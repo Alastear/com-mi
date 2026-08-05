@@ -35,16 +35,18 @@ export default async function OgImage({ params }: { params: Promise<{ handle: st
           fontSize: 32,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16, opacity: 0.85 }}>
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 13,
-              background: "#a970f0",
-              display: "flex",
-            }}
-          />
+        <div style={{ display: "flex", alignItems: "center", gap: 16, opacity: 0.9 }}>
+          {/* โลโก้จริง — satori รองรับ SVG แบบ inline (ใช้สีเดียวเพราะ gradient ไม่รองรับเต็มที่) */}
+          <svg width="46" height="46" viewBox="0 0 24 24">
+            <path
+              d="M19.46 6.97A9 9 0 1 0 12.63 20.98"
+              fill="none"
+              stroke="#a97cf2"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <circle cx="17.36" cy="13.93" r="3.19" fill="#a97cf2" />
+          </svg>
           <span style={{ fontSize: 30, fontWeight: 600 }}>Commi</span>
         </div>
 

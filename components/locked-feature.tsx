@@ -31,10 +31,17 @@ export function LockedFeature({
     // → ความสูงของกล่องคิดจากชั้นที่สูงกว่า ทำให้ overlay ไม่โดนตัดเมื่อเนื้อหาข้างหลังเตี้ย
     //   (ของเดิม overlay เป็น absolute จึงไม่มีความสูง ปุ่มอัปเกรดถูก overflow-hidden ตัดหาย
     //    เมื่อใช้กับการ์ดเตี้ย ๆ อย่าง Milestones ในหน้าออเดอร์)
-    <div className={cn("grid overflow-hidden rounded-xl border *:col-start-1 *:row-start-1", className)}>
+    <div
+      className={cn(
+        // grid-cols-[minmax(0,1fr)] กันไม่ให้เนื้อหาที่เบลออยู่ข้างหลังดันความกว้างของแถวจนล้นจอ
+        // (เจอที่หน้า analytics ความกว้าง 320px — กราฟข้างในกว้างกว่าคอนเทนเนอร์)
+        "grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border *:col-start-1 *:row-start-1",
+        className,
+      )}
+    >
       <div
         aria-hidden
-        className="pointer-events-none select-none *:h-full blur-[5px] saturate-50 opacity-55"
+        className="pointer-events-none min-w-0 select-none overflow-hidden *:h-full blur-[5px] saturate-50 opacity-55"
       >
         {children}
       </div>

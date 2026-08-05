@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Commi">
+  <title>Commi</title>
+  <defs>
+    <linearGradient id="commiViolet" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#A97CF2"/>
+      <stop offset="1" stop-color="#7A43DE"/>
+    </linearGradient>
+  </defs>
+  <!--
+    เรขาคณิตวัดจาก public/logo-exp.png ของจริง:
+      รัศมีกึ่งกลางเส้น R = 9        (ต้นฉบับ 104.5 px)
+      ความหนาเส้น       = 0.45R = 4  (ต้นฉบับ 47 px)
+      ช่องเปิด 120° จาก 326° ถึง 86° (0° = ขวา, เพิ่มตามเข็มเพราะแกน y ชี้ลง)
+      จุด: offset (0.595R, 0.214R) จากศูนย์กลาง, รัศมี 0.8 × ความหนาเส้น
+  -->
+  <path
+    d="M19.46 6.97A9 9 0 1 0 12.63 20.98"
+    fill="none"
+    stroke="url(#commiViolet)"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+  <circle cx="17.36" cy="13.93" r="3.19" fill="url(#commiViolet)"/>
+</svg>

@@ -15,6 +15,7 @@ import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/forma
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { PLANS } from "@/lib/billing/plans";
+import { cn } from "@/lib/utils";
 import { orderHref, shopHref } from "@/lib/routes";
 
 export default async function DashboardPage() {
@@ -89,13 +90,13 @@ export default async function DashboardPage() {
               <p className="text-sm text-muted-foreground">{s.label}</p>
               <s.icon className={`size-4 ${s.tone}`} />
             </div>
-            <p className="tabular text-3xl font-semibold">{s.value}</p>
+            <p className="tabular text-2xl font-semibold xl:text-3xl">{s.value}</p>
           </Card>
         ))}
 
         <Card className="gap-1 p-4">
           <p className="text-sm text-muted-foreground">{t.dashboard.monthRevenue}</p>
-          <p className="tabular text-3xl font-semibold">
+          <p className="tabular text-2xl font-semibold xl:text-3xl">
             {/* TODO Phase 1: อ่านสกุลเงินจาก creator_page */}
             {formatMoney(revenue, "THB", locale)}
           </p>
@@ -216,18 +217,21 @@ export default async function DashboardPage() {
               used={active.length}
               max={freeLimits.active_orders}
               display={`${active.length} / ${freeLimits.active_orders}`}
+              overLabel={t.dashboard.overQuota}
             />
             <Quota
               label={t.dashboard.quotaServices}
               used={5}
               max={freeLimits.services}
               display={`5 / ${freeLimits.services}`}
+              overLabel={t.dashboard.overQuota}
             />
             <Quota
               label={t.dashboard.quotaStorage}
               used={storageUsed}
               max={freeLimits.storage_bytes}
               display={`${formatBytes(storageUsed)} / ${formatBytes(freeLimits.storage_bytes)}`}
+              overLabel={t.dashboard.overQuota}
             />
 
             <Button asChild size="sm" variant="outline" className="mt-1 w-full">
@@ -273,20 +277,36 @@ function Quota({
   used,
   max,
   display,
+  overLabel,
 }: {
   label: string;
   used: number;
   max: number;
   display: string;
+  overLabel: string;
 }) {
   const percent = Math.min(100, Math.round((used / max) * 100));
+
+  /**
+   * เกินโควตาได้จริงและเป็นสถานะที่ตั้งใจรองรับ — เช่นคนที่ลด Pro → Free
+   * แล้วยังมีงานค้างเกินลิมิต (docs/03-plans-and-entitlements.md §5)
+   * ต้องแสดงให้รู้ว่า "เกิน" ไม่ใช่ปล่อยให้แถบเต็มสีปกติจนดูเหมือนระบบพัง
+   */
+  const over = used > max;
+
   return (
     <div>
-      <div className="flex items-baseline justify-between text-sm">
+      <div className="flex items-baseline justify-between gap-2 text-sm">
         <span className="text-muted-foreground">{label}</span>
-        <span className="tabular">{display}</span>
+        <span className={cn("tabular shrink-0", over && "font-medium text-destructive")}>
+          {display}
+        </span>
       </div>
-      <Progress value={percent} className="mt-1.5 h-1.5" />
+      <Progress
+        value={percent}
+        className={cn("mt-1.5 h-1.5", over && "*:bg-destructive")}
+      />
+      {over ? <p className="mt-1 text-xs text-destructive">{overLabel}</p> : null}
     </div>
   );
 }

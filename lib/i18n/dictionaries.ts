@@ -400,6 +400,7 @@ const th = {
     quotaServices: "เมนูรับงาน",
     shopLink: "ลิงก์หน้าร้านของคุณ",
     upgradeHint: "อัปเกรดเป็น Pro เพื่อรับงานไม่จำกัดและเปิดแจ้งเตือนทันที",
+    overQuota: "เกินโควตาแพ็กเกจ — รับงานใหม่เพิ่มไม่ได้จนกว่าจะปิดงานเดิมหรืออัปเกรด",
   },
 
   analytics: {
@@ -880,6 +881,7 @@ const en: Dictionary = {
     quotaServices: "Menu items",
     shopLink: "Your shop link",
     upgradeHint: "Upgrade to Pro for unlimited orders and instant notifications",
+    overQuota: "Over your plan limit — finish existing work or upgrade to take more",
   },
 
   analytics: {
