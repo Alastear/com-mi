@@ -40,15 +40,23 @@ export default async function CreatorPage({ params }: Props) {
   return (
     <div className="pb-20">
       {/* ── Banner + identity ────────────────────────────── */}
-      <ArtImage
-        seed={creator.bannerSeed}
-        alt=""
-        rounded={false}
-        className="h-40 w-full sm:h-56 lg:h-64"
-        ratio={null}
-      />
+      {/*
+        แบนเนอร์อยู่ในคอนเทนเนอร์เดียวกับเนื้อหา (max-w-6xl เท่ากับ header/footer)
+        ถ้าปล่อยเต็มขอบจอ พอจอกว้าง ๆ อวาตาร์กับชื่อจะลอยอยู่กลางที่ว่าง
+        และไม่ตรงกับโลโก้บน header — เหมือนหน้าโปรไฟล์ที่วางผิดกริด
+        บนมือถือยังเต็มขอบอยู่เพื่อความรู้สึกเต็มจอ
+      */}
+      <div className="mx-auto w-full max-w-6xl sm:px-4 sm:pt-4">
+        <ArtImage
+          seed={creator.bannerSeed}
+          alt=""
+          rounded={false}
+          className="h-40 w-full sm:h-52 sm:rounded-2xl lg:h-60"
+          ratio={null}
+        />
+      </div>
 
-      <div className="mx-auto w-full max-w-5xl px-4">
+      <div className="mx-auto w-full max-w-6xl px-4">
         <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end">
           <ArtAvatar
             seed={creator.avatarSeed}
@@ -97,15 +105,21 @@ export default async function CreatorPage({ params }: Props) {
           </span>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/*
+          prototype: แสดงเป็นชิปเฉย ๆ ไม่ใช่ลิงก์
+          เพราะ URL ใน mock เป็นของปลอม กดแล้วจะพาออกไปบัญชีคนอื่นจริง ๆ
+          ตอนต่อ DB ค่อยเปลี่ยนเป็น <a href={s.url}> ที่ชี้ไปบัญชีจริงของครีเอเตอร์
+        */}
+        <ul className="mt-4 flex flex-wrap gap-2">
           {creator.socials.map((s) => (
-            <Button key={s.platform} asChild variant="outline" size="sm">
-              <a href={s.url} target="_blank" rel="noreferrer noopener">
-                {s.platform}
-              </a>
-            </Button>
+            <li
+              key={s.platform}
+              className="rounded-md border px-2.5 py-1 text-sm text-muted-foreground"
+            >
+              {s.platform}
+            </li>
           ))}
-        </div>
+        </ul>
 
         <Separator className="my-10" />
 

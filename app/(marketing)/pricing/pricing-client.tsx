@@ -86,7 +86,9 @@ export function PricingClient() {
           <Card
             key={tier.id}
             className={cn(
-              "relative gap-0 p-6",
+              // Card ของ shadcn มี overflow-hidden ติดมา → badge ที่ -top-2.5 จะโดนตัดครึ่ง
+              // ต้อง overflow-visible เพื่อให้ป้าย "แนะนำ" ลอยพ้นขอบการ์ดได้
+              "relative gap-0 overflow-visible p-6",
               tier.highlight && "border-primary/50 ring-1 ring-primary/25",
             )}
           >
