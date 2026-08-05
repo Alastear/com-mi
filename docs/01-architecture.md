@@ -200,6 +200,40 @@ Next วิเคราะห์ค่านี้ตอน compile จึงร
 
 ---
 
+### ⚠️ กับดัก: แก้ฟิลด์ของ `user` ตรง ๆ แล้วต้อง refresh `cookieCache` เสมอ
+
+**เจอจริงตอนทำ `/onboarding` — ผู้ใช้ติดลูป**
+
+`cookieCache` เก็บ session ที่เซ็นแล้วไว้ในคุกกี้ 5 นาที และ **ไม่รู้เลย**ว่าเราไป `UPDATE` แถวใน DB
+พอ Server Action ตั้ง `handle` เสร็จแล้ว `redirect("/dashboard")` →
+`requireCreator()` อ่านจากคุกกี้ที่ยังบอกว่า `handle = null` → เด้งกลับ `/onboarding` →
+**วนแบบนี้จนกว่าคุกกี้จะหมดอายุใน 5 นาที**
+
+> ตัวเลือก `cookieCache.version` **ใช้แก้เคสนี้ไม่ได้** — โค้ดของ Better Auth คำนวณ version
+> จากข้อมูลที่อยู่ใน cache เองแล้วเทียบกับตัวมันเอง จึงไว้สำหรับ bust cache ตอนเปลี่ยนโครง session
+> ไม่ใช่ตอนข้อมูลใน DB เปลี่ยน
+
+วิธีแก้ — บังคับอ่านจาก DB แล้วเขียน cache ใหม่ ก่อน `redirect()`:
+
+```ts
+await db.update(schema.user).set({ handle }).where(eq(schema.user.id, user.id))
+
+// อ่านข้าม cache → เขียน cache ชุดใหม่ (คุกกี้ apply ผ่าน plugin nextCookies())
+await getAuth().api.getSession({
+  headers: await headers(),
+  query: { disableCookieCache: true },
+})
+
+redirect("/dashboard")
+```
+
+**ใช้กฎเดียวกันกับทุกฟิลด์ที่อยู่ใน session** — `handle`, `plan`, `planUntil`, `role`
+โดยเฉพาะตอน Stripe webhook อัปเกรดเป็น Pro: webhook แก้ DB จากนอก request ของผู้ใช้
+จึง refresh คุกกี้ให้ไม่ได้ → หน้า success ต้องเรียก refresh เองฝั่ง client
+ไม่งั้นผู้ใช้จ่ายเงินแล้วแต่ยังเห็นฟีเจอร์ล็อกอยู่นานถึง 5 นาที
+
+---
+
 **`cookieCache` คือฟีเจอร์ที่ประหยัดที่สุดในไฟล์นี้** — เก็บ session ที่เซ็นแล้วไว้ในคุกกี้ 5 นาที
 ทำให้ทุก request ไม่ต้องยิง `SELECT * FROM session` เข้า Neon
 สำหรับแอปที่มี navigation ถี่ ๆ อันนี้ลด DB read ได้ระดับ 80–90%

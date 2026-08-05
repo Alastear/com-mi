@@ -1,8 +1,10 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb, schema } from "@/lib/db";
+import { getAuth } from "@/lib/auth";
 import { requireSession } from "@/lib/auth-guard";
 import { checkHandle } from "@/lib/handles";
 
@@ -41,6 +43,24 @@ export async function claimHandle(
     // ชนกับ unique constraint = มีคนคว้าไปก่อนระหว่างที่กำลังกรอก
     return { error: "taken" };
   }
+
+  /**
+   * ⚠️ ต้อง refresh cookie cache ทุกครั้งที่แก้ฟิลด์ของ user ตรง ๆ ผ่าน Drizzle
+   *
+   * `session.cookieCache` เก็บ session ที่เซ็นแล้วไว้ในคุกกี้ 5 นาที และ **ไม่รู้เลย**
+   * ว่าเราไปแก้แถวใน DB (ตัวเลือก `cookieCache.version` เทียบกับข้อมูลใน cache เอง
+   * จึงใช้ตรวจการเปลี่ยนแปลงใน DB ไม่ได้)
+   *
+   * ถ้าไม่ refresh: คุกกี้ยังบอกว่า handle = null → requireCreator() ใน (app)/layout
+   * เด้งกลับมา /onboarding อีกรอบ → ผู้ใช้ติดลูปจนกว่า cache จะหมดอายุใน 5 นาที
+   *
+   * `disableCookieCache` บังคับให้อ่านจาก DB แล้วเขียน cache ใหม่
+   * (คุกกี้ถูก apply ผ่าน plugin `nextCookies()` และอยู่รอดข้าม redirect)
+   */
+  await getAuth().api.getSession({
+    headers: await headers(),
+    query: { disableCookieCache: true },
+  });
 
   redirect("/dashboard");
 }
