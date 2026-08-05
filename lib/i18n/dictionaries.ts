@@ -91,6 +91,25 @@ const th = {
     notFoundBody: "ไม่พบหน้าที่คุณกำลังหา — อาจถูกย้ายหรือลิงก์พิมพ์ผิด",
   },
 
+  auth: {
+    tosNotice: "การเข้าสู่ระบบถือว่าคุณยอมรับ",
+    and: "และ",
+    signedInAs: "เข้าสู่ระบบในชื่อ",
+    finishSetup: "ตั้งค่าหน้าร้านให้เสร็จ →",
+  },
+
+  onboarding: {
+    title: "ตั้งชื่อลิงก์หน้าร้านของคุณ",
+    subtitle: "นี่คือลิงก์ที่คุณจะเอาไปแปะใน bio — เปลี่ยนทีหลังได้",
+    hint: "ใช้ a–z, 0–9 และ _ ความยาว 3–30 ตัวอักษร",
+    available: "ใช้ชื่อนี้ได้",
+    format: "ใช้ได้เฉพาะ a–z, 0–9 และ _ ความยาว 3–30 ตัวอักษร",
+    reserved: "ชื่อนี้ระบบสงวนไว้ ลองชื่ออื่นนะครับ",
+    taken: "มีคนใช้ชื่อนี้แล้ว ลองชื่ออื่น",
+    submit: "ใช้ชื่อนี้",
+    canChange: "เปลี่ยนได้ทีหลังในหน้าตั้งค่า แต่ลิงก์เดิมจะใช้ไม่ได้ทันที",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -552,6 +571,25 @@ const en: Dictionary = {
     body: "Try again. If it keeps happening, send us the reference below.",
     retry: "Try again",
     notFoundBody: "We couldn't find that page. It may have moved, or the link has a typo.",
+  },
+
+  auth: {
+    tosNotice: "By signing in you agree to our",
+    and: "and",
+    signedInAs: "Signed in as",
+    finishSetup: "Finish setting up your shop →",
+  },
+
+  onboarding: {
+    title: "Pick your shop link",
+    subtitle: "This is the link you'll put in your bio — you can change it later.",
+    hint: "Use a–z, 0–9 and _, 3–30 characters",
+    available: "That one's available",
+    format: "Only a–z, 0–9 and _ are allowed, 3–30 characters",
+    reserved: "That name is reserved — try another",
+    taken: "Someone already has that one",
+    submit: "Use this name",
+    canChange: "You can change this later in settings, but the old link stops working immediately.",
   },
 
   legal: {

@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Clock, Inbox, TrendingUp } from "lucide-react";
-import { ArtAvatar, ArtImage } from "@/components/art-image";
+import { ArtImage } from "@/components/art-image";
+import { UserAvatar } from "@/components/user-avatar";
 import { OrderStatusPill } from "@/components/status-pill";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { LockedFeature } from "@/components/locked-feature";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { creator, notifications, orders } from "@/lib/mock/data";
+import { notifications, orders } from "@/lib/mock/data";
+import { requireSession } from "@/lib/auth-guard";
 import { ACTIVE_STATUSES } from "@/lib/types";
 import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
@@ -18,6 +20,11 @@ import { orderHref, shopHref } from "@/lib/routes";
 export default async function DashboardPage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
+  const { user } = await requireSession();
+
+  // ⚠️ Phase 0: ผู้ใช้เป็นของจริงแล้ว แต่ออเดอร์/สถิติยังเป็น mock
+  //    จะเปลี่ยนเป็น query จริงใน Phase 1b เมื่อมีตาราง order
+  const shopUrl = user.handle ? shopHref(user.handle) : "/onboarding";
 
   const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
   const newRequests = orders.filter((o) => o.status === "requested");
@@ -51,23 +58,25 @@ export default async function DashboardPage() {
       {/* หัวหน้าเพจ */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <ArtAvatar seed={creator.avatarSeed} alt={creator.displayName} className="size-11" />
+          <UserAvatar user={user} className="size-11" />
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
-              {t.dashboard.greeting} {creator.displayName}
+              {t.dashboard.greeting} {user.name}
             </h1>
             <p className="text-sm text-muted-foreground">{t.dashboard.subtitle}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <CopyLinkButton
-            value={`https://commi.app/@${creator.handle}`}
-            label={t.dashboard.shopLink}
-            size="sm"
-          />
+          {user.handle ? (
+            <CopyLinkButton
+              value={`https://commi.app/@${user.handle}`}
+              label={t.dashboard.shopLink}
+              size="sm"
+            />
+          ) : null}
           <Button asChild size="sm" variant="outline">
-            <Link href={shopHref(creator.handle)}>{t.nav.shop}</Link>
+            <Link href={shopUrl}>{user.handle ? t.nav.shop : t.auth.finishSetup}</Link>
           </Button>
         </div>
       </div>
@@ -87,7 +96,8 @@ export default async function DashboardPage() {
         <Card className="gap-1 p-4">
           <p className="text-sm text-muted-foreground">{t.dashboard.monthRevenue}</p>
           <p className="tabular text-3xl font-semibold">
-            {formatMoney(revenue, creator.currency, locale)}
+            {/* TODO Phase 1: อ่านสกุลเงินจาก creator_page */}
+            {formatMoney(revenue, "THB", locale)}
           </p>
         </Card>
       </div>

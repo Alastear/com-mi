@@ -3,13 +3,25 @@
 แพลตฟอร์มรับงาน commission สำหรับครีเอเตอร์สายภาพ · วิดีโอ · adopts
 หน้าร้านสาธารณะ + ระบบหลังบ้านจัดการคิวงาน ในที่เดียว · ไทย / อังกฤษ
 
-> **สถานะ: UI prototype ใช้งานได้จริงแล้ว (ยังไม่มี DB / auth / server action)**
-> ข้อมูลทั้งหมดมาจาก `lib/mock/data.ts` — ลบไฟล์นั้นทิ้งตอนต่อของจริง
+> **สถานะ: Phase 0 เสร็จ — ล็อกอิน Google ได้จริง ต่อ Neon จริง**
+> เนื้อหาในหน้า (ออเดอร์ · สถิติ · ผลงาน) ยังเป็น mock จาก `lib/mock/data.ts`
+> ส่วนผู้ใช้ / session / handle เป็นของจริงจากฐานข้อมูลแล้ว
 
 ```bash
 pnpm install
-pnpm dev     # http://localhost:3000
+cp .env.example .env.development.local   # แล้วเติมค่า (ดูหัวข้อ Environment ด้านล่าง)
+pnpm db:migrate                          # สร้างตารางบน Neon
+pnpm dev                                 # http://localhost:3000
 ```
+
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `pnpm db:generate` | สร้างไฟล์ migration จาก schema |
+| `pnpm db:migrate` | รัน migration ขึ้น Neon |
+| `pnpm db:check` | เช็คว่าต่อ DB ได้ + ดูตารางที่มี |
+| `pnpm db:stats` | นับ users / sessions / accounts |
+| `pnpm db:seed-session` | สร้าง session ทดสอบ (คืนคุกกี้ที่เซ็นแล้ว) — เทสต์ได้โดยไม่ต้องล็อกอิน Google |
+| `pnpm db:clean-session` | ลบผู้ใช้ทดสอบทิ้ง |
 
 หน้าที่ควรเปิดดูก่อน: [`/`](http://localhost:3000/) · [`/nongfah`](http://localhost:3000/nongfah) · [`/orders`](http://localhost:3000/orders) · [`/orders/B2LLZ4`](http://localhost:3000/orders/B2LLZ4) · [`/pricing`](http://localhost:3000/pricing)
 สลับภาษาและธีมได้จากไอคอนมุมขวาบนทุกหน้า
@@ -50,7 +62,10 @@ Free tier ทำงานครบ loop ได้จริง (รับพร�
 | Pro preview | listings · clients · calendar · analytics — เบลอของจริงไว้ข้างหลังพร้อมปุ่มปลดล็อก |
 | ระบบ | 404/error/global-error · robots · sitemap · manifest · OG image ต่อครีเอเตอร์ |
 
-**ยังไม่ได้ทำ** (ตามแผน Phase 0 เป็นต้นไป): Neon + Drizzle, Better Auth, Vercel Blob, Stripe, Web Push, cron
+**ต่อของจริงแล้ว (Phase 0):** Neon + Drizzle (4 ตาราง) · Better Auth + Google OAuth ·
+`proxy.ts` + `requireSession()` · หน้า sign-in / sign-out · `/onboarding` ตั้ง handle พร้อม reserved list 59 คำ
+
+**ยังไม่ได้ทำ:** Vercel Blob, Stripe, Web Push, cron, ตารางฝั่งโดเมน (order/service/…)
 
 ---
 
@@ -58,7 +73,8 @@ Free tier ทำงานครบ loop ได้จริง (รับพร�
 
 ```
 Next.js 16.2 (App Router)  ·  React 19.2  ·  TypeScript strict  ·  Tailwind v4  ·  shadcn/ui
-วางแผนต่อ: Neon + Drizzle · Better Auth (Google) · Vercel Blob · Stripe · Resend · web-push
+Neon + Drizzle · Better Auth (Google OAuth)
+วางแผนต่อ: Vercel Blob · Stripe · Resend · web-push
 ```
 
 **หลักการควบคุมต้นทุน** — หน้า public cache ด้วย `use cache` + `cacheTag` ไม่แตะ DB,
@@ -74,7 +90,9 @@ Next.js 16.2 (App Router)  ·  React 19.2  ·  TypeScript strict  ·  Tailwind v
 2. **ห้ามใช้ `loading.tsx` ที่ segment ซึ่งตัดสิน 404** — จะได้ soft-404 (ดู `docs/01-architecture.md §2`)
 3. **สีสถานะต้องวัด contrast บนพื้น tint ของตัวเอง** ไม่ใช่บนพื้นหลังหลัก (`docs/04-ux-and-ia.md §4.5`)
 4. **`sr-only sm:not-sr-only` ไม่ใช่ `hidden sm:inline`** สำหรับ label ของปุ่มไอคอน
-5. ตอนต่อ Server Action จริง — **ตรวจสิทธิ์ในฝั่ง server เสมอ** `proxy.ts` เป็นแค่ UX gate
+5. **ตรวจสิทธิ์ในฝั่ง server เสมอ** — ทุก Server Action เริ่มด้วย `requireSession()`; `proxy.ts` เป็นแค่ UX gate (มี CVE เรื่อง middleware auth bypass มาแล้ว)
+6. **`auth` และ `db` ต้อง lazy** — สร้าง instance ที่ top level ทำให้ `next build` พังตอน "Collecting page data"
+7. **`matcher` ใน `proxy.ts` ต้องเป็น literal** — สร้างด้วย `.map()` ไม่ได้ และเพิ่ม route ใหม่ต้องมาเติมเอง
 
 ---
 

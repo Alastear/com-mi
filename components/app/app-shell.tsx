@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
@@ -18,7 +18,7 @@ import {
 import { Logo } from "@/components/brand";
 import { ProBadge } from "@/components/locked-feature";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
-import { ArtAvatar } from "@/components/art-image";
+import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -31,7 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDict } from "@/lib/i18n/client";
-import { creator, notifications } from "@/lib/mock/data";
+import { notifications } from "@/lib/mock/data";
+import { signOut } from "@/lib/auth-client";
 import { formatRelative } from "@/lib/format";
 import { useLocale } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
@@ -128,8 +129,32 @@ function NotificationBell() {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export type SessionUser = {
+  name: string;
+  email: string;
+  image: string | null;
+  handle: string | null;
+  plan: string;
+};
+
+export function AppShell({
+  user,
+  children,
+}: {
+  user: SessionUser;
+  children: React.ReactNode;
+}) {
   const t = useDict();
+  const router = useRouter();
+  const isPro = user.plan !== "free";
+  // ยังไม่ได้ตั้ง handle = ยังไม่ได้ทำ onboarding — ชี้ไปหน้า onboarding แทนหน้าร้าน
+  const shopUrl = user.handle ? shopHref(user.handle) : "/onboarding";
+
+  async function handleSignOut() {
+    await signOut();
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <div className="flex min-h-full flex-1">
@@ -143,7 +168,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mt-auto p-3">
           <div className="rounded-xl border bg-card p-3">
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{t.plan.free}</Badge>
+              <Badge variant={isPro ? "default" : "secondary"}>
+                {isPro ? t.plan.pro : t.plan.free}
+              </Badge>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               {t.dashboard.upgradeHint}
@@ -172,12 +199,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
 
-          <Link
-            href={shopHref(creator.handle)}
-            className="hidden text-sm text-muted-foreground hover:text-foreground sm:block"
-          >
-            commi.app/@{creator.handle}
-          </Link>
+          {user.handle ? (
+            <Link
+              href={shopUrl}
+              className="hidden text-sm text-muted-foreground hover:text-foreground sm:block"
+            >
+              commi.app/@{user.handle}
+            </Link>
+          ) : (
+            <Link href="/onboarding" className="hidden text-sm text-primary sm:block">
+              {t.auth.finishSetup}
+            </Link>
+          )}
 
           <div className="ml-auto flex items-center gap-1">
             <NotificationBell />
@@ -187,31 +220,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <button
                   className="ml-1 rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  aria-label={creator.displayName}
+                  aria-label={user.name}
                 >
-                  <ArtAvatar
-                    seed={creator.avatarSeed}
-                    alt={creator.displayName}
-                    className="size-8"
-                  />
+                  <UserAvatar user={user} className="size-8" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuLabel>
-                  <p className="text-sm">{creator.displayName}</p>
-                  <p className="text-xs font-normal text-muted-foreground">@{creator.handle}</p>
+                  <p className="truncate text-sm">{user.name}</p>
+                  <p className="truncate text-xs font-normal text-muted-foreground">
+                    {user.handle ? `@${user.handle}` : user.email}
+                  </p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href={shopHref(creator.handle)}>{t.nav.shop}</Link>
+                  <Link href={shopUrl}>{t.nav.shop}</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/settings">{t.nav.settings}</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/">{t.common.signOut}</Link>
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignOut}>{t.common.signOut}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

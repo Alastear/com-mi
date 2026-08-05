@@ -167,6 +167,39 @@ export const auth = betterAuth({
 })
 ```
 
+### ⚠️ กับดัก: `auth` instance ต้อง lazy เหมือน `getDb()`
+
+**เจอจริงตอนทำ Phase 0 — `next build` พังทั้ง build**
+
+`betterAuth({ database: drizzleAdapter(getDb(), …) })` ที่เขียนไว้ระดับโมดูล จะเรียก `getDb()`
+ตั้งแต่ตอนที่ Next ประเมินโมดูลของ route ในขั้น **"Collecting page data"** ระหว่าง build
+→ `Error: DATABASE_URL is not set` → build ตาย
+
+เกิดได้สองสถานการณ์:
+1. build ในเครื่อง — production build **ไม่โหลด `.env.development.local`** (โหลดแค่ `.env.local`, `.env.production*`, `.env`)
+2. deploy ครั้งแรก — ก่อน env ถูก provision
+
+```ts
+// lib/auth.ts — singleton แบบ lazy
+let _auth: ReturnType<typeof createAuth> | null = null;
+export function getAuth() {
+  if (!_auth) _auth = createAuth();
+  return _auth;
+}
+
+// app/api/auth/[...all]/route.ts — เรียกข้างใน handler ไม่ใช่ที่ top level
+export async function GET(req: Request)  { return toNextJsHandler(getAuth()).GET(req) }
+export async function POST(req: Request) { return toNextJsHandler(getAuth()).POST(req) }
+```
+
+### ⚠️ กับดัก: `matcher` ใน `proxy.ts` ต้องเป็น literal ล้วน
+
+`matcher: PATHS.map((p) => \`${p}/:path*\`)` ทำให้ build พังทันที —
+Next วิเคราะห์ค่านี้ตอน compile จึงรับได้แค่ string / array ที่เขียนตรง ๆ เท่านั้น
+เพิ่ม route ใหม่ในกลุ่ม `(app)` แล้วต้องมาเติมใน matcher ด้วยมือทุกครั้ง
+
+---
+
 **`cookieCache` คือฟีเจอร์ที่ประหยัดที่สุดในไฟล์นี้** — เก็บ session ที่เซ็นแล้วไว้ในคุกกี้ 5 นาที
 ทำให้ทุก request ไม่ต้องยิง `SELECT * FROM session` เข้า Neon
 สำหรับแอปที่มี navigation ถี่ ๆ อันนี้ลด DB read ได้ระดับ 80–90%

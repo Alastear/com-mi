@@ -9,19 +9,27 @@
 
 **เป้าหมาย: deploy หน้าเปล่าที่ล็อกอิน Google ได้ ขึ้น production จริง**
 
-- [ ] ตัดสิน 4 คำถามท้ายเอกสารนี้ + เลือกชื่อ + จดโดเมน
-- [ ] `pnpm create next-app` — TS, App Router, Tailwind v4, ESLint
-- [ ] `cacheComponents: true`, `typedRoutes: true` ใน `next.config.ts`
-- [ ] `vercel link` → `vercel integration add neon` → สร้าง Blob store → `vercel env pull .env.local --yes`
-- [ ] Drizzle: `schema.ts` (user/session/account/verification), `getDb()` แบบ lazy, `dotenv-cli` สำหรับ drizzle-kit
-- [ ] Better Auth + Google OAuth (สร้าง OAuth client ใน Google Cloud Console, ใส่ redirect URI ทั้ง prod และ preview)
-- [ ] `proxy.ts` ป้องกัน route กลุ่ม `(app)`
-- [ ] shadcn init + globals.css (OKLCH tokens) + next/font (Geist + Noto Sans Thai)
-- [ ] **i18n dictionary (th/en) + language switcher — ต้องมาตั้งแต่ Phase 0** เพราะตัดสินใจทำสองภาษาตั้งแต่แรก ห้ามฮาร์ดโค้ดข้อความ
-- [ ] App shell: sidebar, topbar, theme toggle, `error.tsx`, `not-found.tsx`, `loading.tsx`
-- [ ] Deploy production + ตั้ง Neon branch ผูกกับ preview deployment
+- [x] `pnpm create next-app` — TS, App Router, Tailwind v4, ESLint
+- [x] `typedRoutes: true` ใน `next.config.ts` (`cacheComponents` ยังปิดไว้ รอ data layer จริง)
+- [x] Neon provision + `.env.development.local`
+- [x] Drizzle: schema (user/session/account/verification), `getDb()` แบบ lazy, `dotenv-cli` สำหรับ drizzle-kit
+- [x] Migration รันขึ้น Neon จริง — 4 ตารางพร้อม
+- [x] Better Auth + Google OAuth (redirect URI `…/api/auth/callback/google` ตรวจแล้วว่าตรง)
+- [x] `proxy.ts` ป้องกัน route กลุ่ม `(app)` + `requireSession()` เป็นชั้นป้องกันจริง
+- [x] shadcn init + globals.css (OKLCH tokens) + next/font (Geist + Noto Sans Thai)
+- [x] **i18n dictionary (th/en) + language switcher** — ไม่มีข้อความไหนอยู่นอก dictionary
+- [x] App shell: sidebar, topbar, theme toggle, `error.tsx`, `global-error.tsx`, `not-found.tsx`
+- [x] หน้า sign-in + ปุ่ม sign out + ต่อ session จริงเข้า shell และ dashboard
+- [ ] `vercel link` + deploy production + ตั้ง Neon branch ผูกกับ preview deployment
+- [ ] `/onboarding` — ตั้ง handle (ตอนนี้ยัง redirect ไปหน้าที่ยังไม่มี)
 
-**เสร็จเมื่อ:** เข้าเว็บจริง กด "เข้าสู่ระบบด้วย Google" แล้วเห็นหน้า dashboard เปล่าที่มีชื่อตัวเอง
+**เสร็จเมื่อ:** เข้าเว็บจริง กด "เข้าสู่ระบบด้วย Google" แล้วเห็นหน้า dashboard ที่มีชื่อตัวเอง
+→ ✅ ทำงานแล้วบน localhost เหลือแค่ deploy ขึ้น production
+
+**ตรวจแล้วว่าใช้ได้จริง:**
+`/dashboard` ที่ยังไม่ล็อกอิน → 307 ไป `/sign-in?next=/dashboard` ·
+OAuth redirect_uri ตรง · session คืน additionalFields (handle/plan/role) ครบ ·
+sign-out ล้าง session ใน DB แล้วคุกกี้เดิมใช้ต่อไม่ได้ · CSRF (`Origin`) ทำงาน
 
 ---
 
