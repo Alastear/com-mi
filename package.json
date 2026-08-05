@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 3450",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3450",
     "lint": "eslint",
     "db:generate": "dotenv -e .env.development.local -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.development.local -e .env.local -- drizzle-kit migrate",

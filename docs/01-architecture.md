@@ -111,7 +111,7 @@ Google จะ index หน้าที่ไม่มีอยู่จริง
 
 > ตรวจ regression ด้วยคำสั่งเดียว:
 > ```bash
-> curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/handle-ที่ไม่มีอยู่   # ต้องได้ 404
+> curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3450/handle-ที่ไม่มีอยู่   # ต้องได้ 404
 > ```
 
 ```ts

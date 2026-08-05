@@ -32,7 +32,7 @@ const notoThai = Noto_Sans_Thai({
 export const metadata: Metadata = {
   // จำเป็นสำหรับ resolve URL ของ OG image ให้เป็น absolute — ถ้าไม่ตั้ง
   // การ์ดพรีวิวตอนแชร์ลิงก์หน้าร้านจะชี้ไป localhost บน production
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3450"),
   title: {
     default: "Commi — ระบบรับงาน commission",
     template: "%s · Commi",

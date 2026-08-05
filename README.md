@@ -11,7 +11,7 @@
 pnpm install
 cp .env.example .env.development.local   # แล้วเติมค่า (ดูหัวข้อ Environment ด้านล่าง)
 pnpm db:migrate                          # สร้างตารางบน Neon
-pnpm dev                                 # http://localhost:3000
+pnpm dev                                 # http://localhost:3450
 ```
 
 | คำสั่ง | ทำอะไร |
@@ -23,7 +23,7 @@ pnpm dev                                 # http://localhost:3000
 | `pnpm db:seed-session` | สร้าง session ทดสอบ (คืนคุกกี้ที่เซ็นแล้ว) — เทสต์ได้โดยไม่ต้องล็อกอิน Google |
 | `pnpm db:clean-session` | ลบผู้ใช้ทดสอบทิ้ง |
 
-หน้าที่ควรเปิดดูก่อน: [`/`](http://localhost:3000/) · [`/nongfah`](http://localhost:3000/nongfah) · [`/orders`](http://localhost:3000/orders) · [`/orders/B2LLZ4`](http://localhost:3000/orders/B2LLZ4) · [`/pricing`](http://localhost:3000/pricing)
+หน้าที่ควรเปิดดูก่อน: [`/`](http://localhost:3450/) · [`/nongfah`](http://localhost:3450/nongfah) · [`/orders`](http://localhost:3450/orders) · [`/orders/B2LLZ4`](http://localhost:3450/orders/B2LLZ4) · [`/pricing`](http://localhost:3450/pricing)
 สลับภาษาและธีมได้จากไอคอนมุมขวาบนทุกหน้า
 
 ---
