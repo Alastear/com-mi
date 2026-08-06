@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { creator } from "@/lib/mock/data";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+import { shopUrlPrefix } from "@/lib/site";
 
 export default async function SettingsPage() {
   const locale = await getLocale();
@@ -66,7 +67,7 @@ export default async function SettingsPage() {
                 <Label htmlFor="handle">{t.settings.handle}</Label>
                 <div className="mt-1.5 flex items-center">
                   <span className="rounded-l-lg border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    commi.app/@
+                    {shopUrlPrefix()}
                   </span>
                   <Input id="handle" defaultValue={creator.handle} className="rounded-l-none" />
                 </div>

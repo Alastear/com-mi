@@ -11,6 +11,7 @@ import { useDict } from "@/lib/i18n/client";
 import { checkHandle } from "@/lib/handles";
 import { claimHandle, type ClaimResult } from "./actions";
 import { cn } from "@/lib/utils";
+import { shopUrlPrefix } from "@/lib/site";
 
 export function OnboardingClient({ suggested }: { suggested: string }) {
   const t = useDict();
@@ -49,7 +50,7 @@ export function OnboardingClient({ suggested }: { suggested: string }) {
               <Label htmlFor="handle">{t.settings.handle}</Label>
               <div className="mt-1.5 flex items-center">
                 <span className="rounded-l-lg border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                  commi.app/@
+                  {shopUrlPrefix()}
                 </span>
                 <Input
                   id="handle"

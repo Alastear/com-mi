@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { cn } from "@/lib/utils";
+import { SITE_NAME } from "@/lib/site";
 
 /**
- * โลโก้ Commi — เวกเตอร์ที่แกะจาก public/logo-exp.png
+ * โลโก้ com-mi — เวกเตอร์ที่แกะจาก public/logo-exp.png
  *
  * เรขาคณิตวัดจากต้นฉบับจริง (หน่วยใน viewBox 24×24):
  *   รัศมีกึ่งกลางเส้น 9 · ความหนาเส้น 4 (= 0.45R) · ปลายมน
@@ -60,7 +61,7 @@ export function Logo({
       className={cn("flex items-center gap-2 font-semibold tracking-tight", className)}
     >
       <LogoMark />
-      {showWordmark ? <span>Commi</span> : <span className="sr-only">Commi</span>}
+      {showWordmark ? <span>{SITE_NAME}</span> : <span className="sr-only">{SITE_NAME}</span>}
     </Link>
   );
 }

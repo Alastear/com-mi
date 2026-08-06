@@ -15,7 +15,7 @@ import type { Locale } from "./config";
  */
 const th = {
   brand: {
-    name: "Commi",
+    name: "com-mi",
     tagline: "ระบบรับงาน commission ที่ครีเอเตอร์คุมเองได้ทั้งหมด",
   },
 
@@ -499,7 +499,7 @@ export type Dictionary = Widen<typeof th>;
 
 const en: Dictionary = {
   brand: {
-    name: "Commi",
+    name: "com-mi",
     tagline: "Commission workflow that creators actually control",
   },
 

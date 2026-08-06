@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 import { creator, services } from "@/lib/mock/data";
+import { siteUrl } from "@/lib/site";
 
-const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://commi.app";
+const BASE = siteUrl();
 
 /**
  * ของจริงดึงรายชื่อครีเอเตอร์ที่ publish แล้วจาก DB

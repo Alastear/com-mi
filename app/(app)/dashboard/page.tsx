@@ -17,6 +17,7 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { PLANS } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 import { orderHref, shopHref } from "@/lib/routes";
+import { shopUrl } from "@/lib/site";
 
 export default async function DashboardPage() {
   const locale = await getLocale();
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
 
   // ⚠️ Phase 0: ผู้ใช้เป็นของจริงแล้ว แต่ออเดอร์/สถิติยังเป็น mock
   //    จะเปลี่ยนเป็น query จริงใน Phase 1b เมื่อมีตาราง order
-  const shopUrl = user.handle ? shopHref(user.handle) : "/onboarding";
+  const shopPageHref = user.handle ? shopHref(user.handle) : "/onboarding";
 
   const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
   const newRequests = orders.filter((o) => o.status === "requested");
@@ -71,13 +72,13 @@ export default async function DashboardPage() {
         <div className="flex items-center gap-2">
           {user.handle ? (
             <CopyLinkButton
-              value={`https://commi.app/@${user.handle}`}
+              value={shopUrl(user.handle)}
               label={t.dashboard.shopLink}
               size="sm"
             />
           ) : null}
           <Button asChild size="sm" variant="outline">
-            <Link href={shopUrl}>{user.handle ? t.nav.shop : t.auth.finishSetup}</Link>
+            <Link href={shopPageHref}>{user.handle ? t.nav.shop : t.auth.finishSetup}</Link>
           </Button>
         </div>
       </div>

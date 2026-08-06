@@ -4,6 +4,7 @@ import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+import { SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,10 +33,10 @@ const notoThai = Noto_Sans_Thai({
 export const metadata: Metadata = {
   // จำเป็นสำหรับ resolve URL ของ OG image ให้เป็น absolute — ถ้าไม่ตั้ง
   // การ์ดพรีวิวตอนแชร์ลิงก์หน้าร้านจะชี้ไป localhost บน production
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3450"),
+  metadataBase: new URL(siteUrl()),
   title: {
-    default: "Commi — ระบบรับงาน commission",
-    template: "%s · Commi",
+    default: `${SITE_NAME} — ระบบรับงาน commission`,
+    template: `%s · ${SITE_NAME}`,
   },
   description:
     "หน้าร้านรับงาน commission พร้อมระบบจัดการคิว ส่งงาน และเก็บเงิน สำหรับนักวาด นักตัดต่อ และคนทำ adopts",

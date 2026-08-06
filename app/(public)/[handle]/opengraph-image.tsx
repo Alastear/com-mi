@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getCreator } from "@/lib/mock/data";
+import { SITE_NAME, shopUrlDisplay } from "@/lib/site";
 
 /**
  * OG image ต่อครีเอเตอร์
@@ -47,7 +48,7 @@ export default async function OgImage({ params }: { params: Promise<{ handle: st
             />
             <circle cx="17.36" cy="13.93" r="3.19" fill="#a97cf2" />
           </svg>
-          <span style={{ fontSize: 30, fontWeight: 600 }}>Commi</span>
+          <span style={{ fontSize: 30, fontWeight: 600 }}>{SITE_NAME}</span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -78,7 +79,7 @@ export default async function OgImage({ params }: { params: Promise<{ handle: st
             />
             {open ? "เปิดรับงาน" : "ปิดรับงาน"}
           </div>
-          <span style={{ opacity: 0.6 }}>commi.app/@{handle}</span>
+          <span style={{ opacity: 0.6 }}>{shopUrlDisplay(handle)}</span>
         </div>
       </div>
     ),

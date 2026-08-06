@@ -1,4 +1,4 @@
-# Commi — Commission Platform
+# com-mi — Commission Platform
 
 แพลตฟอร์มรับงาน commission สำหรับครีเอเตอร์สายภาพ · วิดีโอ · adopts
 หน้าร้านสาธารณะ + ระบบหลังบ้านจัดการคิวงาน ในที่เดียว · ไทย / อังกฤษ
@@ -105,4 +105,8 @@ vercel integration add neon
 vercel env pull .env.local --yes
 ```
 
-ยังต้องตัดสิน: ชื่อ/โดเมนจริง (ตอนนี้ใช้ "Commi" ชั่วคราว) และระดับ marketplace — ดูท้าย [docs/05-roadmap.md](docs/05-roadmap.md)
+**ชื่อแบรนด์: `com-mi`** — โดเมนจริงยังไม่ตัดสิน
+ชื่อและ URL ทุกที่อ่านจาก [`lib/site.ts`](lib/site.ts) ตัวเดียว ไม่มีที่ไหนฮาร์ดโค้ด
+พอเลือกโดเมนได้แล้ว แก้ `NEXT_PUBLIC_APP_URL` ที่เดียวจบ (แล้วอย่าลืมเพิ่ม redirect URI ใน Google Console)
+
+ยังต้องตัดสิน: โดเมน และระดับ marketplace — ดูท้าย [docs/05-roadmap.md](docs/05-roadmap.md)

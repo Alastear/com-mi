@@ -14,6 +14,7 @@ import { serviceHref } from "@/lib/routes";
 import { formatDate, formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
+import { shopUrl } from "@/lib/site";
 
 type Props = { params: Promise<{ handle: string }> };
 
@@ -73,7 +74,7 @@ export default async function CreatorPage({ params }: Props) {
 
           <div className="flex gap-2 pb-1">
             <CopyLinkButton
-              value={`https://commi.app/@${creator.handle}`}
+              value={shopUrl(creator.handle)}
               label={t.common.share}
               size="sm"
             />
@@ -278,7 +279,10 @@ export default async function CreatorPage({ params }: Props) {
         </Card>
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          {t.creator.poweredBy} <Link href="/" className="underline underline-offset-2">Commi</Link>
+          {t.creator.poweredBy}{" "}
+          <Link href="/" className="underline underline-offset-2">
+            {t.brand.name}
+          </Link>
         </p>
       </div>
     </div>

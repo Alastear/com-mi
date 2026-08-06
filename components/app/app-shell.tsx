@@ -37,6 +37,7 @@ import { formatRelative } from "@/lib/format";
 import { useLocale } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { shopHref } from "@/lib/routes";
+import { shopUrlDisplay } from "@/lib/site";
 
 /** เมนูที่มี `pro: true` จะขึ้นป้าย Pro — การบังคับจริงต้องอยู่ใน Server Action */
 function useNavItems() {
@@ -148,7 +149,7 @@ export function AppShell({
   const router = useRouter();
   const isPro = user.plan !== "free";
   // ยังไม่ได้ตั้ง handle = ยังไม่ได้ทำ onboarding — ชี้ไปหน้า onboarding แทนหน้าร้าน
-  const shopUrl = user.handle ? shopHref(user.handle) : "/onboarding";
+  const shopPageHref = user.handle ? shopHref(user.handle) : "/onboarding";
 
   async function handleSignOut() {
     await signOut();
@@ -201,10 +202,10 @@ export function AppShell({
 
           {user.handle ? (
             <Link
-              href={shopUrl}
+              href={shopPageHref}
               className="hidden text-sm text-muted-foreground hover:text-foreground sm:block"
             >
-              commi.app/@{user.handle}
+              {shopUrlDisplay(user.handle)}
             </Link>
           ) : (
             <Link href="/onboarding" className="hidden text-sm text-primary sm:block">
@@ -234,7 +235,7 @@ export function AppShell({
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href={shopUrl}>{t.nav.shop}</Link>
+                  <Link href={shopPageHref}>{t.nav.shop}</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/settings">{t.nav.settings}</Link>

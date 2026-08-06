@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_NAME } from "@/lib/site";
 
 /**
  * ต้องมี manifest + service worker เพื่อให้ Web Push ทำงาน (ฟีเจอร์ Pro หลักของแผน)
@@ -6,8 +7,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Commi — ระบบรับงาน commission",
-    short_name: "Commi",
+    name: `${SITE_NAME} — ระบบรับงาน commission`,
+    short_name: SITE_NAME,
     description:
       "หน้าร้านรับงาน commission พร้อมระบบจัดการคิว ส่งงาน และเก็บเงิน สำหรับนักวาด นักตัดต่อ และคนทำ adopts",
     start_url: "/dashboard",
