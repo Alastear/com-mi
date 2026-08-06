@@ -410,6 +410,25 @@ export async function prepareImage(file: File) {
 → `media.status = 'orphan'` ตอนอัปโหลด, เปลี่ยนเป็น `'linked'` เมื่อ submit สำเร็จ
 → cron รายวันลบ orphan ที่เก่ากว่า 24 ชม. + ไฟล์ของ order ที่ยกเลิกและเกิน retention
 
+### ⚠️ Blob store ต้องสร้างเป็น **public** ตั้งแต่แรก (เจอจริงตอนต่อ Phase 1a)
+
+โหมด access ของ store ถูกกำหนด**ตอนสร้าง store** เปลี่ยนทีหลังไม่ได้
+ถ้าสร้างเป็น private แล้วโค้ดเรียก `put(..., { access: "public" })` จะได้:
+
+```
+Vercel Blob: Cannot use public access on a private store.
+The store is configured with private access.
+```
+
+**อาการหลอก:** ในเบราว์เซอร์จะเห็นเป็น CORS error แทน
+(`No 'Access-Control-Allow-Origin' header`) เพราะ response ที่เป็น error
+ไม่ส่ง header CORS มาด้วย — ทำให้หลงไปแก้เรื่อง origin/proxy ทั้งที่ไม่เกี่ยว
+`pnpm blob:check` ยิงตรงจาก Node ข้ามเบราว์เซอร์ไป จะเห็นข้อความจริงทันที
+
+private ไม่ใช่ทางเลือกสำหรับรูปหน้าร้าน/ผลงาน — เสิร์ฟช้ากว่าและ egress แพงกว่า
+เพราะทุกครั้งที่เปิดดูต้องเซ็น URL ใหม่และไม่ติด CDN cache
+เก็บ private ไว้ให้ไฟล์ส่งมอบงานใน Phase 1c เท่านั้น (แยกเป็นคนละ store)
+
 ### เก็บอะไรใน Blob vs Neon
 
 | ข้อมูล | เก็บที่ | เหตุผล |

@@ -1,51 +1,24 @@
-import { ImagePlus } from "lucide-react";
-import { ArtImage } from "@/components/art-image";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { portfolio } from "@/lib/mock/data";
+import { requireCreator } from "@/lib/auth-guard";
+import { getOwnShop } from "@/lib/queries/creator";
+import { ensureShop } from "@/lib/shop/ensure";
 import { getLocale } from "@/lib/i18n/server";
-import { getDictionary } from "@/lib/i18n/dictionaries";
 import { PLANS } from "@/lib/billing/plans";
+import { PortfolioManager } from "./portfolio-manager";
 
 export default async function PortfolioPage() {
-  const locale = await getLocale();
-  const t = getDictionary(locale);
-  const max = PLANS.free.limits.portfolio_items;
+  const { user } = await requireCreator();
+  await ensureShop(user.id, user.name, await getLocale());
 
-  return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 lg:py-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t.nav.portfolio}</h1>
-          <p className="tabular text-sm text-muted-foreground">
-            {portfolio.length} / {max}
-          </p>
-        </div>
-        <Button disabled={portfolio.length >= max}>
-          <ImagePlus className="size-4" />
-          {t.portfolio.upload}
-        </Button>
-      </div>
+  const shop = await getOwnShop(user.id);
+  const items = (shop?.portfolio ?? []).map((p) => ({
+    id: p.id,
+    mediaId: p.mediaId,
+    title: p.title,
+    url: p.media.url,
+    width: p.media.width,
+    height: p.media.height,
+  }));
 
-      <div className="masonry mt-6 columns-2 sm:columns-3 lg:columns-4">
-        {portfolio.map((p) => (
-          <figure key={p.id} className="group relative">
-            <ArtImage seed={p.seed} alt={p.title} ratio={1 / p.ratio} />
-            <figcaption className="absolute inset-x-0 bottom-0 rounded-b-lg bg-gradient-to-t from-black/80 to-transparent p-2.5">
-              <span className="block truncate text-xs font-medium text-white">{p.title}</span>
-              {p.linkedServiceSlug ? (
-                <Badge variant="secondary" className="mt-1 text-[10px]">
-                  {p.linkedServiceSlug}
-                </Badge>
-              ) : null}
-            </figcaption>
-          </figure>
-        ))}
-      </div>
-
-      <p className="mt-6 text-xs text-muted-foreground">
-        {t.portfolio.storageNote}
-      </p>
-    </div>
-  );
+  // TODO Phase 2: อ่านลิมิตจาก plan ของผู้ใช้จริงผ่าน entitlements
+  return <PortfolioManager items={items} max={PLANS.free.limits.portfolio_items} />;
 }

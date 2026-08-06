@@ -126,6 +126,20 @@ const th = {
     statusNote: "โน้ตต่อท้ายสถานะ เช่น เปิดรอบหน้า 15 ก.ย.",
   },
 
+  media: {
+    choose: "เลือกรูป หรือลากมาวาง",
+    hint: "PNG · JPG · WebP — ระบบย่อและแปลงเป็น WebP ให้ในเบราว์เซอร์ก่อนอัปโหลด",
+    uploading: "กำลังอัปโหลด…",
+    failed: "อัปโหลดไม่สำเร็จ ลองใหม่อีกครั้ง",
+    wrongType: "รองรับเฉพาะไฟล์รูปภาพ",
+    tooBig: "ไฟล์ใหญ่เกินไป",
+    quotaFull: "พื้นที่เก็บไฟล์เต็มแล้ว — ลบของเก่าหรืออัปเกรดเป็น Pro",
+    banner: "แบนเนอร์",
+    avatar: "รูปโปรไฟล์",
+    remove: "ลบรูปนี้",
+    uploaded: "อัปโหลดแล้ว",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -623,6 +637,20 @@ const en: Dictionary = {
     about: "About you",
     tos: "Terms of service (one per line)",
     statusNote: "Note after the status, e.g. reopening 15 Sept",
+  },
+
+  media: {
+    choose: "Choose an image, or drop one here",
+    hint: "PNG · JPG · WebP — resized and converted to WebP in your browser before upload",
+    uploading: "Uploading…",
+    failed: "Upload failed. Try again.",
+    wrongType: "Images only",
+    tooBig: "That file is too large",
+    quotaFull: "Storage is full — remove something or upgrade to Pro",
+    banner: "Banner",
+    avatar: "Profile picture",
+    remove: "Remove",
+    uploaded: "Uploaded",
   },
 
   legal: {

@@ -17,6 +17,10 @@ import { shopHref } from "@/lib/routes";
 import { shopUrl, shopUrlDisplay } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { saveShop, setPublished, type SaveShopResult } from "./actions";
+import { MediaUploader } from "@/components/media-uploader";
+import { ArtAvatar, ArtImage } from "@/components/art-image";
+import { setShopImage } from "@/lib/media/actions";
+import { useRouter } from "next/navigation";
 import type { ShopStatus } from "@/lib/types";
 
 const STATUSES: ShopStatus[] = ["open", "waitlist", "closed", "vacation"];
@@ -27,6 +31,9 @@ export function ShopEditor({
 }: {
   handle: string;
   shop: {
+    id: string;
+    bannerUrl: string | null;
+    avatarUrl: string | null;
     displayName: string;
     tagline: string;
     about: string;
@@ -41,6 +48,7 @@ export function ShopEditor({
   const [state, action, saving] = useActionState<SaveShopResult, FormData>(saveShop, undefined);
   const [status, setStatus] = useState(shop.status);
   const [publishing, startPublish] = useTransition();
+  const router = useRouter();
 
   function togglePublish() {
     startPublish(async () => {
@@ -96,6 +104,49 @@ export function ShopEditor({
           {publishing ? <Loader2 className="size-4 animate-spin" /> : null}
           {shop.isPublished ? t.shop.unpublished : t.shop.publishCta}
         </Button>
+      </Card>
+
+      {/* รูปหน้าร้าน */}
+      <Card className="mt-5 gap-4 p-5">
+        <p className="font-medium">{t.media.banner}</p>
+        <ArtImage
+          seed={shop.id}
+          src={shop.bannerUrl}
+          alt={t.media.banner}
+          ratio={null}
+          className="h-32 w-full sm:h-40"
+        />
+        <MediaUploader
+          kind="banner"
+          label={t.media.banner}
+          onUploaded={async (id) => {
+            await setShopImage(id, "banner");
+            router.refresh();
+            toast.success(t.media.uploaded);
+          }}
+        />
+
+        <Separator />
+
+        <p className="font-medium">{t.media.avatar}</p>
+        <div className="flex items-center gap-4">
+          <ArtAvatar
+            seed={handle}
+            src={shop.avatarUrl}
+            alt={t.media.avatar}
+            className="size-20 shrink-0"
+          />
+          <MediaUploader
+            kind="avatar"
+            label={t.media.avatar}
+            className="flex-1"
+            onUploaded={async (id) => {
+              await setShopImage(id, "avatar");
+              router.refresh();
+              toast.success(t.media.uploaded);
+            }}
+          />
+        </div>
       </Card>
 
       <form action={action} className="mt-5 space-y-5">
