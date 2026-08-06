@@ -7,21 +7,29 @@ import type { Route } from "next";
 
 export type ShopStatus = "open" | "closed" | "waitlist" | "vacation";
 
-export type ServiceKind =
-  | "illustration"
-  | "emote"
-  | "chibi"
-  | "reference_sheet"
-  | "animation"
-  | "video_edit"
-  | "model_3d"
-  | "live2d"
-  | "adopt"
-  | "ych"
-  | "design"
-  | "other";
+/**
+ * เก็บเป็น array แล้ว derive type ออกมา ไม่ใช่เขียน union ตรง ๆ
+ * เพราะหน้าแก้ไขเมนูต้องวนลูปออกมาเป็นปุ่มให้เลือก — union วนไม่ได้
+ * และ dictionary.serviceKind ถูกบังคับให้มีครบทุกค่าโดยอัตโนมัติ
+ */
+export const SERVICE_KINDS = [
+  "illustration",
+  "emote",
+  "chibi",
+  "reference_sheet",
+  "animation",
+  "video_edit",
+  "model_3d",
+  "live2d",
+  "adopt",
+  "ych",
+  "design",
+  "other",
+] as const;
+export type ServiceKind = (typeof SERVICE_KINDS)[number];
 
-export type ServiceMode = "instant" | "proposal";
+export const SERVICE_MODES = ["instant", "proposal"] as const;
+export type ServiceMode = (typeof SERVICE_MODES)[number];
 
 export type OrderStatus =
   | "requested"

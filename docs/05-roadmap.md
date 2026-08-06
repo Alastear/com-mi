@@ -46,8 +46,10 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
       (เจ้าของเห็น preview คนอื่นได้ 404)
 - [x] `/shop` แก้ชื่อ/คำโปรย/about/สถานะ/TOS + ปุ่มเผยแพร่
 - [x] `<ArtImage>` รองรับทั้งรูปจริงและ gradient placeholder · OG image อ่านจาก DB
-- [ ] `<MediaUploader>`: client upload ไป Blob + ย่อ/WebP ในเบราว์เซอร์ + thumbhash
-- [ ] Service editor (CRUD) + Portfolio manager
+- [x] `<MediaUploader>`: client upload ไป Blob + ย่อ/WebP ในเบราว์เซอร์ + thumbhash
+      ⚠️ ยังใช้จริงไม่ได้จนกว่าจะมี Blob store แบบ **public** (ของเดิมเป็น private) — `pnpm blob:check`
+- [x] Service editor (CRUD): `/services` + `/services/[id]` พร้อม tier/option, soft delete, slug ภาษาไทย
+- [x] Portfolio manager อ่าน/เขียนจาก DB จริง
 - [ ] `use cache` + `cacheTag` + `updateTag` ตอน save (รอเปิด `cacheComponents`)
 
 **เสร็จเมื่อ:** เอาลิงก์ `/@handle` ไปแปะ bio Twitter ได้แล้วดูดี ← *ตรงนี้คือจุดที่ product มีคุณค่าแล้วแม้ยังรับออเดอร์ในระบบไม่ได้*
