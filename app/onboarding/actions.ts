@@ -7,11 +7,13 @@ import { getDb, schema } from "@/lib/db";
 import { getAuth } from "@/lib/auth";
 import { requireSession } from "@/lib/auth-guard";
 import { checkHandle } from "@/lib/handles";
+import { getLocale } from "@/lib/i18n/server";
+import { ensureShop } from "@/lib/shop/ensure";
 
 export type ClaimResult = { error: "format" | "reserved" | "taken" } | undefined;
 
 /**
- * จอง handle ให้ผู้ใช้ที่ล็อกอินอยู่
+ * จอง handle แล้วเปิดหน้าร้านให้พร้อมใช้ทันที
  *
  * ทุก Server Action ต้องเริ่มด้วย requireSession() เสมอ —
  * proxy.ts ไม่ครอบ Server Action และไม่ใช่ชั้นป้องกันจริง
@@ -44,6 +46,8 @@ export async function claimHandle(
     return { error: "taken" };
   }
 
+  await ensureShop(user.id, user.name, await getLocale());
+
   /**
    * ⚠️ ต้อง refresh cookie cache ทุกครั้งที่แก้ฟิลด์ของ user ตรง ๆ ผ่าน Drizzle
    *
@@ -53,9 +57,6 @@ export async function claimHandle(
    *
    * ถ้าไม่ refresh: คุกกี้ยังบอกว่า handle = null → requireCreator() ใน (app)/layout
    * เด้งกลับมา /onboarding อีกรอบ → ผู้ใช้ติดลูปจนกว่า cache จะหมดอายุใน 5 นาที
-   *
-   * `disableCookieCache` บังคับให้อ่านจาก DB แล้วเขียน cache ใหม่
-   * (คุกกี้ถูก apply ผ่าน plugin `nextCookies()` และอยู่รอดข้าม redirect)
    */
   await getAuth().api.getSession({
     headers: await headers(),

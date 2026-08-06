@@ -13,6 +13,7 @@ import {
   Menu,
   Settings,
   Store,
+  LayoutList,
   Users,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
@@ -45,7 +46,8 @@ function useNavItems() {
   return [
     { href: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
     { href: "/orders", label: t.nav.orders, icon: ListChecks },
-    { href: "/services", label: t.nav.services, icon: Store },
+    { href: "/shop", label: t.nav.shop, icon: Store },
+    { href: "/services", label: t.nav.services, icon: LayoutList },
     { href: "/listings", label: t.nav.listings, icon: Gavel, pro: true },
     { href: "/portfolio", label: t.nav.portfolio, icon: Images },
     { href: "/clients", label: t.nav.clients, icon: Users, pro: true },

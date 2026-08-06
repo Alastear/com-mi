@@ -110,6 +110,22 @@ const th = {
     canChange: "เปลี่ยนได้ทีหลังในหน้าตั้งค่า แต่ลิงก์เดิมจะใช้ไม่ได้ทันที",
   },
 
+  shop: {
+    unpublishedNotice: "หน้าร้านนี้ยังไม่เผยแพร่ — มีแต่คุณที่เห็น",
+    publishCta: "ไปเผยแพร่",
+    noServices: "ยังไม่มีเมนูรับงาน",
+    published: "เผยแพร่แล้ว",
+    unpublished: "ยังไม่เผยแพร่",
+    publishToggle: "เผยแพร่หน้าร้าน",
+    publishHint: "เมื่อเผยแพร่แล้ว ใครก็ตามที่มีลิงก์จะเข้าดูหน้าร้านได้",
+    saved: "บันทึกแล้ว",
+    displayName: "ชื่อที่แสดง",
+    tagline: "คำโปรยสั้น ๆ",
+    about: "เกี่ยวกับคุณ",
+    tos: "ข้อตกลงรับงาน (บรรทัดละข้อ)",
+    statusNote: "โน้ตต่อท้ายสถานะ เช่น เปิดรอบหน้า 15 ก.ย.",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -591,6 +607,22 @@ const en: Dictionary = {
     taken: "Someone already has that one",
     submit: "Use this name",
     canChange: "You can change this later in settings, but the old link stops working immediately.",
+  },
+
+  shop: {
+    unpublishedNotice: "This shop isn't published yet — only you can see it",
+    publishCta: "Publish it",
+    noServices: "No commission menu yet",
+    published: "Published",
+    unpublished: "Not published",
+    publishToggle: "Publish shop",
+    publishHint: "Once published, anyone with the link can see your shop",
+    saved: "Saved",
+    displayName: "Display name",
+    tagline: "Short tagline",
+    about: "About you",
+    tos: "Terms of service (one per line)",
+    statusNote: "Note after the status, e.g. reopening 15 Sept",
   },
 
   legal: {

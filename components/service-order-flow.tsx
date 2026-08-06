@@ -18,7 +18,10 @@ import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { shopHref } from "@/lib/routes";
-import type { Creator, Service } from "@/lib/types";
+import type { getShopByHandle } from "@/lib/queries/creator";
+
+type Shop = NonNullable<Awaited<ReturnType<typeof getShopByHandle>>>;
+type ShopService = Shop["services"][number];
 
 type Step = 0 | 1 | 2;
 
@@ -39,26 +42,26 @@ const BRIEF_FIELDS = [
 
 export function ServiceOrderFlow({
   service,
-  creator,
+  shop,
 }: {
-  service: Service;
-  creator: Creator;
+  service: ShopService;
+  shop: Shop;
 }) {
   const { t, locale } = useLocale();
 
   const [step, setStep] = useState<Step>(0);
-  const [tierId, setTierId] = useState(service.tiers.at(-1)?.id ?? service.tiers[0].id);
+  const [tierId, setTierId] = useState(service.tiers.at(-1)?.id ?? "");
   const [options, setOptions] = useState<Record<string, number>>({});
   const [brief, setBrief] = useState<Record<string, string>>({});
   const [tosAccepted, setTosAccepted] = useState(false);
 
-  const tier = service.tiers.find((x) => x.id === tierId) ?? service.tiers[0];
+  const tier = service.tiers.find((x) => x.id === tierId) ?? service.tiers[0] ?? null;
 
   const lineItems = useMemo(() => {
     const items = [
       {
-        label: `${service.title} — ${tier.label}`,
-        priceCents: service.basePriceCents + tier.priceDeltaCents,
+        label: tier ? `${service.title} — ${tier.label}` : service.title,
+        priceCents: service.basePriceCents + (tier?.priceDeltaCents ?? 0),
       },
     ];
     for (const opt of service.options) {
@@ -139,7 +142,7 @@ export function ServiceOrderFlow({
                 <legend className="text-sm font-medium">{t.service.tier}</legend>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   {service.tiers.map((x) => {
-                    const active = x.id === tier.id;
+                    const active = x.id === tier?.id;
                     return (
                       <button
                         key={x.id}
@@ -154,13 +157,13 @@ export function ServiceOrderFlow({
                             : "hover:border-foreground/25",
                         )}
                       >
-                        <ArtImage seed={x.previewSeed} alt={x.label} ratio={1.4} rounded={false} />
+                        <ArtImage seed={x.id} src={x.preview?.url} alt={x.label} ratio={1.4} rounded={false} />
                         <div className="p-3">
                           <p className="text-sm font-medium">{x.label}</p>
                           <p className="tabular text-sm text-muted-foreground">
                             {formatMoney(
                               service.basePriceCents + x.priceDeltaCents,
-                              creator.currency,
+                              shop.currency,
                               locale,
                             )}
                           </p>
@@ -226,7 +229,7 @@ export function ServiceOrderFlow({
                         ) : null}
 
                         <span className="tabular w-20 text-right text-sm text-muted-foreground">
-                          +{formatMoney(opt.priceDeltaCents, creator.currency, locale)}
+                          +{formatMoney(opt.priceDeltaCents, shop.currency, locale)}
                         </span>
                       </div>
                     );
@@ -307,7 +310,7 @@ export function ServiceOrderFlow({
                   {t.creator.tosTitle}
                 </p>
                 <ol className="space-y-2 text-sm text-muted-foreground">
-                  {creator.tos.slice(0, 3).map((line, i) => (
+                  {shop.tos.slice(0, 3).map((line, i) => (
                     <li key={line} className="flex gap-2">
                       <span className="tabular">{i + 1}.</span>
                       <span>{line}</span>
@@ -378,7 +381,7 @@ export function ServiceOrderFlow({
             <li key={item.label} className="flex justify-between gap-3">
               <span className="text-muted-foreground">{item.label}</span>
               <span className="tabular shrink-0">
-                {formatMoney(item.priceCents, creator.currency, locale)}
+                {formatMoney(item.priceCents, shop.currency, locale)}
               </span>
             </li>
           ))}
@@ -389,7 +392,7 @@ export function ServiceOrderFlow({
         <div className="flex items-baseline justify-between">
           <span className="font-medium">{t.service.total}</span>
           <span className="tabular text-2xl font-semibold">
-            {formatMoney(total, creator.currency, locale)}
+            {formatMoney(total, shop.currency, locale)}
           </span>
         </div>
 
@@ -406,18 +409,14 @@ export function ServiceOrderFlow({
               {service.revisionsIncluded} {t.service.times}
             </dd>
           </div>
-          <div className="flex justify-between">
-            <dt>{t.creator.queueCount}</dt>
-            <dd className="tabular">{creator.queueCount}</dd>
-          </div>
         </dl>
 
         <Separator className="my-4" />
 
         <p className="text-xs text-muted-foreground">
           {t.creator.poweredBy}{" "}
-          <Link href={shopHref(creator.handle)} className="underline underline-offset-2">
-            @{creator.handle}
+          <Link href={shopHref(shop.owner.handle ?? "")} className="underline underline-offset-2">
+            @{shop.owner.handle}
           </Link>
         </p>
       </Card>

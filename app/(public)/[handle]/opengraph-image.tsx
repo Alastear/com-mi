@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { getCreator } from "@/lib/mock/data";
+import { getShopByHandle } from "@/lib/queries/creator";
 import { SITE_NAME, shopUrlDisplay } from "@/lib/site";
 
 /**
@@ -14,11 +14,11 @@ export const alt = "Commission shop";
 
 export default async function OgImage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
-  const creator = getCreator(handle);
+  const shop = await getShopByHandle(handle);
 
-  const name = creator?.displayName ?? handle;
-  const tagline = creator?.tagline ?? "";
-  const open = creator?.status === "open";
+  const name = shop?.displayName ?? handle;
+  const tagline = shop?.tagline ?? "";
+  const open = shop?.status === "open";
 
   return new ImageResponse(
     (

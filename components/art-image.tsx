@@ -68,6 +68,12 @@ type ArtImageProps = {
   /** width / height — ค่าเริ่มต้น 1 (จัตุรัส); ส่ง null เมื่อกำหนดความสูงเองผ่าน className */
   ratio?: number | null;
   rounded?: boolean;
+  /**
+   * URL รูปจริงจาก Blob — ถ้ามีจะวางทับ gradient
+   * ไม่มี = ยังไม่ได้อัปโหลด ใช้ gradient จาก seed ไปก่อน (ดีกว่ากล่องเทาว่าง)
+   * gradient ยังทำหน้าที่เป็น placeholder ระหว่างรูปจริงโหลดด้วย
+   */
+  src?: string | null;
   children?: React.ReactNode;
 };
 
@@ -77,6 +83,7 @@ export function ArtImage({
   className,
   ratio = 1,
   rounded = true,
+  src,
   children,
 }: ArtImageProps) {
   return (
@@ -94,15 +101,26 @@ export function ArtImage({
         backgroundSize: "cover",
       }}
     >
-      {/* เกรนบาง ๆ ทำให้ไม่ดูเป็นกราเดียนต์เพียว ๆ */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.14] mix-blend-overlay"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E\")",
-        }}
-      />
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element -- ปิด image optimization ไว้ (next.config.ts)
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover"
+        />
+      ) : (
+        /* เกรนบาง ๆ ทำให้ gradient ไม่ดูเพียวเกินไป — ใส่เฉพาะตอนไม่มีรูปจริง */
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.14] mix-blend-overlay"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E\")",
+          }}
+        />
+      )}
       {children}
     </div>
   );
@@ -120,17 +138,35 @@ export function ArtAvatar({
   seed,
   alt,
   className,
+  src,
 }: {
   seed: string;
   alt: string;
   className?: string;
+  /** รูปจาก Google หรือที่อัปโหลดเอง — ไม่มีก็ใช้ gradient จาก seed */
+  src?: string | null;
 }) {
   return (
     <div
       role="img"
       aria-label={alt}
-      className={cn("relative shrink-0 rounded-full bg-muted ring-1 ring-border", className)}
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border",
+        className,
+      )}
       style={{ backgroundImage: artGradient(seed), backgroundSize: "cover" }}
-    />
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element -- ปิด image optimization ไว้ (next.config.ts)
+        <img
+          src={src}
+          alt=""
+          referrerPolicy="no-referrer"
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover"
+        />
+      ) : null}
+    </div>
   );
 }

@@ -38,13 +38,17 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 **เป้าหมาย: ครีเอเตอร์ 1 คนรับงานจริงจากลูกค้าจริงจนจบได้ — นี่คือหมุดหมายที่สำคัญที่สุดของทั้งโปรเจกต์**
 
 ### 1a. หน้าร้าน (สัปดาห์ 2)
-- [ ] Schema: `creator_page`, `service`, `service_tier`, `service_option`, `portfolio_item`, `media`
-- [ ] Onboarding wizard 4 ขั้น + reserved handle list + เช็ค availability
+- [x] Schema: `creator_page`, `service`, `service_tier`, `service_option`, `portfolio_item`, `media`
+- [x] Onboarding + reserved handle list + เช็ค availability (ยังเป็นขั้นเดียว ไม่ใช่ wizard 4 ขั้น)
+- [x] เปิดร้านแล้วได้เมนูตั้งต้น 3 รายการทันที — `lib/shop/ensure.ts` เรียกซ้ำได้ปลอดภัย
+      และ `/shop` ก็เรียก จึงกู้ผู้ใช้ที่ตั้ง handle ไว้ก่อนมีตารางนี้ได้เอง
+- [x] `/[handle]` + `/[handle]/s/[slug]` อ่านจาก DB จริง + gate ร้านที่ยังไม่เผยแพร่
+      (เจ้าของเห็น preview คนอื่นได้ 404)
+- [x] `/shop` แก้ชื่อ/คำโปรย/about/สถานะ/TOS + ปุ่มเผยแพร่
+- [x] `<ArtImage>` รองรับทั้งรูปจริงและ gradient placeholder · OG image อ่านจาก DB
 - [ ] `<MediaUploader>`: client upload ไป Blob + ย่อ/WebP ในเบราว์เซอร์ + thumbhash
-- [ ] Service editor + Portfolio manager
-- [ ] `/@handle` + `/@handle/s/[slug]` พร้อม `use cache` + `cacheTag` + `updateTag` ตอน save
-- [ ] `<ArtImage>`, `<MasonryGrid>`, `<PriceBuilder>`
-- [ ] OG image ด้วย `next/og`
+- [ ] Service editor (CRUD) + Portfolio manager
+- [ ] `use cache` + `cacheTag` + `updateTag` ตอน save (รอเปิด `cacheComponents`)
 
 **เสร็จเมื่อ:** เอาลิงก์ `/@handle` ไปแปะ bio Twitter ได้แล้วดูดี ← *ตรงนี้คือจุดที่ product มีคุณค่าแล้วแม้ยังรับออเดอร์ในระบบไม่ได้*
 
