@@ -171,7 +171,16 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       quote.lines.map((line, i) => ({
         id: newId("oitm"),
         orderId,
-        label: line.label,
+        /**
+         * บรรทัดตัวคูณต้องแช่อัตราไว้ในข้อความด้วย
+         *
+         * `label` คือ "ข้อความที่ลูกค้าเห็นตอนสั่ง" ซึ่งบนหน้าจอคือ "ใช้เชิงพาณิชย์ (×2)"
+         * ถ้าเก็บแค่ชื่อกับจำนวนเงิน ใบเสร็จจะอธิบายไม่ได้ว่าเงินก้อนนี้มาจากไหน
+         * และย้อนกลับไปดูจากเมนูปัจจุบันก็ไม่ได้ เพราะครีเอเตอร์แก้อัตราทีหลังได้
+         */
+        label: line.multiplierBp
+          ? `${line.label} (×${line.multiplierBp / 10_000})`
+          : line.label,
         kind: line.kind,
         unitPriceCents: line.unitPriceCents,
         quantity: line.quantity,

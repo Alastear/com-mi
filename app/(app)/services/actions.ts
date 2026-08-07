@@ -14,6 +14,7 @@ import { ensureShop } from "@/lib/shop/ensure";
 import { slugify, uniqueSlug } from "@/lib/services/slug";
 import { dynamicHref } from "@/lib/routes";
 import { SERVICE_KINDS, SERVICE_MODES } from "@/lib/types";
+import { BP_ONE, MAX_MULTIPLIER_BP } from "@/lib/orders/pricing";
 
 /** หน้าร้านของผู้ใช้ + slug ที่ถูกใช้ไปแล้ว — ทุก action ต้องผ่านตรงนี้ก่อนแตะข้อมูล */
 async function ownPage(userId: string) {
@@ -70,14 +71,37 @@ const TierSchema = z.object({
   priceDeltaCents: z.number().int().min(0).max(100_000_00),
 });
 
-const OptionSchema = z.object({
-  id: z.string().optional(),
-  groupLabel: z.string().trim().max(60).default(""),
-  label: z.string().trim().min(1).max(60),
-  priceDeltaCents: z.number().int().min(0).max(100_000_00),
-  inputType: z.enum(["checkbox", "quantity"]),
-  maxQuantity: z.number().int().min(1).max(99).nullable(),
-});
+const OptionSchema = z
+  .object({
+    id: z.string().optional(),
+    groupLabel: z.string().trim().max(60).default(""),
+    label: z.string().trim().min(1).max(60),
+    priceDeltaCents: z.number().int().min(0).max(100_000_00),
+    /**
+     * ตัวคูณเป็น basis point — 0 = ตัวเลือกแบบบวกเงินตามปกติ
+     * ขั้นต่ำ 10001 เพราะ x1 พอดีคือไม่คิดเพิ่ม ซึ่งควรตั้งเป็น 0 แทน
+     */
+    priceMultiplierBp: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_MULTIPLIER_BP)
+      .default(0)
+      .refine((n) => n === 0 || n > BP_ONE, { message: "multiplier_too_low" }),
+    inputType: z.enum(["checkbox", "quantity"]),
+    maxQuantity: z.number().int().min(1).max(99).nullable(),
+  })
+  /**
+   * ตัวเลือกหนึ่งอันเป็นได้อย่างเดียว — บวกเงิน หรือ คูณ
+   *
+   * ถ้าปล่อยให้เป็นทั้งคู่ ครีเอเตอร์จะตั้งค่าที่ตัวเองอธิบายให้ลูกค้าไม่ถูก
+   * และ quoteOrder ก็จะข้ามราคาบวกไปเงียบ ๆ (ตัวคูณถูกตรวจก่อน) กลายเป็นเงินหาย
+   */
+  .transform((o) =>
+    o.priceMultiplierBp > 0
+      ? { ...o, priceDeltaCents: 0, inputType: "checkbox" as const, maxQuantity: null }
+      : o,
+  );
 
 const SaveSchema = z.object({
   id: z.string().min(1),
@@ -212,6 +236,7 @@ async function syncRows(
       groupLabel: o.groupLabel,
       label: o.label,
       priceDeltaCents: o.priceDeltaCents,
+      priceMultiplierBp: o.priceMultiplierBp,
       inputType: o.inputType,
       // เก็บ maxQuantity เฉพาะตอนเป็นแบบเลือกจำนวน — ไม่งั้นค่าค้างจากตอนสลับชนิด
       maxQuantity: o.inputType === "quantity" ? (o.maxQuantity ?? 5) : null,

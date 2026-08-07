@@ -40,6 +40,7 @@ export default async function EditServicePage({
           groupLabel: o.groupLabel,
           label: o.label,
           priceDeltaCents: o.priceDeltaCents,
+          priceMultiplierBp: o.priceMultiplierBp,
           inputType: o.inputType === "quantity" ? "quantity" : "checkbox",
           maxQuantity: o.maxQuantity,
         })),

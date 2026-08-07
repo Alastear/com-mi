@@ -98,8 +98,39 @@ describe("pricing", () => {
         id: "o2", label: "เร่งด่วน", priceDeltaCents: 50_000,
         inputType: "checkbox", maxQuantity: null,
       },
+      {
+        id: "m1", label: "ใช้เชิงพาณิชย์", priceDeltaCents: 0,
+        priceMultiplierBp: 20_000, // x2
+        inputType: "checkbox", maxQuantity: null,
+      },
+      {
+        id: "m2", label: "สิทธิ์ผูกขาด", priceDeltaCents: 0,
+        priceMultiplierBp: 15_000, // x1.5
+        inputType: "checkbox", maxQuantity: null,
+      },
+      {
+        id: "m3", label: "คูณลงตัวไม่ได้", priceDeltaCents: 0,
+        priceMultiplierBp: 13_300, // x1.33 — จงใจให้เกิดเศษสตางค์
+        inputType: "checkbox", maxQuantity: null,
+      },
     ],
   };
+
+  /** เอกลักษณ์ที่ห้ามพัง ไม่ว่าจะเลือกอะไรมา — ตรวจซ้ำในทุกเคสของตัวคูณ */
+  function assertInvariants(q: ReturnType<typeof quoteOrder>) {
+    assert.equal(
+      q.totalCents,
+      q.subtotalCents + q.addonsCents,
+      "total ต้องเท่ากับ subtotal + addons (ตาราง order เก็บสามค่านี้แยกคอลัมน์)",
+    );
+    const sum = q.lines.reduce((n, l) => n + l.unitPriceCents * l.quantity, 0);
+    assert.equal(sum, q.totalCents, "ผลรวมของทุกบรรทัดต้องเท่ายอดท้าย");
+    for (const l of q.lines) {
+      assert.ok(Number.isInteger(l.unitPriceCents), `${l.label} ไม่ใช่จำนวนเต็ม`);
+    }
+    assert.ok(Number.isInteger(q.totalCents), "ยอดรวมต้องเป็นจำนวนเต็มสตางค์");
+    assert.equal(q.totalCents % 100, 0, "ยอดรวมต้องลงตัวเป็นบาท");
+  }
 
   it("บวก tier กับ option ถูกต้อง", () => {
     const q = quoteOrder(service, {
@@ -136,6 +167,182 @@ describe("pricing", () => {
       const q = quoteOrder(service, { tierId: null, options: [{ optionId: "o1", quantity }] });
       assert.equal(q.totalCents, 150_000, `quantity=${quantity}`);
     }
+  });
+
+  it("ตัวคูณคิดจากยอดรวมทั้งหมด ไม่ใช่แค่ค่าภาพหลัก", () => {
+    const q = quoteOrder(service, {
+      tierId: "t2",
+      options: [{ optionId: "o1", quantity: 2 }, { optionId: "m1", quantity: 1 }],
+    });
+    // ค่างาน 1,500 + 800 + (600×2) = 3,500 → x2 คือบวกอีก 3,500
+    assert.equal(q.subtotalCents, 230_000);
+    assert.equal(q.totalCents, 700_000);
+    assertInvariants(q);
+    const line = q.lines.find((l) => l.kind === "multiplier");
+    assert.equal(line?.unitPriceCents, 350_000);
+    assert.equal(line?.multiplierBp, 20_000);
+  });
+
+  it("ไม่ติ๊กตัวคูณ = ราคาเท่าเดิมทุกบาท", () => {
+    const q = quoteOrder(service, { tierId: "t2", options: [{ optionId: "o1", quantity: 2 }] });
+    assert.equal(q.totalCents, 350_000);
+    assert.ok(!q.lines.some((l) => l.kind === "multiplier"));
+    assertInvariants(q);
+  });
+
+  it("เมนูเก่าที่ยังไม่มีฟิลด์ตัวคูณเลย คิดราคาได้เหมือนเดิม", () => {
+    const legacy: PricingService = {
+      title: "เมนูก่อนมีตัวคูณ",
+      basePriceCents: 100_000,
+      tiers: [],
+      options: [
+        { id: "x", label: "ของเสริม", priceDeltaCents: 25_000, inputType: "checkbox", maxQuantity: null },
+      ],
+    };
+    const q = quoteOrder(legacy, { tierId: null, options: [{ optionId: "x", quantity: 1 }] });
+    assert.equal(q.totalCents, 125_000);
+    assertInvariants(q);
+  });
+
+  it("ติ๊กหลายตัวคูณ = บวกส่วนที่เกิน x1 ไม่ใช่คูณต่อกัน และไม่ขึ้นกับลำดับ", () => {
+    // x2 กับ x1.5 → +100% +50% = x2.5 ไม่ใช่ x3
+    const a = quoteOrder(service, {
+      tierId: null,
+      options: [{ optionId: "m1", quantity: 1 }, { optionId: "m2", quantity: 1 }],
+    });
+    const b = quoteOrder(service, {
+      tierId: null,
+      options: [{ optionId: "m2", quantity: 1 }, { optionId: "m1", quantity: 1 }],
+    });
+    assert.equal(a.totalCents, 375_000); // 1,500 × 2.5
+    assert.equal(a.totalCents, b.totalCents, "สลับลำดับที่ติ๊กแล้วยอดต้องเท่ากัน");
+    assertInvariants(a);
+    assertInvariants(b);
+  });
+
+  it("อัตราที่หารไม่ลงตัวถูกปัดเป็นบาทเต็ม และบรรทัดยังบวกได้เท่ายอดท้าย", () => {
+    // 1,500 × 0.33 = 495 พอดี — ลองอัตราที่ทำให้เกิดเศษจริง ๆ ด้วยฐานคี่
+    const odd: PricingService = {
+      ...service,
+      basePriceCents: 45_500, // 455 บาท
+    };
+    const q = quoteOrder(odd, { tierId: null, options: [{ optionId: "m3", quantity: 1 }] });
+    // 455 × 0.33 = 150.15 บาท → ปัดเป็น 150
+    assert.equal(q.totalCents, 60_500);
+    assertInvariants(q);
+  });
+
+  it("ติ๊กตัวคูณซ้ำ id เดิมสองครั้ง คิดครั้งเดียว", () => {
+    const q = quoteOrder(service, {
+      tierId: null,
+      options: [{ optionId: "m1", quantity: 1 }, { optionId: "m1", quantity: 1 }],
+    });
+    assert.equal(q.totalCents, 300_000); // ไม่ใช่ 1,500 × 3
+    assert.equal(q.lines.filter((l) => l.kind === "multiplier").length, 1);
+    assertInvariants(q);
+  });
+
+  it("ตัวคูณบนงานราคา 0 ไม่ทำให้เกิดบรรทัดผี", () => {
+    const free: PricingService = { ...service, basePriceCents: 0, tiers: [] };
+    const q = quoteOrder(free, { tierId: null, options: [{ optionId: "m1", quantity: 1 }] });
+    assert.equal(q.totalCents, 0);
+    assert.ok(!q.lines.some((l) => l.kind === "multiplier"));
+    assertInvariants(q);
+  });
+
+  it("ตัวคูณที่ครีเอเตอร์ตั้งเกินเพดานถูกจำกัด ไม่ใช่คิดตามที่ใส่", () => {
+    const insane: PricingService = {
+      ...service,
+      options: [
+        { id: "boom", label: "พิมพ์ผิด", priceDeltaCents: 0,
+          priceMultiplierBp: 9_999_999, inputType: "checkbox", maxQuantity: null },
+      ],
+    };
+    const q = quoteOrder(insane, { tierId: null, options: [{ optionId: "boom", quantity: 1 }] });
+    assert.equal(q.totalCents, 150_000 * 10); // เพดาน x10
+    assertInvariants(q);
+  });
+
+  it("ตัวคูณ x1 หรือต่ำกว่า ไม่คิดเงินเพิ่มและไม่โผล่เป็นบรรทัด", () => {
+    for (const bp of [0, 1, 9_999, 10_000]) {
+      const s: PricingService = {
+        ...service,
+        options: [{ id: "noop", label: "เท่าเดิม", priceDeltaCents: 0,
+          priceMultiplierBp: bp, inputType: "checkbox", maxQuantity: null }],
+      };
+      const q = quoteOrder(s, { tierId: null, options: [{ optionId: "noop", quantity: 1 }] });
+      assert.equal(q.totalCents, 150_000, `bp=${bp}`);
+      assertInvariants(q);
+    }
+  });
+
+  it("quantity ที่เป็น NaN ไม่ทำให้ตัวคูณถูกคิดทั้งที่ไม่ได้ติ๊ก", () => {
+    // Math.trunc(NaN) คือ NaN และ NaN < 1 เป็น false เสมอ — เคยลอดด่านมาแล้ว
+    for (const quantity of [Number.NaN, 0, -3, 0.4]) {
+      const q = quoteOrder(service, { tierId: null, options: [{ optionId: "m1", quantity }] });
+      assert.equal(q.totalCents, 150_000, `quantity=${quantity}`);
+      assert.ok(!q.lines.some((l) => l.kind === "multiplier"), `quantity=${quantity}`);
+      assertInvariants(q);
+    }
+  });
+
+  it("ไม่มีบรรทัดตัวคูณไหนติดลบ ต่อให้ยอดน้อยและติ๊กหลายอัน", () => {
+    // เคสจริงที่เคยพัง: งาน 1 บาท + x1.5 + x1.5 + x1.0001 → บรรทัดสุดท้ายเคยเป็น -1 บาท
+    const tiny: PricingService = {
+      title: "งานหนึ่งบาท",
+      basePriceCents: 100,
+      tiers: [],
+      options: [
+        { id: "a", label: "ก", priceDeltaCents: 0, priceMultiplierBp: 15_000, inputType: "checkbox", maxQuantity: null },
+        { id: "b", label: "ข", priceDeltaCents: 0, priceMultiplierBp: 15_000, inputType: "checkbox", maxQuantity: null },
+        { id: "c", label: "ค", priceDeltaCents: 0, priceMultiplierBp: 10_001, inputType: "checkbox", maxQuantity: null },
+      ],
+    };
+    const q = quoteOrder(tiny, {
+      tierId: null,
+      options: [
+        { optionId: "a", quantity: 1 },
+        { optionId: "b", quantity: 1 },
+        { optionId: "c", quantity: 1 },
+      ],
+    });
+    for (const l of q.lines) {
+      assert.ok(l.unitPriceCents >= 0, `${l.label} ติดลบ (${l.unitPriceCents})`);
+    }
+    assertInvariants(q);
+  });
+
+  it("กวาดทุกอัตราและทุกยอด แล้วเอกลักษณ์ยังจริงเสมอ", () => {
+    for (let baht = 0; baht <= 300; baht += 7) {
+      for (const bps of [[13_300], [15_000, 12_500], [10_001, 19_999, 11_111]]) {
+        const s: PricingService = {
+          title: "กวาด",
+          basePriceCents: baht * 100,
+          tiers: [],
+          options: bps.map((bp, i) => ({
+            id: `k${i}`, label: `k${i}`, priceDeltaCents: 0,
+            priceMultiplierBp: bp, inputType: "checkbox", maxQuantity: null,
+          })),
+        };
+        const q = quoteOrder(s, {
+          tierId: null,
+          options: bps.map((_, i) => ({ optionId: `k${i}`, quantity: 1 })),
+        });
+        assertInvariants(q);
+        for (const l of q.lines) {
+          assert.ok(l.unitPriceCents >= 0, `${baht}฿ ${bps.join("/")} → ${l.label} ติดลบ`);
+        }
+      }
+    }
+  });
+
+  it("ตัวคูณที่ครีเอเตอร์ลบทิ้งไประหว่างที่ลูกค้าเปิดหน้าค้าง ถูกเมินเฉย ๆ", () => {
+    const q = quoteOrder(service, {
+      tierId: null,
+      options: [{ optionId: "ตัวคูณที่ถูกลบแล้ว", quantity: 1 }],
+    });
+    assert.equal(q.totalCents, 150_000);
+    assertInvariants(q);
   });
 });
 

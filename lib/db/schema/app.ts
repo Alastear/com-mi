@@ -246,6 +246,18 @@ export const serviceOption = pgTable(
     groupLabel: text("group_label").notNull().default(""),
     label: text("label").notNull(),
     priceDeltaCents: integer("price_delta_cents").notNull().default(0),
+    /**
+     * ตัวคูณเป็น basis point — 10000 = x1.0, 15000 = x1.5, 20000 = x2.0
+     *
+     * **0 = ไม่ใช่ตัวเลือกแบบคูณ** ให้ใช้ `priceDeltaCents` ตามปกติ
+     * ค่าที่ไม่เกิน 10000 ก็ถูกมองเป็นแบบบวกเงินเช่นกัน (คูณแล้วราคาลดไม่มีความหมาย)
+     * ที่ต้องมีเพราะค่าใช้เชิงพาณิชย์คิดเป็น "เท่า" ของค่างาน ไม่ใช่เงินก้อนคงที่ —
+     * ชิบิ 450 บาทกับภาพเต็มตัว 1,500 บาทไม่ควรจ่ายค่าสิทธิ์เท่ากัน
+     *
+     * เก็บเป็นจำนวนเต็มไม่ใช่ทศนิยม เพราะเงินทั้งระบบเป็น integer สตางค์
+     * float ตัวเดียวที่หลุดเข้ามาจะทำให้ยอดฝั่งลูกค้ากับฝั่งเซิร์ฟเวอร์ต่างกันได้
+     */
+    priceMultiplierBp: integer("price_multiplier_bp").notNull().default(0),
     /** checkbox | quantity */
     inputType: text("input_type").notNull().default("checkbox"),
     maxQuantity: integer("max_quantity"),

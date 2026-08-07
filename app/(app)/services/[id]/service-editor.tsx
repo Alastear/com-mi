@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDict } from "@/lib/i18n/client";
 import { serviceHref } from "@/lib/routes";
 import { SERVICE_KINDS, SERVICE_MODES } from "@/lib/types";
+import { MAX_MULTIPLIER_BP } from "@/lib/orders/pricing";
 import { deleteService, saveService, setServiceCover, type SaveServiceResult } from "../actions";
 
 type Tier = { id?: string; label: string; priceDeltaCents: number };
@@ -25,6 +26,8 @@ type Option = {
   groupLabel: string;
   label: string;
   priceDeltaCents: number;
+  /** 0 = ตัวเลือกแบบบวกเงิน · >0 = ตัวคูณ basis point (10000 = x1) */
+  priceMultiplierBp: number;
   inputType: "checkbox" | "quantity";
   maxQuantity: number | null;
 };
@@ -49,6 +52,19 @@ type Service = {
 /** ราคาในฟอร์มเป็นบาท ส่วน DB เก็บเป็นสตางค์ — แปลงที่ขอบเท่านั้น */
 const toBaht = (cents: number) => Math.round(cents / 100);
 const toCents = (baht: string) => Math.max(0, Math.round(Number(baht) || 0)) * 100;
+
+/**
+ * ตัวคูณ: ครีเอเตอร์คิดเป็น "x2" แต่ DB เก็บเป็น basis point
+ *
+ * ⚠️ ช่องนี้อยู่ติดกับช่องราคาซึ่งแปลง บาท→สตางค์ (x100) — คนละหน่วยกันคนละตัวคูณ
+ * สลับสองอันนี้เมื่อไรคือคิดเงินผิด 100 เท่าแบบเงียบ ๆ จึงตั้งชื่อให้ต่างกันชัด
+ */
+const toRate = (bp: number) => (bp > 0 ? bp / 10_000 : 0);
+const toBp = (rate: string) => {
+  const n = Number(rate);
+  if (!Number.isFinite(n) || n <= 1) return 0;
+  return Math.min(MAX_MULTIPLIER_BP, Math.round(n * 10_000));
+};
 
 export function ServiceEditor({ handle, service }: { handle: string; service: Service }) {
   const t = useDict();
@@ -353,18 +369,38 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
                     className="mt-1"
                   />
                 </div>
-                <div className="w-28">
-                  <Label className="text-xs">
-                    {t.service.priceDelta} ({t.service.priceUnit})
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={toBaht(row.priceDeltaCents)}
-                    onChange={(e) => patchOption(i, { priceDeltaCents: toCents(e.target.value) })}
-                    className="tabular mt-1"
-                  />
-                </div>
+                {row.priceMultiplierBp > 0 ? (
+                  <div className="w-28">
+                    <Label className="text-xs">{t.service.multiplierRate}</Label>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="text-muted-foreground">×</span>
+                      <Input
+                        type="number"
+                        min={1.1}
+                        max={MAX_MULTIPLIER_BP / 10_000}
+                        step={0.1}
+                        value={toRate(row.priceMultiplierBp)}
+                        onChange={(e) =>
+                          patchOption(i, { priceMultiplierBp: toBp(e.target.value) })
+                        }
+                        className="tabular"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-28">
+                    <Label className="text-xs">
+                      {t.service.priceDelta} ({t.service.priceUnit})
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={toBaht(row.priceDeltaCents)}
+                      onChange={(e) => patchOption(i, { priceDeltaCents: toCents(e.target.value) })}
+                      className="tabular mt-1"
+                    />
+                  </div>
+                )}
                 <Button
                   type="button"
                   size="icon"
@@ -379,17 +415,41 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
               <div className="mt-3 flex flex-wrap items-center gap-4">
                 <Label className="flex items-center gap-2 text-sm font-normal">
                   <Checkbox
-                    checked={row.inputType === "quantity"}
+                    checked={row.priceMultiplierBp > 0}
                     onCheckedChange={(v) =>
                       patchOption(i, {
-                        inputType: v === true ? "quantity" : "checkbox",
-                        maxQuantity: v === true ? (row.maxQuantity ?? 5) : null,
+                        // เริ่มที่ x2 ซึ่งเป็นอัตราที่ใช้กันบ่อยที่สุดสำหรับสิทธิ์เชิงพาณิชย์
+                        priceMultiplierBp: v === true ? 20_000 : 0,
+                        // ตัวคูณเป็นติ๊กถูกเสมอ — "ใช้เชิงพาณิชย์ 3 ครั้ง" ไม่มีความหมาย
+                        // และล้างราคาบวกทิ้ง ไม่งั้นจะเหลือค่าที่ไม่ได้ใช้แต่ยังอยู่ใน DB
+                        inputType: v === true ? "checkbox" : row.inputType,
+                        maxQuantity: v === true ? null : row.maxQuantity,
+                        priceDeltaCents: v === true ? 0 : row.priceDeltaCents,
                       })
                     }
                   />
-                  {t.service.quantityType}
+                  {t.service.multiplierType}
                 </Label>
-                {row.inputType === "quantity" && (
+                {row.priceMultiplierBp > 0 ? (
+                  <p className="w-full text-xs text-muted-foreground">
+                    {t.service.multiplierHint}
+                  </p>
+                ) : null}
+                {row.priceMultiplierBp === 0 && (
+                  <Label className="flex items-center gap-2 text-sm font-normal">
+                    <Checkbox
+                      checked={row.inputType === "quantity"}
+                      onCheckedChange={(v) =>
+                        patchOption(i, {
+                          inputType: v === true ? "quantity" : "checkbox",
+                          maxQuantity: v === true ? (row.maxQuantity ?? 5) : null,
+                        })
+                      }
+                    />
+                    {t.service.quantityType}
+                  </Label>
+                )}
+                {row.priceMultiplierBp === 0 && row.inputType === "quantity" && (
                   <Label className="flex items-center gap-2 text-sm font-normal">
                     {t.service.maxQuantity}
                     <Input
@@ -423,6 +483,7 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
                   groupLabel: "",
                   label: "",
                   priceDeltaCents: 0,
+                  priceMultiplierBp: 0,
                   inputType: "checkbox",
                   maxQuantity: null,
                 },

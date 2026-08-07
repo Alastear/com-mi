@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { dynamicHref, shopHref } from "@/lib/routes";
 import type { getShopByHandle } from "@/lib/queries/creator";
 import { createOrder } from "@/lib/orders/create";
-import { quoteOrder } from "@/lib/orders/pricing";
+import { isMultiplierOption, quoteOrder } from "@/lib/orders/pricing";
 import { fill } from "@/lib/i18n/dictionaries";
 
 type Shop = NonNullable<Awaited<ReturnType<typeof getShopByHandle>>>;
@@ -341,8 +341,14 @@ export function ServiceOrderFlow({
                           </div>
                         ) : null}
 
+                        {/*
+                          ตัวคูณยังไม่มีจำนวนเงินตอนนี้ เพราะขึ้นกับยอดรวมที่ยังเลือกไม่เสร็จ
+                          โชว์อัตราไว้ก่อน แล้วบรรทัดสรุปด้านล่างจะบอกเงินจริงเมื่อติ๊กแล้ว
+                        */}
                         <span className="tabular w-20 text-right text-sm text-muted-foreground">
-                          +{formatMoney(opt.priceDeltaCents, shop.currency, locale)}
+                          {isMultiplierOption(opt)
+                            ? `×${(opt.priceMultiplierBp ?? 0) / 10_000}`
+                            : `+${formatMoney(opt.priceDeltaCents, shop.currency, locale)}`}
                         </span>
                       </div>
                     );
@@ -508,7 +514,11 @@ export function ServiceOrderFlow({
           {quote.lines.map((line, i) => (
             <li key={`${line.kind}-${line.sourceId ?? i}`} className="flex justify-between gap-3">
               <span className="text-muted-foreground">
-                {line.quantity > 1 ? `${line.label} × ${line.quantity}` : line.label}
+                {line.multiplierBp
+                  ? `${line.label} (×${line.multiplierBp / 10_000})`
+                  : line.quantity > 1
+                    ? `${line.label} × ${line.quantity}`
+                    : line.label}
               </span>
               <span className="tabular shrink-0">
                 {formatMoney(line.unitPriceCents * line.quantity, shop.currency, locale)}

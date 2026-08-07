@@ -1,0 +1,1 @@
+ALTER TABLE "service_option" ADD COLUMN "price_multiplier_bp" integer DEFAULT 0 NOT NULL;
