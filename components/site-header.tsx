@@ -9,15 +9,30 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Logo } from "@/components/brand";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
 import { useDict } from "@/lib/i18n/client";
-import { creator } from "@/lib/mock/data";
+import { UserAvatar } from "@/components/user-avatar";
+import { DEMO_HANDLE } from "@/lib/site";
 
-export function SiteHeader() {
+/**
+ * ผู้ใช้ที่ล็อกอินอยู่ ส่งมาจาก layout ฝั่ง server
+ *
+ * ส่งเป็น prop แทนที่จะให้ header ยิง useSession() เอง เพราะ layout เป็น Server Component
+ * ที่รู้ session อยู่แล้ว — ยิงซ้ำฝั่ง client จะได้ปุ่ม "เข้าสู่ระบบ" กระพริบก่อนหนึ่งจังหวะ
+ * ทุกครั้งที่โหลดหน้า ทั้งที่ผู้ใช้ล็อกอินอยู่
+ */
+export type HeaderUser = {
+  name: string;
+  email: string;
+  image?: string | null;
+  handle?: string | null;
+};
+
+export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const t = useDict();
 
   const links: Array<{ href: Route; label: string }> = [
     { href: "/explore", label: t.nav.explore },
     { href: "/pricing", label: t.nav.pricing },
-    { href: shopHref(creator.handle), label: t.landing.heroCtaSecondary },
+    { href: shopHref(DEMO_HANDLE), label: t.landing.heroCtaSecondary },
   ];
 
   return (
@@ -36,9 +51,18 @@ export function SiteHeader() {
         <div className="ml-auto flex items-center gap-1">
           <LanguageToggle />
           <ThemeToggle />
-          <Button asChild size="sm" className="hidden sm:inline-flex">
-            <Link href="/dashboard">{t.common.signIn}</Link>
-          </Button>
+          {user ? (
+            <Button asChild variant="ghost" size="sm" className="hidden gap-2 sm:inline-flex">
+              <Link href="/dashboard">
+                <UserAvatar user={user} className="size-6" />
+                <span className="max-w-32 truncate">{user.name}</span>
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm" className="hidden sm:inline-flex">
+              <Link href="/sign-in">{t.common.signIn}</Link>
+            </Button>
+          )}
 
           <Sheet>
             <SheetTrigger asChild>
@@ -56,9 +80,18 @@ export function SiteHeader() {
                     <Link href={l.href}>{l.label}</Link>
                   </Button>
                 ))}
-                <Button asChild className="mt-3">
-                  <Link href="/dashboard">{t.common.signIn}</Link>
-                </Button>
+                {user ? (
+                  <Button asChild variant="outline" className="mt-3 justify-start gap-2">
+                    <Link href="/dashboard">
+                      <UserAvatar user={user} className="size-5" />
+                      <span className="truncate">{user.name}</span>
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button asChild className="mt-3">
+                    <Link href="/sign-in">{t.common.signIn}</Link>
+                  </Button>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

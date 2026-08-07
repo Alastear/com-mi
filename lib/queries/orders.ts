@@ -110,6 +110,8 @@ export async function listOrdersForBoard(creatorUserId: string) {
       completedAt: true,
     },
     with: {
+      // ชื่อที่แช่ไว้ตอนสั่ง — บรรทัด base คือชื่อเมนู ณ ตอนนั้น
+      items: { where: eq(schema.orderItem.kind, "base"), limit: 1, columns: { label: true } },
       service: { columns: { title: true } },
       client: { columns: { name: true, image: true } },
     },

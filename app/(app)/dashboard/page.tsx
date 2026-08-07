@@ -8,9 +8,12 @@ import { LockedFeature } from "@/components/locked-feature";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { notifications, orders } from "@/lib/mock/data";
-import { requireSession } from "@/lib/auth-guard";
-import { ACTIVE_STATUSES } from "@/lib/types";
+import { requireCreator } from "@/lib/auth-guard";
+import { listOrdersForBoard } from "@/lib/queries/orders";
+import { getCreatorStats, getSetupProgress } from "@/lib/queries/setup";
+import { ensureShop } from "@/lib/shop/ensure";
+import { SetupChecklist } from "@/components/app/setup-checklist";
+import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/types";
 import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -22,31 +25,37 @@ import { shopUrl } from "@/lib/site";
 export default async function DashboardPage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
-  const { user } = await requireSession();
+  const { user } = await requireCreator();
+  const pageId = await ensureShop(user.id, user.name, locale);
 
-  // ⚠️ Phase 0: ผู้ใช้เป็นของจริงแล้ว แต่ออเดอร์/สถิติยังเป็น mock
-  //    จะเปลี่ยนเป็น query จริงใน Phase 1b เมื่อมีตาราง order
+  const [allOrders, progress, usage] = await Promise.all([
+    listOrdersForBoard(user.id),
+    getSetupProgress(user.id),
+    getCreatorStats(user.id, pageId),
+  ]);
+
   const shopPageHref = user.handle ? shopHref(user.handle) : "/onboarding";
+  const currency = "THB";
 
-  const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status));
-  const newRequests = orders.filter((o) => o.status === "requested");
-  const inProgress = orders.filter((o) => o.status === "in_progress");
+  const active = allOrders.filter((o) => ACTIVE_STATUSES.includes(o.status as OrderStatus));
+  const newRequests = active.filter((o) => o.status === "requested");
+  const inProgress = active.filter((o) => o.status === "in_progress");
   const dueSoon = active.filter((o) => o.dueAt && daysUntil(o.dueAt) <= 3);
-  const revenue = orders
-    .filter((o) => o.paidCents > 0)
-    .reduce((sum, o) => sum + o.paidCents, 0);
 
-  // งานที่ต้องจัดการ: คำขอใหม่ + เลยกำหนด + ลูกค้าตอบแล้วยังไม่ได้อ่าน
+  /**
+   * รายได้นับจาก "เงินที่ยืนยันแล้วว่าเข้าจริง" ไม่ใช่ยอดรวมของออเดอร์
+   * ออเดอร์ที่ยังไม่จ่ายไม่ใช่รายได้ และตัวเลขที่สูงเกินจริงบนแดชบอร์ด
+   * ทำให้ครีเอเตอร์วางแผนผิด
+   */
+  const revenue = allOrders.reduce((sum, o) => sum + o.amountPaidCents, 0);
+
+  // งานที่ต้องจัดการ: คำขอใหม่ + เลยกำหนด
   const needsAttention = active
-    .filter(
-      (o) =>
-        o.status === "requested" ||
-        o.unreadCount > 0 ||
-        (o.dueAt !== undefined && daysUntil(o.dueAt) < 0),
-    )
+    .filter((o) => o.status === "requested" || (o.dueAt !== null && daysUntil(o.dueAt) < 0))
     .slice(0, 5);
 
-  const storageUsed = 96 * 1024 ** 2;
+  const storageUsed = usage.storageBytes;
+  // TODO Phase 2: อ่านลิมิตจาก plan จริงของผู้ใช้ผ่าน entitlements
   const freeLimits = PLANS.free.limits;
 
   const stats = [
@@ -83,6 +92,17 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/*
+        เช็กลิสต์ตั้งร้าน — อยู่บนสุดจนกว่าจะตั้งค่าครบและเผยแพร่แล้ว
+        ครีเอเตอร์ใหม่เปิดเข้ามาเจอตัวเลข 0 ทั้งแถวโดยไม่รู้ว่าต้องทำอะไรต่อ
+        คือจุดที่คนเลิกใช้มากที่สุด
+      */}
+      {progress ? (
+        <div className="mt-6">
+          <SetupChecklist progress={progress} handle={user.handle ?? ""} locale={locale} />
+        </div>
+      ) : null}
+
       {/* ตัวเลขสรุป */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
@@ -99,7 +119,7 @@ export default async function DashboardPage() {
           <p className="text-sm text-muted-foreground">{t.dashboard.monthRevenue}</p>
           <p className="tabular text-2xl font-semibold xl:text-3xl">
             {/* TODO Phase 1: อ่านสกุลเงินจาก creator_page */}
-            {formatMoney(revenue, "THB", locale)}
+            {formatMoney(revenue, currency, locale)}
           </p>
         </Card>
       </div>
@@ -124,23 +144,18 @@ export default async function DashboardPage() {
           ) : (
             <ul className="mt-3 space-y-2">
               {needsAttention.map((o) => {
-                const overdue = o.dueAt !== undefined && daysUntil(o.dueAt) < 0;
+                const overdue = o.dueAt !== null && daysUntil(o.dueAt) < 0;
                 return (
                   <li key={o.code}>
                     <Link href={orderHref(o.code)}>
                       <Card className="flex-row items-center gap-3 p-3 transition-colors hover:bg-accent/40">
-                        <ArtImage
-                          seed={o.coverSeed}
-                          alt=""
-                          ratio={1}
-                          className="size-12 shrink-0"
-                        />
+                        <ArtImage seed={o.id} alt="" ratio={1} className="size-12 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="tabular font-mono text-xs text-muted-foreground">
                               #{o.code}
                             </span>
-                            <OrderStatusPill status={o.status} />
+                            <OrderStatusPill status={o.status as OrderStatus} />
                             {overdue && (
                               <span className="inline-flex items-center gap-1 text-xs text-destructive">
                                 <AlertTriangle className="size-3" />
@@ -148,22 +163,17 @@ export default async function DashboardPage() {
                               </span>
                             )}
                           </div>
-                          <p className="mt-0.5 truncate text-sm font-medium">{o.serviceTitle}</p>
+                          <p className="mt-0.5 truncate text-sm font-medium">{o.service?.title ?? "—"}</p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {o.clientName} · {formatRelative(o.createdAt, locale)}
+                            {o.client?.name ?? "—"} · {formatRelative(o.createdAt, locale)}
                           </p>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="tabular text-sm font-medium">
                             {o.totalCents > 0
                               ? formatMoney(o.totalCents, o.currency, locale)
-                              : "—"}
+                              : t.order.noQuoteYet}
                           </p>
-                          {o.unreadCount > 0 && (
-                            <span className="tabular mt-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
-                              {o.unreadCount}
-                            </span>
-                          )}
                         </div>
                       </Card>
                     </Link>
@@ -215,16 +225,16 @@ export default async function DashboardPage() {
 
             <Quota
               label={t.dashboard.quotaOrders}
-              used={active.length}
+              used={usage.activeOrders}
               max={freeLimits.active_orders}
-              display={`${active.length} / ${freeLimits.active_orders}`}
+              display={`${usage.activeOrders} / ${freeLimits.active_orders}`}
               overLabel={t.dashboard.overQuota}
             />
             <Quota
               label={t.dashboard.quotaServices}
-              used={5}
+              used={usage.services}
               max={freeLimits.services}
-              display={`5 / ${freeLimits.services}`}
+              display={`${usage.services} / ${freeLimits.services}`}
               overLabel={t.dashboard.overQuota}
             />
             <Quota
@@ -240,32 +250,39 @@ export default async function DashboardPage() {
             </Button>
           </Card>
 
+          {/*
+            เดิมเป็นรายการแจ้งเตือนจำลอง — ตาราง notification ยังไม่มี (Phase 1c)
+            ระหว่างนี้แสดงออเดอร์ล่าสุดจริง ซึ่งเป็นความเคลื่อนไหวที่มีอยู่แล้ว
+            ดีกว่าโชว์การแจ้งเตือนของคนอื่นที่ไม่เคยเกิดขึ้น
+          */}
           <Card className="gap-3 p-5">
             <p className="font-medium">{t.dashboard.recentActivity}</p>
-            <ul className="space-y-3">
-              {notifications.map((n) => (
-                <li key={n.id}>
-                  <Link href={n.href} className="group flex gap-2.5">
-                    <span
-                      className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
-                        n.read ? "bg-muted-foreground/40" : "bg-primary"
-                      }`}
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm group-hover:underline">
-                        {n.title}
+            {allOrders.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                {t.order.emptyAll}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {allOrders.slice(0, 5).map((o) => (
+                  <li key={o.id}>
+                    <Link href={orderHref(o.code)} className="group flex gap-2.5">
+                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm group-hover:underline">
+                          {o.service?.title ?? o.code}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {o.client?.name ?? "—"} · {t.orderStatus[o.status as OrderStatus]}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {formatRelative(o.createdAt, locale)}
+                        </span>
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {n.body}
-                      </span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {formatRelative(n.createdAt, locale)}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </aside>
       </div>

@@ -147,6 +147,35 @@ const th = {
     count: "ครีเอเตอร์ {n} คน",
   },
 
+  /** เช็กลิสต์พาครีเอเตอร์ใหม่ตั้งร้าน — อ่านจากสถานะจริง ไม่ใช่ทัวร์ที่กดข้ามได้ */
+  setup: {
+    title: "เริ่มต้นใช้งาน",
+    subtitle: "ทำครบแล้วร้านของคุณพร้อมรับงานจริง",
+    progress: "ทำแล้ว {done} จาก {total} ข้อ",
+    optional: "ไม่บังคับ",
+    readyTitle: "ตั้งค่าครบแล้ว",
+    readyBody: "กดเผยแพร่เพื่อให้คนอื่นเปิดหน้าร้านของคุณได้",
+    publishedTitle: "ร้านของคุณเปิดแล้ว",
+    publishedBody: "ก็อปลิงก์ไปแปะใน bio ของ X, Instagram หรือ Discord ได้เลย",
+    dismiss: "ซ่อนเช็กลิสต์นี้",
+    steps: {
+      identity: "เขียนคำโปรยแนะนำตัว",
+      identityBody: "ประโยคเดียวที่บอกว่าคุณรับวาดแนวไหน — เป็นสิ่งแรกที่ลูกค้าอ่าน",
+      avatar: "ใส่รูปโปรไฟล์",
+      avatarBody: "ใช้รูปที่คุณใช้ในโซเชียลอยู่แล้ว ลูกค้าจะจำได้ว่าเป็นคนเดียวกัน",
+      banner: "ใส่แบนเนอร์",
+      bannerBody: "เอาผลงานที่ภูมิใจที่สุดขึ้นเป็นภาพปก",
+      service: "เพิ่มเมนูรับงานแรก",
+      serviceBody: "ตั้งชื่องาน ราคา และระยะเวลาส่ง — ลูกค้าสั่งจากเมนูนี้",
+      portfolio: "อัปโหลดผลงาน",
+      portfolioBody: "อย่างน้อย 3–4 ชิ้นที่ตรงกับงานที่คุณรับ",
+      payout: "ตั้งค่าการรับเงิน",
+      payoutBody: "ใส่หมายเลข PromptPay ระบบจะสร้าง QR ให้ลูกค้าโอนตรงเข้าบัญชีคุณ",
+      publish: "เผยแพร่หน้าร้าน",
+      publishBody: "ก่อนกดนี้มีแค่คุณที่เห็นหน้าร้าน",
+    },
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -447,6 +476,8 @@ const th = {
     draftRestored: "กู้ร่างที่กรอกไว้กลับมาแล้ว",
     hideFromQueue: "ไม่ต้องแสดงงานนี้ในคิวสาธารณะ",
     hideFromQueueHint: "คิวสาธารณะไม่แสดงชื่อหรือรายละเอียดอยู่แล้ว แสดงแค่จำนวนงาน",
+    moveStale: "สถานะเปลี่ยนไปแล้วจากที่อื่น — รีเฟรชแล้วลองใหม่",
+    moveNotAllowed: "ย้ายไปสถานะนี้ไม่ได้จากตรงนี้",
   },
 
   /** ข้อความตอนส่งคำขอไม่สำเร็จ — ต้องบอกว่าทำอะไรต่อได้ ไม่ใช่แค่บอกว่าพัง */
@@ -748,6 +779,34 @@ const en: Dictionary = {
     count: "{n} creators",
   },
 
+  setup: {
+    title: "Get started",
+    subtitle: "Finish these and your shop is ready to take real work",
+    progress: "{done} of {total} done",
+    optional: "optional",
+    readyTitle: "Setup complete",
+    readyBody: "Publish to let people open your shop",
+    publishedTitle: "Your shop is live",
+    publishedBody: "Copy the link into your X, Instagram or Discord bio",
+    dismiss: "Hide this checklist",
+    steps: {
+      identity: "Write your tagline",
+      identityBody: "One line on what you draw — the first thing a client reads",
+      avatar: "Add a profile picture",
+      avatarBody: "Use the one you already use on social, so clients recognise you",
+      banner: "Add a banner",
+      bannerBody: "Put your proudest piece across the top",
+      service: "Add your first service",
+      serviceBody: "Name, price and turnaround — this is what clients order from",
+      portfolio: "Upload your work",
+      portfolioBody: "Three or four pieces that match what you take on",
+      payout: "Set up payments",
+      payoutBody: "Add your PromptPay number and we generate a QR that pays you directly",
+      publish: "Publish your shop",
+      publishBody: "Until you do, only you can see it",
+    },
+  },
+
   legal: {
     terms: "Terms of Service",
     privacy: "Privacy Policy",
@@ -1045,6 +1104,8 @@ const en: Dictionary = {
     draftRestored: "Restored what you had filled in",
     hideFromQueue: "Do not show this order in the public queue",
     hideFromQueueHint: "The public queue never shows names or details — only how many orders there are",
+    moveStale: "The status changed elsewhere — refresh and try again",
+    moveNotAllowed: "That move is not allowed from here",
   },
 
   orderError: {

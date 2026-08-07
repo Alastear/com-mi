@@ -17,7 +17,8 @@
     "blob:check": "dotenv -e .env.development.local -e .env.local -- tsx scripts/blob-check.mts",
     "test": "tsx --test lib/**/*.test.ts",
     "db:seed-orders": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-orders.mts",
-    "db:seed-demo": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-demo-shop.mts"
+    "db:seed-demo": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-demo-shop.mts",
+    "db:reset-creator": "dotenv -e .env.development.local -e .env.local -- tsx scripts/reset-creator.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

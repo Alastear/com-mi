@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle, Clock, LayoutGrid, List, MessageSquare, MoveRight } from "lucide-react";
+import { AlertTriangle, Clock, LayoutGrid, List, MoveRight } from "lucide-react";
 import { toast } from "sonner";
 import { ArtImage } from "@/components/art-image";
 import { OrderStatusPill } from "@/components/status-pill";
@@ -19,40 +19,86 @@ import { useLocale } from "@/lib/i18n/client";
 import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
 import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
-import { BOARD_COLUMNS, type BoardColumn, type Order } from "@/lib/types";
+import { BOARD_COLUMNS, type BoardColumn, type OrderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { orderHref } from "@/lib/routes";
+import { boardDropTarget, boardMenuTargets, columnOf } from "@/lib/orders/board";
+import { transitionOrder } from "@/lib/orders/actions";
+
+/**
+ * ข้อมูลการ์ดที่หน้า /orders แบนมาให้ — ไม่ใช่แถวดิบจาก Drizzle
+ * ทุกฟิลด์ต้อง serialize ข้ามไปฝั่ง client ได้ วันที่จึงเป็น ISO string ไม่ใช่ Date
+ */
+export type BoardOrder = {
+  id: string;
+  code: string;
+  status: OrderStatus;
+  title: string;
+  clientName: string;
+  clientImage: string | null;
+  currency: string;
+  totalCents: number;
+  amountPaidCents: number;
+  dueAt: string | null;
+  createdAt: string;
+};
 
 /**
  * บอร์ดคิวงาน
  *
- * prototype ใช้ HTML5 drag-and-drop + เมนู "ย้ายไป…" เป็นทางเลือกสำหรับคีย์บอร์ดและมือถือ
- * ของจริงเปลี่ยนเป็น @dnd-kit (รองรับคีย์บอร์ดในตัว) + optimistic update ที่ rollback ได้
- * เมื่อ Server Action ปฏิเสธ transition — ดู docs/02-data-model.md §5
+ * ใช้ HTML5 drag-and-drop (ไม่พึ่ง @dnd-kit — bundle เล็กกว่าและพอสำหรับบอร์ดห้าคอลัมน์)
+ * พร้อมเมนู "ย้ายไป…" ที่เป็นทางเดียวสำหรับคีย์บอร์ดและมือถือ
+ *
+ * **เมนูไม่ใช่แค่ทางเลือกสำรอง** — การเปลี่ยนสถานะสามแบบที่ใช้บ่อยที่สุด
+ * (รับคำขอ / เริ่มลงมือ / กลับมาแก้) เกิดขึ้นภายในคอลัมน์เดียวกัน จึงลากไม่ได้เลย
+ * ถ้ามีแต่การลาก ครีเอเตอร์จะทำงานประจำวันไม่ได้ (ดู lib/orders/board.ts)
  */
-export function OrderBoard({ orders: initial }: { orders: Order[] }) {
+export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
   const { t, locale } = useLocale();
   const [view, setView] = useState<"board" | "list">("board");
-  const [orders, setOrders] = useState(initial);
   const [dragging, setDragging] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<BoardColumn | null>(null);
+  const [, startMove] = useTransition();
+
+  /**
+   * ขยับการ์ดทันทีที่ปล่อย แล้วค่อยรอเซิร์ฟเวอร์
+   *
+   * useOptimistic ย้อนสถานะกลับให้เองเมื่อ action จบและข้อมูลจริงมาแทน
+   * — ถ้าเซิร์ฟเวอร์ปฏิเสธ การ์ดจะเด้งกลับที่เดิมโดยไม่ต้องเขียนโค้ด rollback เอง
+   */
+  const [items, moveOptimistic] = useOptimistic(
+    orders,
+    (prev: BoardOrder[], move: { code: string; to: OrderStatus }) =>
+      prev.map((o) => (o.code === move.code ? { ...o, status: move.to } : o)),
+  );
+
+  const dragged = items.find((o) => o.code === dragging) ?? null;
 
   const columns = useMemo(
     () =>
       BOARD_COLUMNS.map((status) => ({
         status,
-        items: orders.filter((o) => matchesColumn(o, status)),
+        items: items.filter((o) => columnOf(o.status) === status),
       })),
-    [orders],
+    [items],
   );
 
-  function move(code: string, to: BoardColumn) {
-    setOrders((prev) =>
-      prev.map((o) => (o.code === code ? { ...o, status: to } : o)),
-    );
-    toast.success(`#${code} → ${t.orderStatus[to]}`, {
-      description:
-        t.prototype.notSavedNote,
+  function move(code: string, to: OrderStatus) {
+    startMove(async () => {
+      moveOptimistic({ code, to });
+      const res = await transitionOrder({ code, to });
+      if (res.ok) {
+        toast.success(`#${code} → ${t.orderStatus[to]}`);
+      } else {
+        // การ์ดเด้งกลับเองเมื่อ transition จบ — toast แค่บอกว่าทำไมถึงไม่ผ่าน
+        toast.error(
+          res.error === "stale"
+            ? t.order.moveStale
+            : res.error === "wrong_actor" || res.error === "not_allowed"
+              ? t.order.moveNotAllowed
+              : t.error.title,
+        );
+      }
     });
   }
 
@@ -94,6 +140,9 @@ export function OrderBoard({ orders: initial }: { orders: Order[] }) {
             <div
               key={col.status}
               onDragOver={(e) => {
+                // ไม่ preventDefault = เบราว์เซอร์แสดงเคอร์เซอร์ "ห้ามวาง" ให้เอง
+                // ไม่ต้องเขียน UI บอกว่าลงไม่ได้ และไม่ต้องรอเซิร์ฟเวอร์ปฏิเสธทีหลัง
+                if (!dragged || boardDropTarget(dragged.status, col.status) === null) return;
                 e.preventDefault();
                 setOverColumn(col.status);
               }}
@@ -104,7 +153,8 @@ export function OrderBoard({ orders: initial }: { orders: Order[] }) {
                 // (การ์ดมี <Link> อยู่ข้างใน → เบราว์เซอร์ใส่ text/uri-list ให้เอง)
                 // ผลคือปล่อยการ์ดแล้วเด้งออกจากบอร์ดไปหน้าออเดอร์ทันที
                 e.preventDefault();
-                if (dragging) move(dragging, col.status);
+                const to = dragged ? boardDropTarget(dragged.status, col.status) : null;
+                if (dragged && to) move(dragged.code, to);
                 setDragging(null);
                 setOverColumn(null);
               }}
@@ -146,20 +196,20 @@ export function OrderBoard({ orders: initial }: { orders: Order[] }) {
       ) : (
         <Card className="mt-5 gap-0 overflow-hidden p-0">
           <ul className="divide-y">
-            {orders.map((o) => {
-              const overdue = o.dueAt !== undefined && daysUntil(o.dueAt) < 0;
+            {items.map((o) => {
+              const overdue = o.dueAt !== null && daysUntil(o.dueAt) < 0;
               return (
                 <li key={o.code}>
                   <Link
                     href={orderHref(o.code)}
                     className="flex items-center gap-3 p-3 transition-colors hover:bg-accent/40"
                   >
-                    <ArtImage seed={o.coverSeed} alt="" ratio={1} className="size-10 shrink-0" />
+                    <ArtImage seed={o.id} alt="" ratio={1} className="size-10 shrink-0" />
                     <span className="tabular hidden font-mono text-xs text-muted-foreground sm:block">
                       #{o.code}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{o.serviceTitle}</span>
+                      <span className="block truncate text-sm font-medium">{o.title}</span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {o.clientName}
                       </span>
@@ -174,7 +224,9 @@ export function OrderBoard({ orders: initial }: { orders: Order[] }) {
                       {o.dueAt ? formatRelative(o.dueAt, locale) : "—"}
                     </span>
                     <span className="tabular w-20 shrink-0 text-right text-sm">
-                      {o.totalCents > 0 ? formatMoney(o.totalCents, o.currency, locale) : "—"}
+                      {o.totalCents > 0
+                        ? formatMoney(o.totalCents, o.currency, locale)
+                        : t.order.needsQuote}
                     </span>
                   </Link>
                 </li>
@@ -187,23 +239,6 @@ export function OrderBoard({ orders: initial }: { orders: Order[] }) {
   );
 }
 
-function matchesColumn(order: Order, column: BoardColumn): boolean {
-  // reviewing รวมกับ requested และ revision_requested/accepted รวมกับ in_progress
-  // เพื่อให้บอร์ดมี 5 คอลัมน์ที่อ่านง่าย ไม่ใช่ 9 คอลัมน์ตาม state machine เต็ม
-  switch (column) {
-    case "requested":
-      return order.status === "requested" || order.status === "reviewing";
-    case "in_progress":
-      return (
-        order.status === "in_progress" ||
-        order.status === "accepted" ||
-        order.status === "revision_requested"
-      );
-    default:
-      return order.status === column;
-  }
-}
-
 function OrderCard({
   order,
   locale,
@@ -213,15 +248,15 @@ function OrderCard({
   onMove,
   dragging,
 }: {
-  order: Order;
+  order: BoardOrder;
   locale: Locale;
   t: Dictionary;
   onDragStart: () => void;
   onDragEnd: () => void;
-  onMove: (to: BoardColumn) => void;
+  onMove: (to: OrderStatus) => void;
   dragging: boolean;
 }) {
-  const days = order.dueAt !== undefined ? daysUntil(order.dueAt) : null;
+  const days = order.dueAt !== null ? daysUntil(order.dueAt) : null;
   const urgency =
     days === null ? null : days < 0 ? "overdue" : days <= 2 ? "soon" : "ok";
 
@@ -257,10 +292,10 @@ function OrderCard({
       {/* draggable={false} — anchor ลากได้เองโดยปริยาย ต้องปิดไม่ให้แย่งเป็น drag source */}
       <Link href={orderHref(order.code)} draggable={false} className="block p-3 pl-3.5">
         <div className="flex gap-2.5">
-          <ArtImage seed={order.coverSeed} alt="" ratio={1} className="size-11 shrink-0" />
+          <ArtImage seed={order.id} alt="" ratio={1} className="size-11 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="tabular font-mono text-[11px] text-muted-foreground">#{order.code}</p>
-            <p className="truncate text-sm font-medium">{order.serviceTitle}</p>
+            <p className="truncate text-sm font-medium">{order.title}</p>
             <p className="truncate text-xs text-muted-foreground">{order.clientName}</p>
           </div>
         </div>
@@ -296,22 +331,29 @@ function OrderCard({
             </span>
           )}
 
-          {order.unreadCount > 0 && (
-            <span className="tabular ml-auto inline-flex items-center gap-1 text-primary">
-              <MessageSquare className="size-3" />
-              {order.unreadCount}
-            </span>
-          )}
         </div>
 
-        {order.progressPercent > 0 && (
-          <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary"
-              style={{ width: `${order.progressPercent}%` }}
-            />
+        {/*
+          เดิมเป็นแถบ "ความคืบหน้า" ที่ไม่มีคอลัมน์รองรับใน DB เลย
+          เปลี่ยนเป็นสัดส่วนเงินที่ได้รับจริง ซึ่งเป็นตัวเลขที่มีอยู่และครีเอเตอร์ต้องรู้
+        */}
+        {order.totalCents > 0 && order.amountPaidCents > 0 ? (
+          <div className="mt-2.5 flex items-center gap-2">
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-success"
+                style={{
+                  width: `${Math.min(100, (order.amountPaidCents / order.totalCents) * 100)}%`,
+                }}
+              />
+            </div>
+            <span className="tabular text-[10px] text-muted-foreground">
+              {order.amountPaidCents >= order.totalCents
+                ? t.order.fullyPaid
+                : formatMoney(order.amountPaidCents, order.currency, locale)}
+            </span>
           </div>
-        )}
+        ) : null}
       </Link>
 
       {/* ทางเลือกสำหรับคีย์บอร์ดและมือถือ — HTML5 DnD ใช้ไม่ได้บนสองอย่างนี้ */}
@@ -328,9 +370,10 @@ function OrderCard({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>{t.order.moveTo}</DropdownMenuLabel>
-          {BOARD_COLUMNS.map((c) => (
-            <DropdownMenuItem key={c} onClick={() => onMove(c)}>
-              {t.orderStatus[c]}
+          {/* เฉพาะปลายทางที่ state machine อนุญาตจริง — เดิมโชว์ทุกคอลัมน์แล้วกดแล้วพัง */}
+          {boardMenuTargets(order.status).map((to) => (
+            <DropdownMenuItem key={to} onClick={() => onMove(to)}>
+              {t.orderStatus[to]}
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

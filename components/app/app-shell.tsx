@@ -32,10 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDict } from "@/lib/i18n/client";
-import { notifications } from "@/lib/mock/data";
 import { signOut } from "@/lib/auth-client";
-import { formatRelative } from "@/lib/format";
-import { useLocale } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { shopHref } from "@/lib/routes";
 import { shopUrlDisplay } from "@/lib/site";
@@ -88,45 +85,31 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+/**
+ * กระดิ่งแจ้งเตือน
+ *
+ * ตาราง `notification` ยังไม่มี (Phase 1c) — เดิมตรงนี้อ่านจากข้อมูลจำลอง
+ * ทำให้ครีเอเตอร์ใหม่เห็นเลข 3 บนกระดิ่งตั้งแต่วินาทีแรกที่ล็อกอิน
+ * แล้วกดเข้าไปเจอการแจ้งเตือนของคนอื่นที่ไม่เคยเกิดขึ้น
+ *
+ * ตอนนี้แสดงสถานะว่างตามความจริง ต่อกับข้อมูลจริงเมื่อทำตารางเสร็จ
+ */
 function NotificationBell() {
   const t = useDict();
-  const { locale } = useLocale();
-  const unread = notifications.filter((n) => !n.read).length;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label={t.notification.title}>
           <Bell className="size-4" />
-          {unread > 0 && (
-            <span className="tabular absolute -top-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-              {unread}
-            </span>
-          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          {t.notification.title}
-          <span className="text-xs font-normal text-muted-foreground">
-            {t.notification.markAllRead}
-          </span>
-        </DropdownMenuLabel>
+        <DropdownMenuLabel>{t.notification.title}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {notifications.map((n) => (
-          <DropdownMenuItem key={n.id} asChild className="flex-col items-start gap-0.5 py-2.5">
-            <Link href={n.href}>
-              <span className="flex w-full items-center gap-2">
-                {!n.read && <span className="size-1.5 shrink-0 rounded-full bg-primary" />}
-                <span className={cn("truncate text-sm", !n.read && "font-medium")}>{n.title}</span>
-              </span>
-              <span className="truncate text-xs text-muted-foreground">{n.body}</span>
-              <span className="text-[11px] text-muted-foreground">
-                {formatRelative(n.createdAt, locale)}
-              </span>
-            </Link>
-          </DropdownMenuItem>
-        ))}
+        <p className="px-2 py-6 text-center text-sm text-muted-foreground">
+          {t.notification.empty}
+        </p>
       </DropdownMenuContent>
     </DropdownMenu>
   );

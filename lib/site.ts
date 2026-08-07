@@ -8,6 +8,13 @@
 /** ชื่อแบรนด์ที่ใช้ในที่ที่อยู่นอก React (metadata / manifest / OG) — ในหน้าเพจใช้ `t.brand.name` */
 export const SITE_NAME = "com-mi";
 
+/**
+ * handle ของร้านตัวอย่างที่ปุ่ม "ดูตัวอย่างหน้าร้าน" บนหน้าแรกชี้ไป
+ * ต้องตรงกับที่ scripts/seed-demo-shop.mts สร้าง — ร้านนี้ติดธง isDemo
+ * จึงเปิดตรงได้แต่ไม่ขึ้นในหน้าค้นหาและไม่เข้า sitemap
+ */
+export const DEMO_HANDLE = "nongfah";
+
 const FALLBACK_URL = "http://localhost:3450";
 
 export function siteUrl(): string {

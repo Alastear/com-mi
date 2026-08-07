@@ -9,7 +9,8 @@ import {
 } from "./state-machine";
 import { quoteOrder, type PricingService } from "./pricing";
 import { generateOrderCode, isOrderCode } from "./code";
-import type { OrderStatus } from "@/lib/types";
+import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
+import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
 
 /**
  * ตรรกะที่พลาดแล้วเสียเงินจริง — คุ้มที่จะมีเทสต์ถึงแม้โปรเจกต์ยังไม่มี test suite ใหญ่
@@ -149,6 +150,51 @@ describe("order code", () => {
   it("ปฏิเสธค่าที่ผิดรูป", () => {
     for (const bad of ["", "short", "TOOLONGCODE", "ABCDEFG0", "abcdefgh"]) {
       assert.equal(isOrderCode(bad), false, bad);
+    }
+  });
+});
+
+describe("board", () => {
+  it("ครีเอเตอร์ลาก quoted ไปคอลัมน์อื่นไม่ได้ — คนที่กดยอมรับคือลูกค้า", () => {
+    for (const c of BOARD_COLUMNS) {
+      assert.equal(boardDropTarget("quoted", c), null, c);
+    }
+  });
+
+  it("ครีเอเตอร์ลากการ์ดที่ delivered ไม่ได้ — รอลูกค้ายืนยันรับงาน", () => {
+    for (const c of BOARD_COLUMNS) {
+      assert.equal(boardDropTarget("delivered", c), null, c);
+    }
+  });
+
+  it("เส้นทางที่ลากได้จริงตรงกับ state machine ทุกช่อง", () => {
+    for (const from of ORDER_STATUSES) {
+      for (const col of BOARD_COLUMNS) {
+        const to = boardDropTarget(from, col);
+        if (to === null) continue;
+        assert.equal(canTransition(from, to, "creator"), true, `${from} → ${to}`);
+        assert.equal(columnOf(to), col, `${to} ควรอยู่คอลัมน์ ${col}`);
+      }
+    }
+  });
+
+  it("การย้ายที่เกิดในคอลัมน์เดียวกันต้องมีในเมนู ไม่งั้นทำไม่ได้เลย", () => {
+    // สามอย่างนี้เป็นงานประจำวันแต่ลากไม่ได้เพราะต้นทางกับปลายทางอยู่คอลัมน์เดียวกัน
+    for (const [from, to] of [
+      ["requested", "reviewing"],
+      ["accepted", "in_progress"],
+      ["revision_requested", "in_progress"],
+    ] as const) {
+      assert.equal(columnOf(from), columnOf(to), `${from}/${to} ควรอยู่คอลัมน์เดียวกัน`);
+      assert.equal(boardDropTarget(from, columnOf(to)!), null, "ลากไม่ได้");
+      assert.ok(boardMenuTargets(from).includes(to), `เมนูต้องมี ${to}`);
+    }
+  });
+
+  it("สถานะปลายทางไม่ขึ้นบอร์ด", () => {
+    for (const s of ["completed", "declined", "cancelled", "expired"] as const) {
+      assert.equal(isOnBoard(s), false, s);
+      assert.equal(columnOf(s), null, s);
     }
   });
 });
