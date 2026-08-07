@@ -8,7 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getServiceBySlug } from "@/lib/queries/creator";
 import { getSession } from "@/lib/auth-guard";
-import { shopHref } from "@/lib/routes";
+import { serviceHref, shopHref } from "@/lib/routes";
+import { normalizeHandle, redirectToCanonicalHandle } from "@/lib/canonical";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 
@@ -26,6 +27,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ServicePage({ params }: Props) {
   const { handle, slug } = await params;
+  // เข้ารหัส slug กลับก่อนประกอบเป็นเป้าหมาย redirect — header `Location` รับ ASCII เท่านั้น
+  // ถ้าใส่ "วาดภาพครึ่งตัว" ดิบ ๆ ลงไป Node จะโยน ERR_INVALID_CHAR แล้วหน้าพังเป็น 500
+  redirectToCanonicalHandle(
+    handle,
+    serviceHref(normalizeHandle(handle), encodeURIComponent(decodeSlug(slug))),
+  );
+
   const found = await getServiceBySlug(handle, slug);
   if (!found) notFound();
 
@@ -84,4 +92,13 @@ export default async function ServicePage({ params }: Props) {
       <ServiceOrderFlow service={service} shop={shop} />
     </div>
   );
+}
+
+/** slug ภาษาไทยมาเป็น %E0%B8%… — ต้องถอดก่อนประกอบ URL ใหม่ ไม่งั้นโดนเข้ารหัสซ้อน */
+function decodeSlug(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

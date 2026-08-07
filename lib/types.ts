@@ -31,19 +31,25 @@ export type ServiceKind = (typeof SERVICE_KINDS)[number];
 export const SERVICE_MODES = ["instant", "proposal"] as const;
 export type ServiceMode = (typeof SERVICE_MODES)[number];
 
-export type OrderStatus =
-  | "requested"
-  | "reviewing"
-  | "quoted"
-  | "accepted"
-  | "in_progress"
-  | "in_review"
-  | "revision_requested"
-  | "delivered"
-  | "completed"
-  | "declined"
-  | "cancelled"
-  | "expired";
+/**
+ * เก็บเป็น array ด้วยเหตุผลเดียวกับ SERVICE_KINDS — ต้องวนออกมาเป็น UI ได้
+ * และ `z.enum(ORDER_STATUSES)` ใช้ตรวจค่าที่รับจากภายนอกได้โดยไม่ต้องเขียนรายชื่อซ้ำ
+ */
+export const ORDER_STATUSES = [
+  "requested",
+  "reviewing",
+  "quoted",
+  "accepted",
+  "in_progress",
+  "in_review",
+  "revision_requested",
+  "delivered",
+  "completed",
+  "declined",
+  "cancelled",
+  "expired",
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 /** คอลัมน์ที่แสดงบนบอร์ด — สถานะ terminal ไม่ขึ้นบอร์ด */
 export const BOARD_COLUMNS = [

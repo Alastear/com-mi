@@ -11,11 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getShopByHandle } from "@/lib/queries/creator";
 import { getSession } from "@/lib/auth-guard";
-import { serviceHref } from "@/lib/routes";
+import { serviceHref, shopHref } from "@/lib/routes";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
 import { shopUrl } from "@/lib/site";
+import { normalizeHandle, redirectToCanonicalHandle } from "@/lib/canonical";
 import type { ShopStatus } from "@/lib/types";
 
 type Props = { params: Promise<{ handle: string }> };
@@ -33,6 +34,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CreatorPage({ params }: Props) {
   const { handle } = await params;
+  // ต้องอยู่ในตัวหน้า ไม่ใช่ generateMetadata — redirect จาก metadata ไม่มีผลกับ response
+  redirectToCanonicalHandle(handle, shopHref(normalizeHandle(handle)));
+
   const shop = await getShopByHandle(handle);
   if (!shop) notFound();
 
@@ -82,28 +86,36 @@ export default async function CreatorPage({ params }: Props) {
       </div>
 
       <div className="mx-auto w-full max-w-6xl px-4">
-        <div className="-mt-12 flex flex-col gap-4 sm:-mt-14 sm:flex-row sm:items-end">
-          <ArtAvatar
-            seed={shop.userId}
-            src={avatarSrc}
-            alt={shop.displayName}
-            className="size-24 ring-4 ring-background sm:size-28"
-          />
+        {/*
+          อวาตาร์ยื่นขึ้นไปคร่อมแบนเนอร์ได้ แต่ "ชื่อร้านต้องอยู่ใต้แบนเนอร์เสมอ"
+          เดิมชื่อถูกจัดชิดล่างในแถวเดียวกับอวาตาร์ พอ h1 สูงกว่าครึ่งล่างของอวาตาร์
+          ตัวอักษรก็โผล่ไปทับรูปปก — ยิ่งชื่อยาวหรือจอแคบยิ่งทับหนัก
+          แยกชื่อออกมาเป็นบรรทัดของตัวเองจึงไม่มีทางชนกันไม่ว่าชื่อยาวแค่ไหน
+        */}
+        <div className="-mt-12 sm:-mt-14">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <ArtAvatar
+              seed={shop.userId}
+              src={avatarSrc}
+              alt={shop.displayName}
+              className="size-24 ring-4 ring-background sm:size-28"
+            />
 
-          <div className="flex-1 pb-1">
+            <div className="flex gap-2">
+              <CopyLinkButton value={shopUrl(ownerHandle)} label={t.common.share} size="sm" />
+              {hasServices ? (
+                <Button asChild size="sm">
+                  <a href="#menu">{t.creator.viewMenu}</a>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-4">
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               {shop.displayName}
             </h1>
             <p className="text-sm text-muted-foreground">@{ownerHandle}</p>
-          </div>
-
-          <div className="flex gap-2 pb-1">
-            <CopyLinkButton value={shopUrl(ownerHandle)} label={t.common.share} size="sm" />
-            {hasServices ? (
-              <Button asChild size="sm">
-                <a href="#menu">{t.creator.viewMenu}</a>
-              </Button>
-            ) : null}
           </div>
         </div>
 

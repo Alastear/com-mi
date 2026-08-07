@@ -140,6 +140,13 @@ const th = {
     uploaded: "อัปโหลดแล้ว",
   },
 
+  explore: {
+    empty: "ยังไม่มีครีเอเตอร์เปิดร้าน",
+    emptyHint: "เปิดร้านของคุณเป็นคนแรก แล้วลิงก์หน้าร้านจะพร้อมให้เอาไปแปะ bio ได้ทันที",
+    openShop: "เปิดร้านของฉัน",
+    count: "ครีเอเตอร์ {n} คน",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -566,6 +573,20 @@ const th = {
     notifyEmailBody: "สรุปวันละ 1 ครั้ง · Pro ได้แบบทันที",
     notifyPushBody: "เด้งบนเบราว์เซอร์ทันทีที่มีงานเข้า แม้ปิดแท็บอยู่",
     notifyDiscordBody: "ส่งเข้าเซิร์ฟเวอร์ Discord ของคุณเองผ่าน webhook",
+    account: "บัญชีที่ใช้เข้าสู่ระบบ",
+    handleLocked: "เปลี่ยนไม่ได้หลังตั้งแล้ว",
+    handleLockedHint: "ลิงก์หน้าร้านที่แชร์ออกไปแล้วจะตายทันทีถ้าเปลี่ยน — ถ้าจำเป็นจริง ๆ ติดต่อเราได้",
+    editInShop: "แก้ชื่อร้าน คำโปรย และสถานะรับงานได้ที่หน้าจัดการร้าน",
+    goToShop: "ไปหน้าจัดการร้าน",
+    promptpayType: "ประเภทหมายเลข",
+    promptpayPhone: "เบอร์โทร",
+    promptpayNationalId: "เลขบัตรประชาชน",
+    promptpayName: "ชื่อบัญชี (ไว้ตรวจสอบเอง)",
+    promptpayNameHint: "กรอกชื่อที่ควรขึ้นในแอปธนาคารตอนลูกค้าสแกน จะได้รู้ทันทีถ้าเลขผิด",
+    promptpayInvalid: "หมายเลขไม่ถูกรูปแบบ — เบอร์โทร 10 หลัก หรือเลขบัตร 13 หลัก",
+    promptpayVerifyNote:
+      "สแกน QR ด้วยแอปธนาคารของคุณเองหนึ่งครั้งเพื่อตรวจว่าชื่อผู้รับถูกต้อง แล้วกดยกเลิก ไม่ต้องโอนจริง",
+    saved: "บันทึกแล้ว",
   },
 
   notification: {
@@ -718,6 +739,13 @@ const en: Dictionary = {
     avatar: "Profile picture",
     remove: "Remove",
     uploaded: "Uploaded",
+  },
+
+  explore: {
+    empty: "No creators have opened a shop yet",
+    emptyHint: "Be the first — your shop link is ready to paste into a bio the moment you publish",
+    openShop: "Open my shop",
+    count: "{n} creators",
   },
 
   legal: {
@@ -1142,6 +1170,20 @@ const en: Dictionary = {
     notifyEmailBody: "Daily digest · Pro sends instantly",
     notifyPushBody: "Fires the moment work arrives, even with the tab closed",
     notifyDiscordBody: "Posts into your own Discord server via webhook",
+    account: "Signed-in account",
+    handleLocked: "Cannot be changed once set",
+    handleLockedHint: "Shop links already shared would break instantly — contact us if you really need it changed",
+    editInShop: "Shop name, tagline and availability are edited on the shop page",
+    goToShop: "Go to shop page",
+    promptpayType: "Identifier type",
+    promptpayPhone: "Mobile number",
+    promptpayNationalId: "National ID",
+    promptpayName: "Account name (for your own check)",
+    promptpayNameHint: "The name that should appear in the bank app when a client scans — so you notice immediately if the number is wrong",
+    promptpayInvalid: "Wrong format — 10 digits for a phone, 13 for a national ID",
+    promptpayVerifyNote:
+      "Scan the QR once with your own banking app to confirm the payee name, then cancel. No transfer needed.",
+    saved: "Saved",
   },
 
   notification: {

@@ -12,9 +12,13 @@ export function dynamicHref(path: string): Route {
   return path as Route;
 }
 
-export const shopHref = (handle: string) => dynamicHref(`/${handle}`);
+/**
+ * URL หน้าร้านตามหลักคือ `/@handle` — ต้องตรงกับ `shopUrl()` ใน lib/site.ts
+ * ที่ปุ่มแชร์ใช้ ไม่งั้นลิงก์ที่ครีเอเตอร์ก็อปไปแปะ bio จะเปิดไม่ได้
+ */
+export const shopHref = (handle: string) => dynamicHref(`/@${handle}`);
 
 export const serviceHref = (handle: string, slug: string) =>
-  dynamicHref(`/${handle}/s/${slug}`);
+  dynamicHref(`/@${handle}/s/${slug}`);
 
 export const orderHref = (code: string) => dynamicHref(`/orders/${code}`);

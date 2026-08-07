@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { normalizeHandle } from "@/lib/handles";
 
 /**
  * ⚠️ Next **ไม่ถอด** percent-encoding ให้ใน `params`
@@ -46,7 +47,7 @@ export async function getShopByHandle(handle: string) {
 
   const owner = await db.query.user.findFirst({
     columns: { id: true, name: true, image: true, handle: true },
-    where: eq(schema.user.handle, decodeParam(handle).toLowerCase()),
+    where: eq(schema.user.handle, normalizeHandle(handle)),
   });
   if (!owner) return null;
 
@@ -78,12 +79,49 @@ export async function getShopByHandle(handle: string) {
   return { owner, ...page };
 }
 
+/**
+ * ครีเอเตอร์ที่ขึ้นหน้าค้นหาได้
+ *
+ * ตัดร้านตัวอย่างออกด้วย `isDemo` — ร้าน seed มีไว้ให้กดดูจากหน้าแรกหน้าเดียว
+ * ถ้าปล่อยขึ้นหน้าค้นหา marketplace จะดูเหมือนมีคนใช้ทั้งที่ยังไม่มี
+ *
+ * ดึงเมนูถูกสุดกับผลงาน 4 ชิ้นแรกมาด้วยเพื่อวาดการ์ด — จำกัดจำนวนตั้งแต่ใน query
+ * ไม่ใช่ดึงมาทั้งหมดแล้วค่อย slice ทิ้งฝั่ง JS
+ */
+export async function listPublicShops(limit = 24) {
+  const db = getDb();
+
+  return db.query.creatorPage.findMany({
+    where: and(eq(schema.creatorPage.isPublished, true), eq(schema.creatorPage.isDemo, false)),
+    orderBy: [desc(schema.creatorPage.updatedAt)],
+    limit,
+    columns: { id: true, displayName: true, tagline: true, status: true },
+    with: {
+      user: { columns: { handle: true } },
+      banner: { columns: { url: true } },
+      avatar: { columns: { url: true } },
+      services: {
+        where: and(eq(schema.service.isActive, true), isNull(schema.service.deletedAt)),
+        orderBy: [asc(schema.service.basePriceCents)],
+        limit: 2,
+        columns: { id: true, title: true, basePriceCents: true },
+      },
+      portfolio: {
+        orderBy: [asc(schema.portfolioItem.sortOrder)],
+        limit: 4,
+        columns: { id: true, title: true },
+        with: { media: { columns: { url: true } } },
+      },
+    },
+  });
+}
+
 /** ใช้ตอนตัดสิน 404 ที่ layout — ตั้งใจให้เบาที่สุด ไม่ join อะไรเลย */
 export async function shopExists(handle: string): Promise<boolean> {
   const db = getDb();
   const row = await db.query.user.findFirst({
     columns: { id: true },
-    where: eq(schema.user.handle, decodeParam(handle).toLowerCase()),
+    where: eq(schema.user.handle, normalizeHandle(handle)),
   });
   return Boolean(row);
 }

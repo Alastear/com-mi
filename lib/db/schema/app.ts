@@ -88,6 +88,22 @@ export const creatorPage = pgTable("creator_page", {
   tosVersion: integer("tos_version").notNull().default(1),
 
   socials: jsonb("socials").$type<Array<{ platform: string; url: string }>>().notNull().default([]),
+
+    /**
+     * ร้านตัวอย่างที่ seed ไว้ให้กดดูจากหน้าแรก
+     * ต้องไม่โผล่ในหน้าค้นหาครีเอเตอร์และไม่เข้า sitemap — เปิดตรงด้วย URL ได้อย่างเดียว
+     * ไม่งั้น marketplace จะดูเหมือนมีคนใช้ทั้งที่ยังไม่มี และ Google จะ index ร้านที่ไม่มีตัวตนจริง
+     */
+    isDemo: boolean("is_demo").notNull().default(false),
+
+    /**
+     * ช่องทางรับเงิน — แพลตฟอร์มไม่ถือเงิน ลูกค้าโอนตรงเข้าบัญชีครีเอเตอร์
+     * promptpayType: phone | national_id | ewallet
+     * promptpayName เก็บไว้ให้ผู้ใช้ตรวจสอบเองว่าชื่อในแอปธนาคารตรงกับที่คาด
+     */
+    promptpayType: text("promptpay_type"),
+    promptpayId: text("promptpay_id"),
+    promptpayName: text("promptpay_name"),
   theme: jsonb("theme").$type<Record<string, string>>().notNull().default({}),
 
   isMature: boolean("is_mature").notNull().default(false),

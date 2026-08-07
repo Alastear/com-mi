@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { shopExists } from "@/lib/queries/creator";
+import { normalizeHandle } from "@/lib/handles";
 
 /**
  * ตัดสินว่า handle นี้มีอยู่จริงไหม — ต้องทำ "ที่ layout" ไม่ใช่ที่ page
@@ -8,7 +9,9 @@ import { shopExists } from "@/lib/queries/creator";
  * header 200 จึงถูกส่งออกไปก่อน `notFound()` → ได้ soft-404 ที่ Google จะ index
  * (docs/01-architecture.md §2)
  *
- * query ตัวนี้ตั้งใจให้เบาที่สุด — เช็คแค่ว่ามี user ที่ถือ handle นี้ไหม ไม่ join อะไร
+ * ส่วนการเด้งไป URL ตามหลัก (`/@handle`) ทำที่ **page** ไม่ใช่ที่นี่ —
+ * layout ไม่รู้ path ของลูก ถ้าเด้งจากตรงนี้ `/somchai/s/ภาพครึ่งตัว`
+ * จะถูกส่งไป `/@somchai` เฉย ๆ แล้วเมนูที่ลูกค้าตั้งใจเปิดหายไปทั้งอัน
  */
 export default async function CreatorLayout({
   params,
@@ -18,7 +21,6 @@ export default async function CreatorLayout({
   children: React.ReactNode;
 }) {
   const { handle } = await params;
-  if (!(await shopExists(handle))) notFound();
-
+  if (!(await shopExists(normalizeHandle(handle)))) notFound();
   return children;
 }

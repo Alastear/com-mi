@@ -74,6 +74,48 @@ export async function listOrdersForClient(clientUserId: string) {
   });
 }
 
+/**
+ * ออเดอร์ทั้งหมดบนบอร์ดของครีเอเตอร์
+ *
+ * ดึงครั้งเดียวแล้วให้ฝั่ง client แบ่งคอลัมน์เอง — บอร์ดมีไม่กี่สิบใบ
+ * ยิงทีละคอลัมน์จะกลายเป็นห้า query ที่ตอบช้ากว่าเดิมโดยไม่ได้อะไรกลับมา
+ *
+ * เอาเฉพาะฟิลด์ที่การ์ดใช้จริง ไม่ดึงทั้งแถว — `tosSnapshot` อย่างเดียว
+ * ก็หนักกว่าทุกฟิลด์ที่เหลือรวมกันแล้ว และบอร์ดไม่ได้ใช้
+ */
+export async function listOrdersForBoard(creatorUserId: string) {
+  const db = getDb();
+
+  const page = await db.query.creatorPage.findFirst({
+    columns: { id: true },
+    where: eq(schema.creatorPage.userId, creatorUserId),
+  });
+  if (!page) return [];
+
+  return db.query.order.findMany({
+    where: eq(schema.order.creatorPageId, page.id),
+    orderBy: [desc(schema.order.priority), desc(schema.order.createdAt)],
+    columns: {
+      id: true,
+      code: true,
+      status: true,
+      priority: true,
+      currency: true,
+      totalCents: true,
+      amountPaidCents: true,
+      revisionsUsed: true,
+      revisionsAllowed: true,
+      dueAt: true,
+      createdAt: true,
+      completedAt: true,
+    },
+    with: {
+      service: { columns: { title: true } },
+      client: { columns: { name: true, image: true } },
+    },
+  });
+}
+
 /** ออเดอร์ที่ผู้ใช้คนนี้เป็น "ครีเอเตอร์" — เห็นทุกอย่างรวมโน้ตส่วนตัว */
 export async function getOrderForCreator(code: string, creatorUserId: string) {
   if (!isOrderCode(code)) return null;

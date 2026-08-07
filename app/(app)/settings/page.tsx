@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Bell, CreditCard, MessageSquare, Store, User } from "lucide-react";
 import { ProBadge } from "@/components/locked-feature";
-import { ArtAvatar } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,14 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { creator } from "@/lib/mock/data";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { shopUrlPrefix } from "@/lib/site";
+import { requireCreator } from "@/lib/auth-guard";
+import { getOwnShop } from "@/lib/queries/creator";
+import { ensureShop } from "@/lib/shop/ensure";
+import { UserAvatar } from "@/components/user-avatar";
+import { PayoutForm } from "./payout-form";
+import type { PromptPayType } from "@/lib/payments/promptpay-id";
 
 export default async function SettingsPage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
+
+  const { user } = await requireCreator();
+  await ensureShop(user.id, user.name, locale);
+  const shop = await getOwnShop(user.id);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:py-8">
@@ -42,56 +50,83 @@ export default async function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* โปรไฟล์ */}
+        {/* โปรไฟล์ — ของจริงจาก session ทั้งหมด */}
         <TabsContent value="profile" className="mt-5">
           <Card className="gap-5 p-5">
-            <div className="flex items-center gap-4">
-              <ArtAvatar seed={creator.avatarSeed} alt={creator.displayName} className="size-16" />
-              <div>
-                <p className="font-medium">{creator.displayName}</p>
-                <p className="text-sm text-muted-foreground">you@example.com</p>
-                <Badge variant="secondary" className="mt-1.5">
-                  {t.settings.signedInWithGoogle}
-                </Badge>
+            <div>
+              <p className="font-medium">{t.settings.account}</p>
+              <div className="mt-3 flex items-center gap-4">
+                <UserAvatar
+                  user={{
+                    name: user.name,
+                    email: user.email,
+                    image: shop?.avatar?.url ?? user.image ?? null,
+                  }}
+                  className="size-16"
+                />
+                <div className="min-w-0">
+                  <p className="font-medium">{user.name}</p>
+                  <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                  <Badge variant="secondary" className="mt-1.5">
+                    {t.settings.signedInWithGoogle}
+                  </Badge>
+                </div>
               </div>
             </div>
 
             <Separator />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="displayName">{t.settings.displayName}</Label>
-                <Input id="displayName" defaultValue={creator.displayName} className="mt-1.5" />
+            <div>
+              <Label htmlFor="handle">{t.settings.handle}</Label>
+              <div className="mt-1.5 flex items-center">
+                <span className="rounded-l-lg border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  {shopUrlPrefix()}
+                </span>
+                {/*
+                  อ่านอย่างเดียว — เปลี่ยน handle = ลิงก์ที่ครีเอเตอร์แปะ bio ไว้ตายทันที
+                  ปุ่มที่กดแล้วไม่บันทึกแย่กว่าไม่มีปุ่ม จึงล็อกไว้ตรง ๆ พร้อมบอกเหตุผล
+                */}
+                <Input
+                  id="handle"
+                  defaultValue={user.handle ?? ""}
+                  readOnly
+                  aria-describedby="handle-note"
+                  className="rounded-l-none bg-muted/40"
+                />
               </div>
-              <div>
-                <Label htmlFor="handle">{t.settings.handle}</Label>
-                <div className="mt-1.5 flex items-center">
-                  <span className="rounded-l-lg border border-r-0 bg-muted px-3 py-2 text-sm text-muted-foreground">
-                    {shopUrlPrefix()}
-                  </span>
-                  <Input id="handle" defaultValue={creator.handle} className="rounded-l-none" />
-                </div>
-              </div>
+              <p id="handle-note" className="mt-1.5 text-xs text-muted-foreground">
+                {t.settings.handleLocked} — {t.settings.handleLockedHint}
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="flex-1 text-sm text-muted-foreground">{t.settings.editInShop}</p>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/shop">{t.settings.goToShop}</Link>
+              </Button>
             </div>
           </Card>
         </TabsContent>
 
         {/* หน้าร้าน */}
         <TabsContent value="shop" className="mt-5 space-y-4">
-          <Card className="gap-4 p-5">
-            <div>
+          {/*
+            เดิมมีปุ่มเลือกสถานะซ้ำกับหน้า /shop แต่กดแล้วไม่บันทึกอะไรเลย
+            แสดงสถานะจริงแล้วส่งไปแก้ที่เดียว ดีกว่ามีสองที่ที่ไม่ตรงกัน
+          */}
+          <Card className="flex-row flex-wrap items-center gap-4 p-5">
+            <div className="min-w-0 flex-1">
               <p className="font-medium">{t.settings.shopStatusTitle}</p>
-              <p className="text-sm text-muted-foreground">
-                {t.settings.shopStatusDesc}
-              </p>
+              <p className="text-sm text-muted-foreground">{t.settings.shopStatusDesc}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {(["open", "waitlist", "closed", "vacation"] as const).map((s) => (
-                <Button key={s} variant={s === creator.status ? "default" : "outline"} size="sm">
-                  {t.shopStatus[s]}
-                </Button>
-              ))}
-            </div>
+            <Badge variant="secondary">
+              {t.shopStatus[(shop?.status ?? "open") as keyof typeof t.shopStatus]}
+            </Badge>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/shop">{t.common.edit}</Link>
+            </Button>
           </Card>
 
           <Card className="gap-4 p-5">
@@ -126,12 +161,13 @@ export default async function SettingsPage() {
                 {t.settings.promptpayDesc}
               </p>
             </div>
-            <div className="max-w-xs">
-              <Label htmlFor="promptpay">
-                {t.settings.promptpayLabel}
-              </Label>
-              <Input id="promptpay" placeholder="08X-XXX-XXXX" className="mt-1.5" />
-            </div>
+            <PayoutForm
+              initial={{
+                type: (shop?.promptpayType ?? "phone") as PromptPayType,
+                id: shop?.promptpayId ?? "",
+                name: shop?.promptpayName ?? "",
+              }}
+            />
             <p className="rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
               {t.settings.noFeeNote}
             </p>
@@ -140,7 +176,7 @@ export default async function SettingsPage() {
           <Card className="flex-row items-center gap-4 p-5">
             <div className="flex-1">
               <p className="font-medium">{t.settings.currentPlan}</p>
-              <p className="text-sm text-muted-foreground">{t.plan.free}</p>
+              <p className="text-sm text-muted-foreground">{t.plan[(user.plan ?? "free") as "free" | "pro"]}</p>
             </div>
             <Button asChild>
               <Link href="/pricing">{t.common.upgrade}</Link>

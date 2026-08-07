@@ -1,8 +1,11 @@
 /**
  * กติกาของ handle (`/@handle`)
  *
- * handle ชนกับ route จริงไม่ได้ เพราะหน้าร้านอยู่ที่ segment บนสุด (`app/(public)/[handle]`)
- * ถ้าใครจอง "pricing" ได้ หน้า /pricing จะถูกบังทันที
+ * URL ตามหลักคือ `/@somchai` — เครื่องหมาย `@` ทำให้ handle ไม่มีวันชนกับ route จริง
+ * ต่อให้อนาคตเพิ่ม /blog /help /jobs ก็ไม่ต้องไปไล่ยึดชื่อคืนจากคนที่จองไปแล้ว
+ *
+ * RESERVED_HANDLES ยังเก็บไว้ถึงแม้ `@` จะกันการชนให้แล้ว — กันชื่อที่ทำให้เข้าใจผิด
+ * (`/@admin`, `/@support`) ซึ่งเอาไปสวมรอยหลอกคนอื่นได้
  */
 export const RESERVED_HANDLES = new Set([
   // route ที่มีอยู่จริงตอนนี้
@@ -19,6 +22,24 @@ export const RESERVED_HANDLES = new Set([
 ]);
 
 export const HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+
+/**
+ * แปลงค่า handle ที่มาจาก URL ให้เทียบกับ DB ได้
+ *
+ * ต้องทำสองอย่างที่ลืมง่าย:
+ *   1. ถอด percent-encoding เอง — Next **ไม่ถอด** `params` ให้ `/@somchai` มาเป็น `%40somchai`
+ *   2. ตัด `@` นำหน้าออก — DB เก็บแค่ `somchai`
+ * รวมไว้ที่เดียวเพราะ handle ถูกอ่านจาก page, layout, generateMetadata และ opengraph-image
+ */
+export function normalizeHandle(param: string): string {
+  let value = param;
+  try {
+    value = decodeURIComponent(param);
+  } catch {
+    // ลำดับ % ผิดรูป — ใช้ค่าดิบต่อ แล้วไปไม่เจอใน DB กลายเป็น 404 ซึ่งถูกต้องแล้ว
+  }
+  return value.replace(/^@/, "").toLowerCase();
+}
 
 export type HandleCheck =
   | { ok: true; handle: string }
