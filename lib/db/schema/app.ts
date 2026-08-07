@@ -50,6 +50,22 @@ export const media = pgTable(
     variantLabel: text("variant_label"), // thumb | display | original
 
     /**
+     * ไฟล์นี้ผูกกับออเดอร์ไหน — ใช้กับ reference / wip / final / payment_proof
+     *
+     * ⚠️ ประกาศเป็นคอลัมน์เปล่า **ไม่ใส่ `.references()`**
+     * ตาราง `order` import `media` จากไฟล์นี้อยู่แล้ว ถ้าอ้างกลับจะเป็น circular import
+     * ระหว่างสอง schema module — FK จริงเติมด้วยมือใน migration SQL แทน
+     *
+     * ยังจำเป็นถึงแม้ `delivery.mediaIds` จะมีอยู่ เพราะต้องตอบคำถาม
+     * "ไฟล์นี้เป็นของออเดอร์ไหน" จากฝั่งไฟล์ เช่นตอนตรวจสิทธิ์ก่อนออก signed URL
+     * และตอน cron เก็บกวาดไฟล์ของออเดอร์ที่ถูกยกเลิก
+     */
+    orderId: text("order_id"),
+
+    /** WIP ที่ฝังลายน้ำแล้ว — กันการเผลอส่งไฟล์ที่ยังไม่ได้ใส่ลายน้ำให้ลูกค้า */
+    isWatermarked: boolean("is_watermarked").notNull().default(false),
+
+    /**
      * orphan = อัปโหลดแล้วแต่ผู้ใช้ยังไม่ submit → cron เก็บกวาดทีหลัง
      * linked  = ผูกกับ record จริงแล้ว
      */
@@ -57,7 +73,11 @@ export const media = pgTable(
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("media_owner_status_idx").on(t.ownerUserId, t.status, t.createdAt)],
+  (t) => [
+    index("media_owner_status_idx").on(t.ownerUserId, t.status, t.createdAt),
+    // "ไฟล์ของออเดอร์นี้ ชนิดนี้ มีอะไรบ้าง" — ใช้ทุกครั้งที่เปิดหน้าออเดอร์
+    index("media_order_kind_idx").on(t.orderId, t.kind),
+  ],
 );
 
 /* ── creator_page ──────────────────────────────────────────── */
