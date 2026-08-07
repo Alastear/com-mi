@@ -55,12 +55,12 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 **เสร็จเมื่อ:** เอาลิงก์ `/@handle` ไปแปะ bio Twitter ได้แล้วดูดี ← *ตรงนี้คือจุดที่ product มีคุณค่าแล้วแม้ยังรับออเดอร์ในระบบไม่ได้*
 
 ### 1b. รับออเดอร์ (สัปดาห์ 3)
-- [ ] Schema: `order`, `order_item`, `order_answer`, `message`, `payment_record`, `delivery`
-- [ ] `lib/orders/state-machine.ts` + `assertTransition()`
-- [ ] ฟอร์มบรีฟ 3 preset + `<FormRenderer>` + Zod runtime validation
-- [ ] Flow สั่งงาน 3 ขั้น + บันทึกร่างใน localStorage + login ที่ step 3
-- [ ] คำนวณราคาซ้ำฝั่ง server ตอน submit
-- [ ] Rate limit (`rate_limit` table) + Vercel BotID บนฟอร์ม
+- [x] Schema: `order`, `order_item`, `order_answer`, `message`, `payment_record`, `delivery` (+ `review`, `rate_limit`)
+- [x] `lib/orders/state-machine.ts` + `assertTransition()` — มีเทสต์ครอบว่าทุกสถานะเดินถึง terminal ได้
+- [x] ฟอร์มบรีฟ 3 preset + Zod validation ฝั่ง server
+- [x] Flow สั่งงาน 3 ขั้น + เก็บร่างใน localStorage + พาไปล็อกอินตอน step 3 โดยไม่เสียข้อมูล
+- [x] คำนวณราคาซ้ำฝั่ง server ตอน submit — `quoteOrder()` ตัวเดียวใช้ทั้งสองฝั่ง
+- [x] Rate limit บน Postgres (ยืนยันแล้วว่ายิงพร้อมกัน 20 ครั้งผ่านแค่ 5) — Vercel BotID ค่อยเพิ่มตอนขึ้น production
 
 ### 1c. จัดการงาน (สัปดาห์ 4)
 - [ ] Kanban `/orders` (`@dnd-kit`) + มุมมอง List + filter ผ่าน nuqs

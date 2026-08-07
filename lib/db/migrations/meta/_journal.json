@@ -15,6 +15,13 @@
       "when": 1786015708202,
       "tag": "0001_futuristic_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786076922499,
+      "tag": "0002_first_onslaught",
+      "breakpoints": true
     }
   ]
 }

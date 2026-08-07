@@ -434,6 +434,23 @@ const th = {
     moveTo: "ย้ายไป…",
     daysLate: "เลย {n} วัน",
     daysLeft: "อีก {n} วัน",
+    sent: "ส่งคำขอแล้ว",
+    sentHint: "ครีเอเตอร์จะได้รับแจ้งเตือนและติดต่อกลับ",
+    viewOrder: "ดูงานนี้",
+    draftRestored: "กู้ร่างที่กรอกไว้กลับมาแล้ว",
+    hideFromQueue: "ไม่ต้องแสดงงานนี้ในคิวสาธารณะ",
+    hideFromQueueHint: "คิวสาธารณะไม่แสดงชื่อหรือรายละเอียดอยู่แล้ว แสดงแค่จำนวนงาน",
+  },
+
+  /** ข้อความตอนส่งคำขอไม่สำเร็จ — ต้องบอกว่าทำอะไรต่อได้ ไม่ใช่แค่บอกว่าพัง */
+  orderError: {
+    generic: "ส่งคำขอไม่สำเร็จ ลองใหม่อีกครั้ง",
+    notFound: "ไม่พบเมนูนี้แล้ว — ครีเอเตอร์อาจเพิ่งแก้ไขหรือปิดรับ",
+    shopClosed: "ร้านนี้ปิดรับงานอยู่ ลองติดตามไว้แล้วกลับมาใหม่",
+    ownShop: "สั่งงานร้านของตัวเองไม่ได้",
+    creatorFull: "คิวของครีเอเตอร์เต็มแล้ว ลองใหม่อีกครั้งภายหลัง",
+    rateLimited: "ส่งคำขอถี่เกินไป ลองใหม่ในอีก {n} นาที",
+    signInFirst: "เข้าสู่ระบบก่อนส่งคำขอ — ข้อมูลที่กรอกไว้จะถูกเก็บไว้ให้",
   },
 
   orderStatus: {
@@ -994,6 +1011,22 @@ const en: Dictionary = {
     moveTo: "Move to…",
     daysLate: "{n}d late",
     daysLeft: "{n}d left",
+    sent: "Request sent",
+    sentHint: "The creator will be notified and will get back to you",
+    viewOrder: "View this order",
+    draftRestored: "Restored what you had filled in",
+    hideFromQueue: "Do not show this order in the public queue",
+    hideFromQueueHint: "The public queue never shows names or details — only how many orders there are",
+  },
+
+  orderError: {
+    generic: "Could not send the request. Try again.",
+    notFound: "That service is gone — the creator may have just changed or closed it",
+    shopClosed: "This shop is closed for now. Follow it and come back later.",
+    ownShop: "You cannot order from your own shop",
+    creatorFull: "The creator's queue is full. Try again later.",
+    rateLimited: "Too many requests. Try again in {n} minutes.",
+    signInFirst: "Sign in to send your request — what you filled in will be kept",
   },
 
   orderStatus: {

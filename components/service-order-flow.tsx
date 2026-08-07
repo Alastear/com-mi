@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, ImagePlus, Minus, Plus, ShieldCheck } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, ArrowRight, Check, ImagePlus, Loader2, Minus, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,11 @@ import { useLocale } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { shopHref } from "@/lib/routes";
+import { dynamicHref, shopHref } from "@/lib/routes";
 import type { getShopByHandle } from "@/lib/queries/creator";
+import { createOrder } from "@/lib/orders/create";
+import { quoteOrder } from "@/lib/orders/pricing";
+import { fill } from "@/lib/i18n/dictionaries";
 
 type Shop = NonNullable<Awaited<ReturnType<typeof getShopByHandle>>>;
 type ShopService = Shop["services"][number];
@@ -49,34 +53,41 @@ export function ServiceOrderFlow({
 }) {
   const { t, locale } = useLocale();
 
+  const router = useRouter();
+  const pathname = usePathname();
+  const [pending, startSubmit] = useTransition();
+
   const [step, setStep] = useState<Step>(0);
   const [tierId, setTierId] = useState(service.tiers.at(-1)?.id ?? "");
   const [options, setOptions] = useState<Record<string, number>>({});
   const [brief, setBrief] = useState<Record<string, string>>({});
   const [tosAccepted, setTosAccepted] = useState(false);
+  const [hideFromQueue, setHideFromQueue] = useState(false);
 
   const tier = service.tiers.find((x) => x.id === tierId) ?? service.tiers[0] ?? null;
 
-  const lineItems = useMemo(() => {
-    const items = [
-      {
-        label: tier ? `${service.title} — ${tier.label}` : service.title,
-        priceCents: service.basePriceCents + (tier?.priceDeltaCents ?? 0),
-      },
-    ];
-    for (const opt of service.options) {
-      const qty = options[opt.id] ?? 0;
-      if (qty > 0) {
-        items.push({
-          label: opt.inputType === "quantity" ? `${opt.label} × ${qty}` : opt.label,
-          priceCents: opt.priceDeltaCents * qty,
-        });
-      }
-    }
-    return items;
-  }, [service, tier, options]);
+  /**
+   * ยอดที่โชว์มาจาก `quoteOrder` ตัวเดียวกับที่ server ใช้ตอนบันทึกจริง
+   * ถ้าแยกเป็นสองสูตร วันหนึ่งจะเพี้ยนกันแล้วลูกค้าเห็นราคาไม่ตรงกับที่ถูกเรียกเก็บ
+   */
+  const quote = useMemo(
+    () =>
+      quoteOrder(
+        {
+          title: service.title,
+          basePriceCents: service.basePriceCents,
+          tiers: service.tiers,
+          options: service.options,
+        },
+        {
+          tierId: tier?.id ?? null,
+          options: Object.entries(options).map(([optionId, quantity]) => ({ optionId, quantity })),
+        },
+      ),
+    [service, tier, options],
+  );
 
-  const total = lineItems.reduce((sum, i) => sum + i.priceCents, 0);
+  const total = quote.totalCents;
 
   const briefComplete = BRIEF_FIELDS.filter((f) => f.required).every((f) =>
     (brief[f.key] ?? "").trim(),
@@ -89,8 +100,110 @@ export function ServiceOrderFlow({
     // ของจริงจะบันทึกร่างลง localStorage ทุก 2 วินาที (docs/04-ux-and-ia.md §3.2)
   }
 
+  /**
+   * เก็บร่างไว้ใน localStorage แล้วกู้กลับตอนกลับมาจากหน้าล็อกอิน
+   *
+   * ลูกค้าส่วนใหญ่มาจากลิงก์ใน bio โดยยังไม่เคยล็อกอิน ถ้ากรอกบรีฟยาว ๆ เสร็จ
+   * แล้วโดนเด้งไปล็อกอินจนข้อมูลหาย ส่วนใหญ่จะไม่กลับมากรอกใหม่
+   */
+  const draftKey = `draft:${shop.owner.handle}:${service.slug}`;
+  const restored = useRef(false);
+
+  /**
+   * อ่าน localStorage ต้องทำหลัง hydrate เท่านั้น — ถ้าอ่านตอน render
+   * ฝั่ง server จะได้ฟอร์มเปล่าแต่ฝั่ง client ได้ฟอร์มที่มีข้อมูล แล้ว hydration พัง
+   *
+   * eslint-disable ตรงนี้ตั้งใจ: กฎมีไว้กันการ setState ที่ทำให้ render วนซ้ำ
+   * ส่วนนี้อ่าน external store ครั้งเดียวตลอดอายุ component (กันด้วย `restored`)
+   * ซึ่งเป็นเคสที่ effect ถูกออกแบบมาให้ใช้
+   */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as {
+        tierId?: string;
+        options?: Record<string, number>;
+        brief?: Record<string, string>;
+        hideFromQueue?: boolean;
+      };
+      if (d.tierId) setTierId(d.tierId);
+      if (d.options) setOptions(d.options);
+      if (d.brief) setBrief(d.brief);
+      if (d.hideFromQueue) setHideFromQueue(true);
+      if (d.brief && Object.values(d.brief).some(Boolean)) {
+        setStep(2);
+        toast.info(t.order.draftRestored);
+      }
+    } catch {
+      // ร่างเสียก็แค่เริ่มใหม่ ไม่ต้องแจ้งอะไร
+      localStorage.removeItem(draftKey);
+    }
+  }, [draftKey, t.order.draftRestored]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  function saveDraft() {
+    try {
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({ tierId: tier?.id, options, brief, hideFromQueue }),
+      );
+    } catch {
+      // โหมดส่วนตัวบางเบราว์เซอร์เขียนไม่ได้ — ปล่อยผ่าน ไม่ใช่เรื่องคอขาดบาดตาย
+    }
+  }
+
   function submit() {
-    toast.success(t.prototype.requestSent);
+    startSubmit(async () => {
+      const res = await createOrder({
+        handle: shop.owner.handle ?? "",
+        slug: service.slug,
+        tierId: tier?.id ?? null,
+        options: Object.entries(options)
+          .filter(([, q]) => q > 0)
+          .map(([optionId, quantity]) => ({ optionId, quantity })),
+        answers: BRIEF_FIELDS.filter((f) => (brief[f.key] ?? "").trim()).map((f) => ({
+          key: f.key,
+          label: t.brief[f.key],
+          value: brief[f.key]!.trim(),
+        })),
+        acceptTos: true,
+        isPublicInQueue: !hideFromQueue,
+      });
+
+      if (res.ok) {
+        localStorage.removeItem(draftKey);
+        toast.success(t.order.sent, { description: t.order.sentHint });
+        router.push(dynamicHref(`/my/requests/${res.code}`));
+        return;
+      }
+
+      if (res.error === "unauthenticated") {
+        saveDraft();
+        toast.info(t.orderError.signInFirst);
+        router.push(dynamicHref(`/sign-in?next=${encodeURIComponent(pathname)}`));
+        return;
+      }
+
+      toast.error(
+        res.error === "not_found"
+          ? t.orderError.notFound
+          : res.error === "shop_closed"
+            ? t.orderError.shopClosed
+            : res.error === "own_shop"
+              ? t.orderError.ownShop
+              : res.error === "creator_full"
+                ? t.orderError.creatorFull
+                : res.error === "rate_limited"
+                  ? fill(t.orderError.rateLimited, {
+                      n: Math.ceil((res.retryAfterSeconds ?? 60) / 60),
+                    })
+                  : t.orderError.generic,
+      );
+    });
   }
 
   return (
@@ -328,6 +441,20 @@ export function ServiceOrderFlow({
                 </label>
               </Card>
 
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                <Checkbox
+                  checked={hideFromQueue}
+                  onCheckedChange={(v) => setHideFromQueue(v === true)}
+                  className="mt-0.5"
+                />
+                <span className="min-w-0">
+                  {t.order.hideFromQueue}
+                  <span className="block text-xs text-muted-foreground">
+                    {t.order.hideFromQueueHint}
+                  </span>
+                </span>
+              </label>
+
               <p className="text-xs text-muted-foreground">
                 {t.brief.signInNote}
               </p>
@@ -353,7 +480,8 @@ export function ServiceOrderFlow({
               <ArrowRight className="size-4" />
             </Button>
           ) : (
-            <Button className="ml-auto" onClick={submit} disabled={!tosAccepted}>
+            <Button className="ml-auto" onClick={submit} disabled={!tosAccepted || pending}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
               {t.service.submitRequest}
             </Button>
           )}
@@ -377,11 +505,13 @@ export function ServiceOrderFlow({
         <Separator className="my-4" />
 
         <ul className="space-y-2 text-sm">
-          {lineItems.map((item) => (
-            <li key={item.label} className="flex justify-between gap-3">
-              <span className="text-muted-foreground">{item.label}</span>
+          {quote.lines.map((line, i) => (
+            <li key={`${line.kind}-${line.sourceId ?? i}`} className="flex justify-between gap-3">
+              <span className="text-muted-foreground">
+                {line.quantity > 1 ? `${line.label} × ${line.quantity}` : line.label}
+              </span>
               <span className="tabular shrink-0">
-                {formatMoney(item.priceCents, shop.currency, locale)}
+                {formatMoney(line.unitPriceCents * line.quantity, shop.currency, locale)}
               </span>
             </li>
           ))}
