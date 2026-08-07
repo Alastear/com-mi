@@ -11,7 +11,7 @@ import {
   prepareImage,
 } from "@/lib/media/prepare";
 import { registerMedia } from "@/lib/media/actions";
-import type { MediaKind } from "@/lib/media/kinds";
+import type { PublicMediaKind } from "@/lib/media/kinds";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +28,7 @@ export function MediaUploader({
   label,
   multiple = false,
 }: {
-  kind: MediaKind;
+  kind: PublicMediaKind;
   onUploaded: (mediaId: string) => void | Promise<void>;
   className?: string;
   label?: string;

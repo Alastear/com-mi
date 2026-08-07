@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { isPublicKind, type MediaKind } from "@/lib/media/kinds";
+import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/media/video";
 
 /**
  * ออก token ให้เบราว์เซอร์อัปโหลดตรงไป Blob
@@ -54,10 +55,19 @@ export async function POST(request: Request): Promise<Response> {
           throw new Error("storage_quota_exceeded");
         }
 
+        /**
+         * รูปถูกย่อและแปลงเป็น WebP มาแล้วเสมอ ส่วนวิดีโอตัวอย่าง **ไม่ถูกแปลง**
+         * (transcode ในเบราว์เซอร์กินเวลาหลายนาทีบนมือถือและผลไม่แน่นอน)
+         * จึงคุมด้วยขนาดกับความยาวแทน และรับเฉพาะพอร์ตโฟลิโอ
+         */
+        const isPortfolioVideo = kind === "portfolio";
         return {
-          // client ย่อและแปลงเป็น WebP มาแล้วเสมอ — ปฏิเสธอย่างอื่นทั้งหมด
-          allowedContentTypes: ["image/webp"],
-          maximumSizeInBytes: Math.min(limits.file_size_bytes, 12 * 1024 * 1024),
+          allowedContentTypes: isPortfolioVideo
+            ? ["image/webp", ...ACCEPTED_VIDEO_TYPES]
+            : ["image/webp"],
+          maximumSizeInBytes: isPortfolioVideo
+            ? Math.min(limits.file_size_bytes * 2, MAX_VIDEO_BYTES)
+            : Math.min(limits.file_size_bytes, 12 * 1024 * 1024),
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({ userId: session.user.id, kind }),
         };

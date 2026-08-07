@@ -65,6 +65,19 @@ export const media = pgTable(
     /** WIP ที่ฝังลายน้ำแล้ว — กันการเผลอส่งไฟล์ที่ยังไม่ได้ใส่ลายน้ำให้ลูกค้า */
     isWatermarked: boolean("is_watermarked").notNull().default(false),
 
+    /** ความยาววิดีโอเป็นวินาที — null เมื่อเป็นรูป */
+    durationSeconds: integer("duration_seconds"),
+
+    /**
+     * ภาพปกของวิดีโอ — เก็บเป็นคอลัมน์ ไม่ใช่แถว media แยก
+     *
+     * เคยคิดจะใช้ `variantOf` ตามที่ schema เตรียมไว้ แต่ภาพปกไม่มีชีวิตของตัวเอง
+     * มันเกิดพร้อมวิดีโอ ตายพร้อมวิดีโอ และไม่มีใครอยากได้มันเดี่ยว ๆ
+     * แยกเป็นแถวแปลว่าต้อง join ทุกครั้งที่วาดกริด และต้องคอยลบให้ครบสองที่
+     */
+    posterUrl: text("poster_url"),
+    posterPathname: text("poster_pathname"),
+
     /**
      * ชื่อไฟล์ที่คนอ่านออก — pathname ใน Blob เป็น id ล้วนโดยตั้งใจ
      * ชื่อไฟล์ไทยหรือมีอักขระพิเศษไม่ควรไปอยู่ใน URL และ `mediaId` คือสิ่งเดียว
@@ -250,12 +263,18 @@ export const portfolioItem = pgTable(
     creatorPageId: text("creator_page_id")
       .notNull()
       .references(() => creatorPage.id, { onDelete: "cascade" }),
-    mediaId: text("media_id")
-      .notNull()
-      .references(() => media.id, { onDelete: "cascade" }),
+    /** null เมื่อผลงานชิ้นนี้เป็นลิงก์วิดีโอภายนอก (ดู embedRef) */
+    mediaId: text("media_id").references(() => media.id, { onDelete: "cascade" }),
 
     title: text("title").notNull().default(""),
     tags: jsonb("tags").$type<string[]>().notNull().default([]),
+
+    /**
+     * วิดีโอจากภายนอก เก็บเป็น `provider:id` เช่น `youtube:dQw4w9WgXcQ`
+     * ไม่เก็บ URL ทั้งก้อน — ประกอบใหม่จาก id ตอนแสดงผลเสมอ (lib/media/embed.ts)
+     * ผลงานหนึ่งชิ้นเป็นได้อย่างเดียว: ไฟล์ที่อัปเอง หรือลิงก์ภายนอก
+     */
+    embedRef: text("embed_ref"),
 
     /** กดจากผลงานไปสั่งงานแบบเดียวกันได้เลย — ทางลัดที่เพิ่ม conversion */
     linkedServiceId: text("linked_service_id").references(() => service.id, {

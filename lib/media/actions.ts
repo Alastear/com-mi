@@ -7,15 +7,21 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { requireCreator } from "@/lib/auth-guard";
-import { MEDIA_KINDS } from "@/lib/media/kinds";
+import { parseEmbed, serializeEmbed } from "@/lib/media/embed";
+import { PUBLIC_MEDIA_KINDS } from "@/lib/media/kinds";
 
 const RegisterSchema = z.object({
   url: z.url(),
   pathname: z.string().min(1),
-  kind: z.enum(MEDIA_KINDS),
+  // เฉพาะชนิดที่อยู่ store สาธารณะ — ไฟล์ส่งมอบมี registerDeliveryFile ของตัวเอง
+  kind: z.enum(PUBLIC_MEDIA_KINDS),
   width: z.number().int().positive().max(20000),
   height: z.number().int().positive().max(20000),
   thumbhash: z.string().max(200),
+  /** วิดีโอ: ภาพปกกับความยาว — ไม่มีเมื่อเป็นรูป */
+  posterUrl: z.url().nullish(),
+  posterPathname: z.string().max(400).nullish(),
+  durationSeconds: z.number().int().positive().max(3600).nullish(),
 });
 
 export type RegisterMediaInput = z.infer<typeof RegisterSchema>;
@@ -48,6 +54,9 @@ export async function registerMedia(input: RegisterMediaInput): Promise<{ id: st
     width: v.width,
     height: v.height,
     thumbhash: v.thumbhash,
+    posterUrl: v.posterUrl ?? null,
+    posterPathname: v.posterPathname ?? null,
+    durationSeconds: v.durationSeconds ?? null,
     // ยัง orphan จนกว่าจะถูกผูกกับ record จริง — cron เก็บกวาดตัวที่ค้างเกิน 24 ชม.
     status: "orphan",
   });
@@ -82,7 +91,44 @@ export async function setShopImage(mediaId: string, slot: "banner" | "avatar") {
   if (user.handle) revalidatePath(`/${user.handle}`);
 }
 
-/** เพิ่มรูปเข้าพอร์ตโฟลิโอ */
+/**
+ * เพิ่มลิงก์วิดีโอภายนอกเข้าพอร์ตโฟลิโอ
+ *
+ * เก็บเป็น `provider:id` ไม่ใช่ URL ทั้งก้อน และ parse ฝั่ง server อีกรอบ
+ * ถึงแม้ฝั่ง client จะตรวจแล้ว — ค่านี้จบลงใน `src` ของ iframe บนหน้าสาธารณะ
+ */
+export async function addPortfolioEmbed(rawUrl: string, title = "") {
+  const { user } = await requireCreator();
+  const db = getDb();
+
+  const parsed = parseEmbed(rawUrl);
+  if (!parsed) throw new Error("invalid_embed");
+
+  const page = await db.query.creatorPage.findFirst({
+    columns: { id: true },
+    where: eq(schema.creatorPage.userId, user.id),
+  });
+  if (!page) throw new Error("not_found");
+
+  const existing = await db.query.portfolioItem.findMany({
+    columns: { id: true },
+    where: eq(schema.portfolioItem.creatorPageId, page.id),
+  });
+
+  await db.insert(schema.portfolioItem).values({
+    id: newId("port"),
+    creatorPageId: page.id,
+    mediaId: null,
+    embedRef: serializeEmbed(parsed),
+    title: title.slice(0, 120),
+    sortOrder: existing.length,
+  });
+
+  revalidatePath("/portfolio");
+  if (user.handle) revalidatePath(`/${user.handle}`);
+}
+
+/** เพิ่มรูปหรือวิดีโอที่อัปเองเข้าพอร์ตโฟลิโอ */
 export async function addPortfolioItem(mediaId: string, title = "") {
   const { user } = await requireCreator();
   const db = getDb();

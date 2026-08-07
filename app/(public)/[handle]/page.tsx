@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Clock, Eye } from "lucide-react";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
+import { ArtMedia } from "@/components/art-media";
 import { ShopStatusPill } from "@/components/status-pill";
 import { CopyLinkButton } from "@/components/copy-link-button";
 import { Button } from "@/components/ui/button";
@@ -248,18 +249,23 @@ export default async function CreatorPage({ params }: Props) {
               <h2 className="text-xl font-semibold tracking-tight">{t.creator.portfolioTitle}</h2>
               <div className="masonry mt-5 columns-2 sm:columns-3 lg:columns-4">
                 {shop.portfolio.map((p) => {
-                  const ratio =
-                    p.media.width && p.media.height ? p.media.width / p.media.height : 1;
+                  const m = p.media;
+                  const ratio = m?.width && m.height ? m.width / m.height : 1;
+                  // วิดีโอที่อัปเองดูจาก contentType ไม่ใช่จากนามสกุลใน URL
+                  const isVideo = Boolean(m?.contentType?.startsWith("video/"));
                   const linkedSlug = shop.services.find(
                     (s) => s.id === p.linkedServiceId,
                   )?.slug;
                   return (
                     <figure key={p.id} className="group relative">
-                      <ArtImage
-                        seed={p.mediaId}
-                        src={p.media.url}
+                      <ArtMedia
+                        seed={p.mediaId ?? p.id}
                         alt={p.title || t.creator.portfolioTitle}
                         ratio={ratio}
+                        posterUrl={m?.posterUrl ?? (isVideo ? null : (m?.url ?? null))}
+                        videoUrl={isVideo ? (m?.url ?? null) : null}
+                        embedRef={p.embedRef}
+                        durationSeconds={m?.durationSeconds ?? null}
                       />
                       {p.title ? (
                         <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 rounded-b-lg bg-gradient-to-t from-black/75 to-transparent p-2.5 opacity-0 transition-opacity group-hover:opacity-100">

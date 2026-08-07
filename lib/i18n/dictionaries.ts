@@ -307,6 +307,15 @@ const th = {
     noFilesYet: "ต้องมีไฟล์อย่างน้อยหนึ่งไฟล์ก่อนส่งมอบ",
   },
 
+  portfolioVideo: {
+    hint: "รูป PNG/JPG/WebP หรือคลิปสั้น MP4/WebM (ไม่เกิน {n} วินาที) — คลิปยาวกว่านั้นใช้ลิงก์ด้านล่าง",
+    tooLong: "คลิปยาวเกิน {n} วินาที — ใช้ช่องใส่ลิงก์ YouTube/Vimeo ด้านล่างแทน",
+    unreadable: "อ่านไฟล์วิดีโอนี้ไม่ได้ ลองแปลงเป็น MP4 ก่อน",
+    linkPlaceholder: "วางลิงก์ YouTube หรือ Vimeo",
+    addLink: "เพิ่มลิงก์",
+    badLink: "รองรับเฉพาะลิงก์ YouTube และ Vimeo",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -1075,6 +1084,15 @@ const en: Dictionary = {
     wrongState: "Files cannot be uploaded at this stage",
     notPaid: "Cannot deliver yet — the order is not fully paid",
     noFilesYet: "Attach at least one file before delivering",
+  },
+
+  portfolioVideo: {
+    hint: "PNG/JPG/WebP images, or short MP4/WebM clips (up to {n} seconds) — use the link field below for anything longer",
+    tooLong: "That clip is longer than {n} seconds — paste a YouTube or Vimeo link below instead",
+    unreadable: "Could not read that video. Try converting it to MP4 first.",
+    linkPlaceholder: "Paste a YouTube or Vimeo link",
+    addLink: "Add link",
+    badLink: "Only YouTube and Vimeo links are supported",
   },
 
   legal: {

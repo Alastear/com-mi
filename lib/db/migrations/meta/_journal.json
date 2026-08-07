@@ -64,6 +64,20 @@
       "when": 1786119319830,
       "tag": "0008_careful_blue_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786121277488,
+      "tag": "0009_left_ravenous",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786121450814,
+      "tag": "0010_huge_dagger",
+      "breakpoints": true
     }
   ]
 }
