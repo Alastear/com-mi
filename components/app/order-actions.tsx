@@ -49,9 +49,13 @@ export function OrderActions({
         toast.error(
           res.error === "stale"
             ? t.order.moveStale
-            : res.error === "wrong_actor" || res.error === "not_allowed"
-              ? t.order.moveNotAllowed
-              : t.error.title,
+            : res.error === "deposit_unpaid"
+              ? t.order.depositUnpaid
+              : res.error === "not_fully_paid"
+                ? t.order.notFullyPaid
+                : res.error === "wrong_actor" || res.error === "not_allowed"
+                  ? t.order.moveNotAllowed
+                  : t.error.title,
         );
       }
     });

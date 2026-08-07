@@ -198,3 +198,32 @@ describe("board", () => {
     }
   });
 });
+
+describe("เงื่อนไขเรื่องเงิน", () => {
+  /**
+   * ตรรกะเดียวกับที่ transitionOrder ใช้ — เขียนคู่กันไว้ให้เห็นชัดว่ากติกาคืออะไร
+   * ถ้าแก้ที่ actions.ts แล้วลืมแก้ที่นี่ เทสต์จะไม่จับ แต่กติกายังอ่านออกจากที่เดียว
+   */
+  const canStart = (o: { depositCents: number; amountPaidCents: number }) =>
+    o.depositCents === 0 || o.amountPaidCents >= o.depositCents;
+  const canDeliver = (o: { totalCents: number; amountPaidCents: number }) =>
+    o.amountPaidCents >= o.totalCents;
+
+  it("ไม่บังคับมัดจำ (0) เริ่มงานได้เลย", () => {
+    assert.equal(canStart({ depositCents: 0, amountPaidCents: 0 }), true);
+  });
+
+  it("บังคับมัดจำแล้วยังจ่ายไม่ถึง เริ่มไม่ได้", () => {
+    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 0 }), false);
+    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 144_999 }), false);
+    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 145_000 }), true);
+  });
+
+  it("ส่งไฟล์จริงได้ต่อเมื่อจ่ายครบยอด", () => {
+    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 145_000 }), false);
+    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 289_999 }), false);
+    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 290_000 }), true);
+    // จ่ายเกิน (ทิป/โอนผิด) ต้องไม่บล็อก
+    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 300_000 }), true);
+  });
+});

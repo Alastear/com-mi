@@ -60,6 +60,16 @@ export const order = pgTable(
     /** รวมจาก payment_record ที่ยืนยันแล้ว — เก็บซ้ำเพื่อไม่ต้อง SUM ทุกครั้งที่แสดงบอร์ด */
     amountPaidCents: integer("amount_paid_cents").notNull().default(0),
 
+    /**
+     * มัดจำที่ต้องได้รับก่อนเริ่มลงมือ — 0 = ไม่บังคับ
+     *
+     * TOS ตั้งต้นที่เราแจกให้ครีเอเตอร์เขียนว่า "ชำระมัดจำ 50% ก่อนเริ่มงาน"
+     * แต่เดิม state machine ปล่อยให้ `accepted → in_progress` ผ่านที่ ฿0 ได้
+     * ครีเอเตอร์จึงลงมือแล้วโดนเทได้ทั้งที่ข้อตกลงของตัวเองบอกว่าต้องจ่ายก่อน
+     * (ดู docs/00 §5.2.1 — นี่คือด่านเดียวที่ครีเอเตอร์มีในโมเดลที่เราไม่ถือเงิน)
+     */
+    depositCents: integer("deposit_cents").notNull().default(0),
+
     revisionsUsed: integer("revisions_used").notNull().default(0),
     /** snapshot จากเมนูตอนสั่ง — ครีเอเตอร์ลดจำนวนครั้งทีหลังไม่กระทบออเดอร์นี้ */
     revisionsAllowed: integer("revisions_allowed").notNull().default(0),

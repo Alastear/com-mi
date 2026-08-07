@@ -526,6 +526,10 @@ const th = {
     hideFromQueueHint: "คิวสาธารณะไม่แสดงชื่อหรือรายละเอียดอยู่แล้ว แสดงแค่จำนวนงาน",
     moveStale: "สถานะเปลี่ยนไปแล้วจากที่อื่น — รีเฟรชแล้วลองใหม่",
     moveNotAllowed: "ย้ายไปสถานะนี้ไม่ได้จากตรงนี้",
+    depositUnpaid: "ยังเริ่มงานไม่ได้ — ลูกค้ายังจ่ายมัดจำไม่ครบ",
+    notFullyPaid: "ยังส่งไฟล์จริงไม่ได้ — ลูกค้ายังจ่ายไม่ครบยอด",
+    deposit: "มัดจำ",
+    depositHint: "ต้องได้รับก่อนเริ่มลงมือ · ใส่ 0 ถ้าไม่บังคับ",
   },
 
   /** ข้อความตอนส่งคำขอไม่สำเร็จ — ต้องบอกว่าทำอะไรต่อได้ ไม่ใช่แค่บอกว่าพัง */
@@ -1212,6 +1216,10 @@ const en: Dictionary = {
     hideFromQueueHint: "The public queue never shows names or details — only how many orders there are",
     moveStale: "The status changed elsewhere — refresh and try again",
     moveNotAllowed: "That move is not allowed from here",
+    depositUnpaid: "Cannot start yet — the deposit has not been paid in full",
+    notFullyPaid: "Cannot deliver yet — the order is not fully paid",
+    deposit: "Deposit",
+    depositHint: "Required before work starts · set 0 to skip",
   },
 
   orderError: {

@@ -30,7 +30,15 @@ export type TransitionResult =
   | { ok: true; status: OrderStatus }
   | {
       ok: false;
-      error: "unauthenticated" | "not_found" | "invalid" | "not_allowed" | "wrong_actor" | "stale";
+      error:
+        | "unauthenticated"
+        | "not_found"
+        | "invalid"
+        | "not_allowed"
+        | "wrong_actor"
+        | "stale"
+        | "deposit_unpaid"
+        | "not_fully_paid";
     };
 
 export async function transitionOrder(input: {
@@ -48,7 +56,15 @@ export async function transitionOrder(input: {
 
   const order = await db.query.order.findFirst({
     where: eq(schema.order.code, code),
-    columns: { id: true, status: true, clientUserId: true, creatorPageId: true },
+    columns: {
+      id: true,
+      status: true,
+      clientUserId: true,
+      creatorPageId: true,
+      depositCents: true,
+      amountPaidCents: true,
+      totalCents: true,
+    },
     with: { page: { columns: { userId: true } } },
   });
   if (!order) return { ok: false, error: "not_found" };
@@ -69,6 +85,21 @@ export async function transitionOrder(input: {
   } catch (err) {
     if (err instanceof TransitionError) return { ok: false, error: err.reason };
     throw err;
+  }
+
+  /**
+   * เงื่อนไขที่ state machine ไม่รู้ — มันรู้แค่ "เส้นทางนี้มีอยู่และคนนี้กดได้ไหม"
+   * ส่วนเรื่องเงินต้องเช็คที่นี่ เพราะขึ้นกับข้อมูลของออเดอร์ใบนั้น ๆ
+   *
+   * ทั้งสองข้อเป็นด่านฝั่ง server — UI ซ่อนปุ่มให้ก็จริง แต่ Server Action
+   * ถูกเรียกตรงได้ ห้ามให้ UI เป็นชั้นป้องกันเดียว
+   */
+  if (to === "in_progress" && order.depositCents > 0 && order.amountPaidCents < order.depositCents) {
+    return { ok: false, error: "deposit_unpaid" };
+  }
+  if (to === "delivered" && order.amountPaidCents < order.totalCents) {
+    // ส่งไฟล์จริงได้ต่อเมื่อจ่ายครบ — ตรงกับที่ delivery.releasedAt บังคับไว้อีกชั้น
+    return { ok: false, error: "not_fully_paid" };
   }
 
   const now = new Date();
