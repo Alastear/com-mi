@@ -1,203 +1,254 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  Bell,
-  Gavel,
-  LayoutGrid,
-  QrCode,
-  Store,
-  ClipboardList,
-} from "lucide-react";
+import { ArrowRight, Check, Clock, Receipt, Search, ShieldCheck, Wallet } from "lucide-react";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { creator, portfolio, services } from "@/lib/mock/data";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { listPublicShops } from "@/lib/queries/creator";
 import { shopHref } from "@/lib/routes";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+import { DEMO_HANDLE } from "@/lib/site";
+import { SERVICE_KINDS, type ShopStatus } from "@/lib/types";
 
-export default async function LandingPage() {
+/**
+ * หน้าแรก — สำหรับ **คนที่มาหาคนวาดงาน** ไม่ใช่ครีเอเตอร์
+ *
+ * เนื้อหาฝั่งครีเอเตอร์ (เปิดร้าน ฟีเจอร์ ราคาแพ็กเกจ) ย้ายไปหน้า /for-creators แล้ว
+ * หน้าเดียวที่พูดกับสองกลุ่มพร้อมกันจะไม่ชัดกับใครเลย — คนหาคนวาดไม่สนใจว่าเราคิดค่าสมาชิกเท่าไร
+ * และครีเอเตอร์ก็ไม่ได้เข้ามาเพื่อหาคนวาด
+ *
+ * ⚠️ ตอนนี้ยังไม่มีครีเอเตอร์จริงมาก หน้านี้จึงต้องดูดีตอนว่างด้วย
+ * ไม่ใช่ดีเฉพาะตอนมีของเต็ม — ไม่งั้นช่วงเปิดตัวจะดูเหมือนเว็บร้าง
+ * ร้านตัวอย่างไม่ถูกนับรวมในรายการ (กรองด้วย isDemo) แต่ยังกดดูได้จากปุ่มที่บอกชัดว่าเป็นตัวอย่าง
+ */
+export default async function HomePage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
-
-  const features = [
-    { icon: Store, title: t.landing.features.shopTitle, body: t.landing.features.shopBody },
-    { icon: LayoutGrid, title: t.landing.features.queueTitle, body: t.landing.features.queueBody },
-    { icon: ClipboardList, title: t.landing.features.briefTitle, body: t.landing.features.briefBody },
-    { icon: QrCode, title: t.landing.features.payTitle, body: t.landing.features.payBody },
-    { icon: Bell, title: t.landing.features.notifyTitle, body: t.landing.features.notifyBody },
-    { icon: Gavel, title: t.landing.features.adoptTitle, body: t.landing.features.adoptBody },
-  ];
+  const shops = await listPublicShops(6);
 
   const steps = [
-    { n: "1", title: t.landing.how.s1Title, body: t.landing.how.s1Body },
-    { n: "2", title: t.landing.how.s2Title, body: t.landing.how.s2Body },
-    { n: "3", title: t.landing.how.s3Title, body: t.landing.how.s3Body },
+    { n: "1", title: t.home.how.s1Title, body: t.home.how.s1Body },
+    { n: "2", title: t.home.how.s2Title, body: t.home.how.s2Body },
+    { n: "3", title: t.home.how.s3Title, body: t.home.how.s3Body },
   ];
 
+  const trust = [
+    { icon: ShieldCheck, title: t.home.trust.termsTitle, body: t.home.trust.termsBody },
+    { icon: Receipt, title: t.home.trust.priceTitle, body: t.home.trust.priceBody },
+    { icon: Clock, title: t.home.trust.trackTitle, body: t.home.trust.trackBody },
+    { icon: Wallet, title: t.home.trust.feeTitle, body: t.home.trust.feeBody },
+  ];
+
+  // หมวดที่คนมองหาบ่อยสุดก่อน ไม่ใช่ทั้ง 12 หมวดซึ่งจะกลายเป็นกำแพงป้ายให้อ่าน
+  const categories = SERVICE_KINDS.filter((k) =>
+    ["illustration", "chibi", "reference_sheet", "emote", "live2d", "adopt"].includes(k),
+  );
+
+  const statusTone: Record<ShopStatus, string> = {
+    open: "text-success",
+    waitlist: "text-warning",
+    closed: "text-muted-foreground",
+    vacation: "text-info",
+  };
+
   return (
-    <>
-      {/* ── Hero ─────────────────────────────────────────── */}
-      <section className="relative overflow-hidden">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-40 h-[420px] opacity-40 blur-3xl"
-          style={{
-            background:
-              "radial-gradient(45% 60% at 30% 50%, var(--primary) 0%, transparent 70%), radial-gradient(40% 55% at 72% 40%, var(--info) 0%, transparent 70%)",
-          }}
-        />
+    <div>
+      {/* ── หา ─────────────────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-4xl px-4 pt-16 pb-10 text-center lg:pt-24">
+        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
+          {t.home.heroTitle}{" "}
+          <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
+            {t.home.heroTitleAccent}
+          </span>
+        </h1>
+        <p className="mx-auto mt-4 max-w-xl text-pretty text-muted-foreground sm:text-lg">
+          {t.home.heroSubtitle}
+        </p>
 
-        <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-4 pt-16 pb-20 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
-          <div>
-            <p className="inline-flex items-center gap-2 rounded-full border bg-card/60 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-              <span className="size-1.5 rounded-full bg-success" />
-              {t.landing.heroNote}
-            </p>
-
-            <h1 className="mt-5 text-4xl leading-[1.15] font-semibold tracking-tight text-balance sm:text-5xl lg:text-[3.4rem]">
-              {t.landing.heroTitle}{" "}
-              <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
-                {t.landing.heroTitleAccent}
-              </span>
-            </h1>
-
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              {t.landing.heroSubtitle}
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild size="lg">
-                <Link href="/dashboard">
-                  {t.landing.heroCta}
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href={shopHref(creator.handle)}>{t.landing.heroCtaSecondary}</Link>
-              </Button>
-            </div>
-
-            <dl className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-              {[
-                { k: t.creator.completed, v: "132" },
-                { k: t.creator.rating, v: "4.9 ★" },
-                { k: t.creator.avgDelivery, v: `9 ${t.common.days}` },
-              ].map((s) => (
-                <div key={s.k}>
-                  <dt className="text-muted-foreground">{s.k}</dt>
-                  <dd className="tabular text-lg font-semibold">{s.v}</dd>
-                </div>
-              ))}
-            </dl>
+        {/*
+          ฟอร์มธรรมดาแบบ GET — ไม่ต้องใช้ JavaScript ก็ค้นได้ และปุ่ม Enter ทำงานเอง
+          ปลายทางคือ /explore ซึ่งเป็นหน้ารายการเต็ม
+        */}
+        <form action="/explore" className="mx-auto mt-7 flex max-w-lg gap-2">
+          <div className="relative flex-1">
+            <Search
+              aria-hidden
+              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              name="q"
+              placeholder={t.home.searchPlaceholder}
+              aria-label={t.home.searchPlaceholder}
+              className="h-11 pl-9"
+            />
           </div>
+          <Button type="submit" size="lg" className="h-11">
+            {t.home.searchCta}
+          </Button>
+        </form>
 
-          {/* ตัวอย่างหน้าร้านย่อส่วน — สื่อสารว่า "ได้อะไร" เร็วกว่าคำอธิบาย */}
-          <div className="relative">
-            <Card className="overflow-hidden p-0 shadow-2xl">
-              <ArtImage seed={creator.bannerSeed} alt="" ratio={3} rounded={false} />
-              <div className="-mt-8 px-5 pb-5">
-                <ArtAvatar
-                  seed={creator.avatarSeed}
-                  alt={creator.displayName}
-                  className="size-16 ring-4 ring-card"
-                />
-                <p className="mt-3 font-semibold">{creator.displayName}</p>
-                <p className="text-xs text-muted-foreground">@{creator.handle}</p>
-                <p className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-success">
-                  <span className="size-1.5 rounded-full bg-success" />
-                  {t.shopStatus.open}
-                  <span className="text-muted-foreground">
-                    · {t.creator.queueCount} {creator.queueCount}
-                  </span>
-                </p>
-
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {services.slice(0, 3).map((s) => (
-                    <div key={s.id} className="rounded-lg border bg-background/40 p-2">
-                      <ArtImage seed={s.coverSeed} alt={s.title} ratio={1.1} className="mb-2" />
-                      <p className="truncate text-[11px] font-medium">{s.title}</p>
-                      <p className="tabular text-[11px] text-muted-foreground">
-                        {formatMoney(s.basePriceCents, creator.currency, locale)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="masonry mt-3 columns-3">
-                  {portfolio.slice(0, 6).map((p) => (
-                    <ArtImage key={p.id} seed={p.seed} alt={p.title} ratio={1 / p.ratio} />
-                  ))}
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Features ─────────────────────────────────────── */}
-      <section className="border-t bg-card/30">
-        <div className="mx-auto w-full max-w-6xl px-4 py-16 lg:py-20">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {t.landing.featuresTitle}
-          </h2>
-
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {features.map((f) => (
-              <Card key={f.title} className="gap-3 p-5">
-                <div className="grid size-9 place-items-center rounded-lg border border-primary/25 bg-primary/10">
-                  <f.icon className="size-4 text-primary" />
-                </div>
-                <h3 className="font-medium">{f.title}</h3>
-                <p className="text-sm leading-relaxed text-muted-foreground">{f.body}</p>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── How it works ─────────────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-4 py-16 lg:py-20">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.landing.howTitle}</h2>
-        <ol className="mt-10 grid gap-6 sm:grid-cols-3">
-          {steps.map((s) => (
-            <li key={s.n} className="relative">
-              <span className="tabular grid size-9 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
-                {s.n}
-              </span>
-              <p className="mt-4 font-medium">{s.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
-            </li>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+          {categories.map((k) => (
+            <Button key={k} asChild variant="outline" size="sm" className="rounded-full">
+              <Link href={`/explore?kind=${k}`}>{t.serviceKind[k]}</Link>
+            </Button>
           ))}
-        </ol>
+        </div>
       </section>
 
-      {/* ── CTA ──────────────────────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20">
-        <Card className="relative overflow-hidden p-8 text-center sm:p-12">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 opacity-25"
-            style={{
-              background:
-                "radial-gradient(60% 120% at 50% 0%, var(--primary) 0%, transparent 65%)",
-            }}
-          />
-          <div className="relative">
-            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              {t.landing.ctaTitle}
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-muted-foreground">{t.landing.ctaBody}</p>
-            <Button asChild size="lg" className="mt-7">
-              <Link href="/dashboard">
-                {t.landing.heroCta}
-                <ArrowRight className="size-4" />
+      {/* ── ครีเอเตอร์ที่เปิดรับงาน ────────────────────────── */}
+      <section className="mx-auto w-full max-w-6xl px-4 pb-16">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight">{t.home.featuredTitle}</h2>
+          {shops.length > 0 ? (
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/explore">
+                {t.home.browseAll}
+                <ArrowRight className="size-3.5" />
               </Link>
             </Button>
+          ) : null}
+        </div>
+
+        {shops.length === 0 ? (
+          <Card className="mt-5 items-center gap-3 p-10 text-center">
+            <p className="font-medium">{t.home.featuredEmpty}</p>
+            <p className="max-w-md text-sm text-muted-foreground">{t.home.featuredEmptyBody}</p>
+            <div className="mt-2 flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link href="/for-creators">{t.landing.heroCta}</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={shopHref(DEMO_HANDLE)}>{t.landing.heroCtaSecondary}</Link>
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {shops.map((c) => {
+              const handle = c.user?.handle ?? "";
+              const cheapest = c.services[0];
+              return (
+                <Card key={c.id} className="gap-0 overflow-hidden p-0">
+                  <Link href={shopHref(handle)} className="group block">
+                    <ArtImage
+                      seed={c.id}
+                      src={c.banner?.url}
+                      alt=""
+                      ratio={2.6}
+                      rounded={false}
+                      className="transition-transform duration-300 group-hover:scale-[1.03]"
+                    />
+                    <div className="-mt-7 px-4 pb-4">
+                      <ArtAvatar
+                        seed={c.id + "-avatar"}
+                        src={c.avatar?.url}
+                        alt={c.displayName}
+                        className="size-14 ring-4 ring-card"
+                      />
+                      <p className="mt-2.5 font-medium">{c.displayName}</p>
+                      <p className="text-xs text-muted-foreground">@{handle}</p>
+                      {c.tagline ? (
+                        <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                          {c.tagline}
+                        </p>
+                      ) : null}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <span className={statusTone[c.status as ShopStatus]}>
+                          ● {t.shopStatus[c.status as ShopStatus]}
+                        </span>
+                        {cheapest ? (
+                          <span className="tabular text-muted-foreground">
+                            {t.common.from}{" "}
+                            {formatMoney(cheapest.basePriceCents, "THB", locale)}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {c.portfolio.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-4 gap-1.5">
+                          {c.portfolio.map((p) => (
+                            <ArtImage
+                              key={p.id}
+                              seed={p.id}
+                              src={p.media?.url}
+                              alt={p.title}
+                              ratio={1}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Link>
+                </Card>
+              );
+            })}
           </div>
+        )}
+      </section>
+
+      {/* ── สั่งงานยังไง ──────────────────────────────────── */}
+      <section className="border-t bg-card/30">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16">
+          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.howTitle}</h2>
+          <ol className="mt-8 grid gap-8 sm:grid-cols-3">
+            {steps.map((s) => (
+              <li key={s.n}>
+                <span className="tabular grid size-9 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
+                  {s.n}
+                </span>
+                <h3 className="mt-3 font-medium">{s.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── ทำไมสั่งที่นี่ ────────────────────────────────── */}
+      <section className="mx-auto w-full max-w-6xl px-4 py-16">
+        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.trustTitle}</h2>
+        <div className="mt-8 grid gap-6 sm:grid-cols-2">
+          {trust.map((x) => (
+            <div key={x.title} className="flex gap-3.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card">
+                <x.icon className="size-4 text-primary" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-medium">{x.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{x.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── ทางเข้าฝั่งครีเอเตอร์ ─────────────────────────── */}
+      <section className="mx-auto w-full max-w-6xl px-4 pb-20">
+        <Card className="flex-row flex-wrap items-center gap-4 border-primary/30 bg-primary/5 p-6">
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 font-medium">
+              {t.home.forCreatorsTitle}
+              <Badge variant="secondary" className="font-normal">
+                <Check className="size-3" />
+                {t.landing.heroNote}
+              </Badge>
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{t.home.forCreatorsBody}</p>
+          </div>
+          <Button asChild>
+            <Link href="/for-creators">
+              {t.home.forCreatorsCta}
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
         </Card>
       </section>
-    </>
+    </div>
   );
 }

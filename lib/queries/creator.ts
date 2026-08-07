@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { normalizeHandle } from "@/lib/handles";
 
@@ -88,11 +88,65 @@ export async function getShopByHandle(handle: string) {
  * ดึงเมนูถูกสุดกับผลงาน 4 ชิ้นแรกมาด้วยเพื่อวาดการ์ด — จำกัดจำนวนตั้งแต่ใน query
  * ไม่ใช่ดึงมาทั้งหมดแล้วค่อย slice ทิ้งฝั่ง JS
  */
-export async function listPublicShops(limit = 24) {
+export async function listPublicShops(
+  limit = 24,
+  filter?: { q?: string; kind?: string },
+) {
   const db = getDb();
 
+  const q = filter?.q?.trim();
+  const kind = filter?.kind?.trim();
+
+  /**
+   * ค้นหาแบบ ILIKE บนชื่อร้านกับคำโปรย
+   *
+   * ยังไม่ใช้ full-text search ของ Postgres เพราะ tsvector ไม่ตัดคำไทยให้
+   * (ต้องลง pg_trgm หรือพจนานุกรมเพิ่ม) และตอนนี้มีร้านหลักหน่วย — ILIKE เร็วพอ
+   * ถึงเวลาที่ช้าจริงค่อยเปลี่ยน จะได้รู้ด้วยว่าคนค้นด้วยคำแบบไหน
+   */
+  const conditions = [
+    eq(schema.creatorPage.isPublished, true),
+    eq(schema.creatorPage.isDemo, false),
+  ];
+  if (q) {
+    const pattern = `%${q.replace(/[%_]/g, "\\$&")}%`;
+    conditions.push(
+      or(
+        ilike(schema.creatorPage.displayName, pattern),
+        ilike(schema.creatorPage.tagline, pattern),
+      )!,
+    );
+  }
+  if (kind) {
+    /**
+     * ⚠️ ต้องเป็น subquery ที่ **ไม่อ้างถึงตารางนอก**
+     *
+     * `exists()` ที่อ้าง `creatorPage.id` จากข้างในใช้ไม่ได้กับ `db.query.*`
+     * เพราะ relational query ตั้ง alias ให้ตารางราก ชื่อเดิมจึงอ้างไม่ถึง
+     * ("invalid reference to FROM-clause entry") — กับดักเดียวกับ `extras`
+     *
+     * แบบนี้เลือก id ของร้านที่มีเมนูชนิดนั้นออกมาก่อน แล้วค่อยกรอง
+     * ยังเป็น SQL คำสั่งเดียวและไม่ทำให้ร้านซ้ำแบบ join
+     */
+    conditions.push(
+      inArray(
+        schema.creatorPage.id,
+        db
+          .selectDistinct({ id: schema.service.creatorPageId })
+          .from(schema.service)
+          .where(
+            and(
+              eq(schema.service.kind, kind),
+              eq(schema.service.isActive, true),
+              isNull(schema.service.deletedAt),
+            ),
+          ),
+      ),
+    );
+  }
+
   return db.query.creatorPage.findMany({
-    where: and(eq(schema.creatorPage.isPublished, true), eq(schema.creatorPage.isDemo, false)),
+    where: and(...conditions),
     orderBy: [desc(schema.creatorPage.updatedAt)],
     limit,
     columns: { id: true, displayName: true, tagline: true, status: true },

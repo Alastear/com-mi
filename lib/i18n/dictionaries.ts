@@ -59,6 +59,7 @@ const th = {
 
   nav: {
     explore: "ค้นหาครีเอเตอร์",
+    forCreators: "สำหรับครีเอเตอร์",
     pricing: "ราคา",
     dashboard: "ภาพรวม",
     orders: "งานของฉัน",
@@ -144,6 +145,9 @@ const th = {
     empty: "ยังไม่มีครีเอเตอร์เปิดร้าน",
     emptyHint: "เปิดร้านของคุณเป็นคนแรก แล้วลิงก์หน้าร้านจะพร้อมให้เอาไปแปะ bio ได้ทันที",
     openShop: "เปิดร้านของฉัน",
+    noMatch: "ไม่พบครีเอเตอร์ที่ตรงกับที่ค้นหา",
+    noMatchHint: "ลองใช้คำที่สั้นลง หรือดูหมวดอื่น",
+    clearFilters: "ล้างตัวกรอง",
     count: "ครีเอเตอร์ {n} คน",
   },
 
@@ -174,6 +178,49 @@ const th = {
       publish: "เผยแพร่หน้าร้าน",
       publishBody: "ก่อนกดนี้มีแค่คุณที่เห็นหน้าร้าน",
     },
+  },
+
+  /**
+   * หน้าแรกสำหรับ "คนที่มาหาคนวาดงาน" — คนละกลุ่มกับ landing.* ที่พูดกับครีเอเตอร์
+   * ข้อความชุดนี้ห้ามพูดเรื่องเปิดร้านหรือราคาแพ็กเกจ นั่นเป็นเรื่องของหน้า /for-creators
+   */
+  home: {
+    heroTitle: "หาคนวาดงานให้คุณ",
+    heroTitleAccent: "ได้ในที่เดียว",
+    heroSubtitle:
+      "ดูราคาและคิวของแต่ละคนก่อนตัดสินใจ สั่งงานแล้วเห็นความคืบหน้าตลอดทาง ไม่ต้องทักไปถามว่าเสร็จยัง",
+    searchPlaceholder: "ค้นหาชื่อครีเอเตอร์ หรือประเภทงาน",
+    searchCta: "ค้นหา",
+    browseAll: "ดูครีเอเตอร์ทั้งหมด",
+    categoriesTitle: "หมวดงานยอดนิยม",
+    featuredTitle: "ครีเอเตอร์ที่เปิดรับงาน",
+    featuredEmpty: "ยังไม่มีครีเอเตอร์เปิดร้าน",
+    featuredEmptyBody:
+      "ระบบเพิ่งเปิด ถ้าคุณเป็นครีเอเตอร์ เปิดร้านตอนนี้ได้เลย — หรือกดดูตัวอย่างหน้าร้านก่อนก็ได้",
+    howTitle: "สั่งงานยังไง",
+    how: {
+      s1Title: "เลือกเมนูที่ใช่",
+      s1Body: "แต่ละคนมีเมนูพร้อมราคา ระยะเวลาส่ง และจำนวนครั้งที่แก้ได้ บอกไว้ชัดตั้งแต่แรก",
+      s2Title: "กรอกรายละเอียดงาน",
+      s2Body: "บอกสิ่งที่อยากได้พร้อมแนบภาพอ้างอิง ครีเอเตอร์จะได้ไม่ต้องถามซ้ำ",
+      s3Title: "ติดตามจนได้รับงาน",
+      s3Body: "เห็นสถานะทุกขั้น คุยกับครีเอเตอร์ในที่เดียว และดาวน์โหลดไฟล์เมื่อจบงาน",
+    },
+    trustTitle: "สั่งงานที่นี่ต่างจากทักไปใน DM ยังไง",
+    trust: {
+      termsTitle: "เห็นข้อตกลงก่อนจ่าย",
+      termsBody:
+        "ข้อตกลงรับงานของครีเอเตอร์ถูกบันทึกไว้ในออเดอร์ตั้งแต่วันที่คุณกดยอมรับ แก้ย้อนหลังไม่ได้",
+      priceTitle: "ราคาชัดตั้งแต่แรก",
+      priceBody: "เลือกตัวเลือกเสริมแล้วเห็นยอดรวมทันที ไม่มีคิดเพิ่มทีหลังโดยไม่บอก",
+      trackTitle: "รู้ว่างานถึงไหนแล้ว",
+      trackBody: "สถานะเปลี่ยนทุกครั้งที่มีความคืบหน้า ไม่ต้องทักไปถามเอง",
+      feeTitle: "จ่ายตรงให้ครีเอเตอร์",
+      feeBody: "โอนเข้าบัญชีครีเอเตอร์โดยตรงผ่าน PromptPay เราไม่ถือเงินและไม่หักเปอร์เซ็นต์",
+    },
+    forCreatorsTitle: "เป็นครีเอเตอร์ใช่ไหม",
+    forCreatorsBody: "เปิดหน้าร้านฟรี รับงานได้ครบตั้งแต่รับคำขอจนส่งงาน",
+    forCreatorsCta: "ดูสำหรับครีเอเตอร์",
   },
 
   legal: {
@@ -692,6 +739,7 @@ const en: Dictionary = {
 
   nav: {
     explore: "Explore",
+    forCreators: "For creators",
     pricing: "Pricing",
     dashboard: "Overview",
     orders: "My work",
@@ -776,6 +824,9 @@ const en: Dictionary = {
     empty: "No creators have opened a shop yet",
     emptyHint: "Be the first — your shop link is ready to paste into a bio the moment you publish",
     openShop: "Open my shop",
+    noMatch: "No creators match that search",
+    noMatchHint: "Try a shorter word, or another category",
+    clearFilters: "Clear filters",
     count: "{n} creators",
   },
 
@@ -805,6 +856,46 @@ const en: Dictionary = {
       publish: "Publish your shop",
       publishBody: "Until you do, only you can see it",
     },
+  },
+
+  home: {
+    heroTitle: "Find someone to draw it",
+    heroTitleAccent: "in one place",
+    heroSubtitle:
+      "See prices and queues before you commit. Order once and follow the work the whole way — no more asking whether it is done.",
+    searchPlaceholder: "Search a creator or a kind of work",
+    searchCta: "Search",
+    browseAll: "Browse all creators",
+    categoriesTitle: "Popular categories",
+    featuredTitle: "Creators open for work",
+    featuredEmpty: "No creators have opened a shop yet",
+    featuredEmptyBody:
+      "We just launched. If you are a creator, open your shop now — or take a look at an example shop first.",
+    howTitle: "How ordering works",
+    how: {
+      s1Title: "Pick the right service",
+      s1Body: "Every creator lists prices, turnaround and how many revisions are included, up front",
+      s2Title: "Fill in the brief",
+      s2Body: "Say what you want and attach references, so nobody has to ask twice",
+      s3Title: "Follow it to delivery",
+      s3Body: "See each stage, talk to the creator in one place, download the files when it is done",
+    },
+    trustTitle: "Why order here instead of a DM",
+    trust: {
+      termsTitle: "Terms before you pay",
+      termsBody:
+        "The creator's terms are saved into your order the moment you accept them, and cannot be changed afterwards",
+      priceTitle: "The price is the price",
+      priceBody: "Pick your add-ons and see the total immediately — nothing added later without asking",
+      trackTitle: "Always know where it stands",
+      trackBody: "The status changes as the work moves, so you never have to chase an update",
+      feeTitle: "You pay the creator directly",
+      feeBody:
+        "PromptPay straight into their account. We never hold the money and take none of it.",
+    },
+    forCreatorsTitle: "Are you a creator?",
+    forCreatorsBody: "Open a shop for free and run the whole job, from request to delivery",
+    forCreatorsCta: "See it for creators",
   },
 
   legal: {

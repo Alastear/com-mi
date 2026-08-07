@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { listPublicShops } from "@/lib/queries/creator";
@@ -8,7 +9,7 @@ import { shopHref } from "@/lib/routes";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
-import type { ShopStatus } from "@/lib/types";
+import { SERVICE_KINDS, type ShopStatus } from "@/lib/types";
 
 /**
  * Phase 1–2 หน้านี้ตั้งใจให้เรียบมาก — marketplace ที่ยังไม่มีคนใช้ดูแย่กว่าไม่มีเลย
@@ -18,10 +19,17 @@ import type { ShopStatus } from "@/lib/types";
  * เดิมหน้านี้ปั้นครีเอเตอร์ปลอมสามคนจากข้อมูลจำลองชุดเดียว ซึ่งกดเข้าไปแล้ว 404 ทั้งหมด
  * ยอมให้หน้าว่างดีกว่าโชว์ร้านที่ไม่มีตัวตน — คนกดแล้วเจอหน้าเสียจะไม่กลับมาอีก
  */
-export default async function ExplorePage() {
+export default async function ExplorePage(props: PageProps<"/explore">) {
   const locale = await getLocale();
   const t = getDictionary(locale);
-  const shops = await listPublicShops();
+
+  // ตัวกรองอยู่ใน URL ทั้งหมด — แชร์ลิงก์ผลค้นหาได้ และปุ่ม back ทำงานถูก
+  const sp = await props.searchParams;
+  const q = typeof sp.q === "string" ? sp.q : "";
+  const kind = typeof sp.kind === "string" ? sp.kind : "";
+  const hasFilter = Boolean(q || kind);
+
+  const shops = await listPublicShops(24, { q, kind });
 
   const statusTone: Record<ShopStatus, string> = {
     open: "text-success",
@@ -37,12 +45,58 @@ export default async function ExplorePage() {
         {shops.length > 0 ? fill(t.explore.count, { n: shops.length }) : t.brand.tagline}
       </p>
 
+      {/* ฟอร์ม GET ธรรมดา — ค้นได้แม้ JavaScript ยังไม่โหลด และ Enter ทำงานเอง */}
+      <form className="mt-6 flex max-w-lg gap-2">
+        {kind ? <input type="hidden" name="kind" value={kind} /> : null}
+        <Input
+          type="search"
+          name="q"
+          defaultValue={q}
+          placeholder={t.home.searchPlaceholder}
+          aria-label={t.home.searchPlaceholder}
+          className="h-10"
+        />
+        <Button type="submit">{t.home.searchCta}</Button>
+      </form>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          asChild
+          size="sm"
+          variant={kind ? "outline" : "secondary"}
+          className="rounded-full"
+        >
+          <Link href={q ? `/explore?q=${encodeURIComponent(q)}` : "/explore"}>{t.common.all}</Link>
+        </Button>
+        {SERVICE_KINDS.map((k) => (
+          <Button
+            key={k}
+            asChild
+            size="sm"
+            variant={k === kind ? "secondary" : "outline"}
+            className="rounded-full"
+          >
+            <Link
+              href={`/explore?kind=${k}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+              aria-current={k === kind ? "true" : undefined}
+            >
+              {t.serviceKind[k]}
+            </Link>
+          </Button>
+        ))}
+      </div>
+
       {shops.length === 0 ? (
         <Card className="mt-10 items-center gap-3 p-10 text-center">
-          <p className="font-medium">{t.explore.empty}</p>
-          <p className="max-w-md text-sm text-muted-foreground">{t.explore.emptyHint}</p>
-          <Button asChild className="mt-2">
-            <Link href="/dashboard">{t.explore.openShop}</Link>
+          {/* หาไม่เจอกับยังไม่มีใครเปิดร้าน เป็นคนละเรื่อง ต้องบอกให้ตรง */}
+          <p className="font-medium">{hasFilter ? t.explore.noMatch : t.explore.empty}</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            {hasFilter ? t.explore.noMatchHint : t.explore.emptyHint}
+          </p>
+          <Button asChild variant={hasFilter ? "outline" : "default"} className="mt-2">
+            <Link href={hasFilter ? "/explore" : "/for-creators"}>
+              {hasFilter ? t.explore.clearFilters : t.explore.openShop}
+            </Link>
           </Button>
         </Card>
       ) : (

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { shopHref } from "@/lib/routes";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -10,7 +9,6 @@ import { Logo } from "@/components/brand";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
 import { useDict } from "@/lib/i18n/client";
 import { UserAvatar } from "@/components/user-avatar";
-import { DEMO_HANDLE } from "@/lib/site";
 
 /**
  * ผู้ใช้ที่ล็อกอินอยู่ ส่งมาจาก layout ฝั่ง server
@@ -29,10 +27,14 @@ export type HeaderUser = {
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const t = useDict();
 
+  /**
+   * หน้าแรกเป็นหน้าหาครีเอเตอร์แล้ว เมนูจึงพาไปที่ "รายการเต็ม" ไม่ใช่ย้อนกลับหน้าเดิม
+   * และต้องมีทางเข้าฝั่งครีเอเตอร์ให้ชัด เพราะเนื้อหานั้นไม่ได้อยู่หน้าแรกอีกต่อไป
+   */
   const links: Array<{ href: Route; label: string }> = [
     { href: "/explore", label: t.nav.explore },
+    { href: "/for-creators", label: t.nav.forCreators },
     { href: "/pricing", label: t.nav.pricing },
-    { href: shopHref(DEMO_HANDLE), label: t.landing.heroCtaSecondary },
   ];
 
   return (
