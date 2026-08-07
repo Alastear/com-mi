@@ -33,6 +33,31 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 
 ---
 
+## Deploy — production ขึ้นแล้ว
+
+**https://com-mi.vercel.app** (Vercel · ทีม `alastears-projects` · โปรเจกต์ `com-mi`)
+
+ใช้โดเมนแถมของ Vercel ไปก่อนโดยตั้งใจ — ยังไม่ต้องรอตัดสินใจเรื่องโดเมนจริง
+พอมีโดเมนแล้วเปลี่ยนแค่ `NEXT_PUBLIC_APP_URL` + `BETTER_AUTH_URL` และเพิ่ม redirect URI ใน Google
+
+**ยังทำไม่ได้บน production จนกว่าจะเพิ่ม redirect URI ใน Google Cloud Console:**
+`https://com-mi.vercel.app/api/auth/callback/google`
+
+**สิ่งที่ตรวจแล้วว่าทำงานจริงบน production**
+
+| ส่วน | ผล |
+|---|---|
+| หน้าแรก / for-creators / explore / pricing / legal | 200 ทุกหน้า |
+| `/@nongfah` อ่านจาก Neon จริง | 200 พร้อมเมนู |
+| `/nongfah` → `/@nongfah` | 308 (URL ตามหลักทำงาน) |
+| `/@notreal` | 404 (ไม่ใช่ soft-404) |
+| `/dashboard` `/orders` `/shop` ตอนไม่ล็อกอิน | 307 → `/sign-in?next=…` |
+| `/api/notifications` ตอนไม่ล็อกอิน | 401 |
+| `sitemap.xml` | ชี้โดเมน production ถูก ไม่มีร้านตัวอย่าง |
+| Google OAuth เริ่มต้น | คืน consent URL ที่ redirect_uri ถูกโดเมน |
+
+---
+
 ## Phase 1 — MVP: loop รับงานจนจบ (สัปดาห์ 2–4) 🎯
 
 **เป้าหมาย: ครีเอเตอร์ 1 คนรับงานจริงจากลูกค้าจริงจนจบได้ — นี่คือหมุดหมายที่สำคัญที่สุดของทั้งโปรเจกต์**
