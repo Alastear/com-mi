@@ -376,7 +376,8 @@ export async function POST(request: Request) {
         maximumSizeInBytes: kind === 'final' ? 200_000_000 : 20_000_000,
         addRandomSuffix: true,
         // ไฟล์ส่งมอบเป็น private — ลูกค้าเข้าถึงได้ผ่าน signed URL เท่านั้น
-        access: kind === 'final' ? 'private' : 'public',
+        // ⚠️ onBeforeGenerateToken ไม่มีฟิลด์ `access` — ตรวจกับ .d.ts แล้ว
+      // เลือก store ด้วย `token:` ที่ handleUpload แทน และแยกเป็นคนละ route
         tokenPayload: JSON.stringify({ userId: user.id, orderId, kind }),
       }
     },

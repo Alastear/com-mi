@@ -12,6 +12,9 @@ import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { depositSatisfied } from "@/lib/orders/release";
 import { PaymentPanel } from "@/components/app/payment-panel";
+import { DeliveryPanel } from "@/components/app/delivery-panel";
+import { readDelivery } from "@/lib/delivery/read";
+import { canRelease } from "@/lib/orders/release";
 import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
@@ -44,6 +47,7 @@ export default async function ClientRequestPage({ params }: Props) {
   const handle = order.page.user?.handle ?? "";
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
+  const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
   const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
   const amountDue = depositSatisfied(order) ? remaining : order.depositCents - order.amountPaidCents;
 
@@ -165,6 +169,19 @@ export default async function ClientRequestPage({ params }: Props) {
           }
         />
       </Card>
+
+      {delivery ? (
+        <Card className="mt-4 gap-3 p-6">
+          <DeliveryPanel
+            code={order.code}
+            viewer="client"
+            delivery={delivery}
+            pendingFiles={pendingFiles}
+            canDeliver={canRelease(order)}
+            orderStatus={order.status}
+          />
+        </Card>
+      ) : null}
 
       <Card className="mt-4 p-4">
         <OrderActions code={order.code} status={order.status as OrderStatus} actor="client" />

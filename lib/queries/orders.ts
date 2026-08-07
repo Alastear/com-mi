@@ -9,6 +9,10 @@ import { isOrderCode } from "@/lib/orders/code";
  * เพราะถ้าเพิ่มคอลัมน์ลับใหม่ในอนาคต แบบ blacklist จะหลุดออกไปทันทีโดยไม่มีใครรู้
  * ส่วนแบบนี้ต้องเดินมาเติมชื่อคอลัมน์เองถึงจะโผล่ (ตอนนี้ที่ต้องกันคือ `privateNote`)
  *
+ * ⚠️ กฎ whitelist ใช้กับ `with:` ด้วย ไม่ใช่แค่คอลัมน์ชั้นบน
+ * แถวที่ join มาก็ข้าม boundary ไปฝั่ง client เหมือนกัน — `delivery` ต้องไม่พก
+ * อะไรที่ชี้ตำแหน่งไฟล์จริงติดไปด้วย
+ *
  * `with` เขียนซ้ำในแต่ละฟังก์ชันโดยตั้งใจ — ดึงออกไปเป็นตัวแปรกลางแล้ว
  * TypeScript จะขยาย `columns: { title: true }` เป็น `boolean` ทำให้ type
  * ของผลลัพธ์กลายเป็น optional ทั้งก้อน แล้วโค้ดที่เรียกใช้พังหมด
@@ -59,6 +63,10 @@ export async function getOrderForClient(code: string, clientUserId: string) {
         with: { user: { columns: { handle: true, name: true, image: true } } },
       },
       payments: { orderBy: [asc(schema.paymentRecord.createdAt)] },
+      deliveries: {
+        orderBy: [asc(schema.delivery.createdAt)],
+        columns: { id: true, note: true, licenseType: true, releasedAt: true, mediaIds: true },
+      },
       messages: {
         orderBy: [asc(schema.message.createdAt)],
         with: { sender: { columns: { name: true, image: true } } },
@@ -159,6 +167,10 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
           with: { sender: { columns: { name: true, image: true } } },
         },
         payments: { orderBy: [asc(schema.paymentRecord.createdAt)] },
+        deliveries: {
+          orderBy: [asc(schema.delivery.createdAt)],
+          columns: { id: true, note: true, licenseType: true, releasedAt: true, mediaIds: true },
+        },
       },
     })) ?? null
   );

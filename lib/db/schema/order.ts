@@ -330,3 +330,41 @@ export type Message = typeof message.$inferSelect;
 export type PaymentRecord = typeof paymentRecord.$inferSelect;
 export type Delivery = typeof delivery.$inferSelect;
 export type Review = typeof review.$inferSelect;
+
+/* ── delivery_issuance — ร่องรอยการออก URL ดาวน์โหลด ─────────── */
+
+/**
+ * บันทึกทุกครั้งที่มีการออก signed URL ให้ไฟล์ส่งมอบ
+ *
+ * **นี่คือร่องรอยเดียวที่จะมี** — CDN ของ Blob ไม่ให้ log อะไรเรากลับมาเลย
+ * และ signed URL เป็น bearer credential ล้วน ๆ (ทดสอบแล้ว: `fetch()` เปล่า ๆ
+ * ไม่มี header อะไรเลยก็ได้ไฟล์) ถ้าวันหนึ่งมีคนบอกว่างานหลุด สิ่งเดียวที่ตอบได้คือ
+ * "ออก URL ให้ใคร เมื่อไร กี่ครั้ง" ซึ่งต้องเขียนไว้ตั้งแต่ตอนออก ไม่ใช่ไปหาทีหลัง
+ */
+export const deliveryIssuance = pgTable(
+  "delivery_issuance",
+  {
+    id: text("id").primaryKey(),
+    deliveryId: text("delivery_id")
+      .notNull()
+      .references(() => delivery.id, { onDelete: "cascade" }),
+    mediaId: text("media_id").notNull(),
+    /** คนที่ขอ URL — ไม่ใช่เจ้าของไฟล์ */
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("delivery_issuance_delivery_idx").on(t.deliveryId, t.issuedAt)],
+);
+
+export const deliveryIssuanceRelations = relations(deliveryIssuance, ({ one }) => ({
+  delivery: one(delivery, {
+    fields: [deliveryIssuance.deliveryId],
+    references: [delivery.id],
+  }),
+  user: one(user, { fields: [deliveryIssuance.userId], references: [user.id] }),
+}));
+
+export type DeliveryIssuance = typeof deliveryIssuance.$inferSelect;

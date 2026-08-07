@@ -66,6 +66,13 @@ export const media = pgTable(
     isWatermarked: boolean("is_watermarked").notNull().default(false),
 
     /**
+     * ชื่อไฟล์ที่คนอ่านออก — pathname ใน Blob เป็น id ล้วนโดยตั้งใจ
+     * ชื่อไฟล์ไทยหรือมีอักขระพิเศษไม่ควรไปอยู่ใน URL และ `mediaId` คือสิ่งเดียว
+     * ที่ฝั่ง client ถืออยู่ ดังนั้นชื่อสำหรับแสดงต้องเก็บแยกไว้ที่นี่
+     */
+    filename: text("filename").notNull().default(""),
+
+    /**
      * orphan = อัปโหลดแล้วแต่ผู้ใช้ยังไม่ submit → cron เก็บกวาดทีหลัง
      * linked  = ผูกกับ record จริงแล้ว
      */

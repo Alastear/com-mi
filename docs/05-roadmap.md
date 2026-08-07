@@ -95,12 +95,16 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 - [x] `/orders/[code]` — timeline+แชท + action bar ที่ปุ่มมาจาก `allowedNext()` ล้วน
 - [x] `/my/requests/[code]` ใช้ `<OrderThread>` + `<OrderActions>` ตัวเดียวกัน ต่างแค่ `actor`
       (ไฟล์แนบยังไม่ได้ทำ — รอ Blob store แบบ private)
-- [ ] อัปโหลด WIP + ลายน้ำ + ไฟล์ final เป็น private blob (ต้องมี Blob store ตัวที่สองแบบ private)
+- [x] ไฟล์ส่งมอบเข้า private blob + gate ดาวน์โหลด — พิสูจน์เส้นทางกับ store จริงแล้ว
+      route อัปโหลดแยกต่างหาก · ปล่อยไฟล์เป็นการกดแยกจากการยืนยันเงิน
+      · signed URL อายุ 15 นาที ออกผ่าน Server Action (ไม่ใช่ GET route)
+      · `delivery_issuance` บันทึกทุกครั้งที่ออก URL · trigger ห้ามแก้ delivery หลังปล่อย
+- [ ] ~~ลายน้ำ WIP~~ — **ตัดออกจาก 1c** เป็นการป้องปรามไม่ใช่ด่าน
+      และไม่ได้กันอะไรที่ `releasedAt` กันอยู่แล้ว (มีเครื่องมือลบลายน้ำทแยงขายอยู่ทั่วไป)
 - [x] `<PromptPayQR>` (payload EMVCo + CRC-16/CCITT จริง, uqr วาด SVG ฝั่ง server)
       + `payment_record` สองขั้น (ลูกค้าแจ้ง → ครีเอเตอร์ยืนยันเงินเข้า)
       ✅ **ยืนยันด้วยการสแกนจริงแล้ว 7 ส.ค. 2026** — แอปธนาคารอ่านออก ชื่อผู้รับถูกคน
       ยอดตรง โอนสำเร็จ · แก้ `lib/payments/promptpay.ts` เมื่อไรต้องสแกนยืนยันใหม่
-- [ ] gate การดาวน์โหลดไฟล์ส่งมอบ (รอ private blob store)
 - [x] แจ้งเตือนในเว็บ — `notification` เก็บ `type` + `data` ไม่ใช่ข้อความสำเร็จรูป
       polling ถอยจังหวะเป็นทวีคูณ + หยุดเมื่อแท็บไม่ active + ETag ตอบ 304
       (⚠️ ต่างจาก docs/02 §9 ที่ออกแบบให้เก็บ title/body — ดูเหตุผลใน schema)

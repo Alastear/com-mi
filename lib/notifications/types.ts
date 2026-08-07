@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = [
   "payment_reported",
   "payment_recorded_by_creator",
   "payment_confirmed",
+  "delivery_released",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

@@ -69,4 +69,6 @@ export const LIMITS = {
   createOrder: { limit: 5, windowSeconds: 3600 },
   /** ส่งข้อความในเธรด: 30 ครั้งต่อ 5 นาที */
   sendMessage: { limit: 30, windowSeconds: 300 },
+  /** ขอ token อัปโหลดไฟล์ส่งมอบ: 40 ครั้งต่อชั่วโมง (งานหนึ่งชิ้นมีหลายไฟล์ได้) */
+  deliveryUpload: { limit: 40, windowSeconds: 3600 },
 } as const;

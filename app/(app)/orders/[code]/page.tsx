@@ -15,6 +15,9 @@ import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { PaymentPanel } from "@/components/app/payment-panel";
+import { DeliveryPanel } from "@/components/app/delivery-panel";
+import { readDelivery } from "@/lib/delivery/read";
+import { canRelease } from "@/lib/orders/release";
 import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
@@ -41,6 +44,7 @@ export default async function OrderPage({ params }: Props) {
   const locale = await getLocale();
   const t = getDictionary(locale);
   const days = order.dueAt ? daysUntil(order.dueAt) : null;
+  const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
   const remaining = order.totalCents - order.amountPaidCents;
 
   return (
@@ -173,6 +177,17 @@ export default async function OrderPage({ params }: Props) {
               payments={toPaymentRows(order.payments)}
               // ครีเอเตอร์ไม่ต้องเห็น QR ของตัวเอง แต่ต้องรู้ว่าตั้งค่ารับเงินแล้วหรือยัง
               hasPayout={Boolean(order.page.promptpayId)}
+            />
+          </Card>
+
+          <Card className="gap-3 p-5">
+            <DeliveryPanel
+              code={order.code}
+              viewer="creator"
+              delivery={delivery}
+              pendingFiles={pendingFiles}
+              canDeliver={canRelease(order)}
+              orderStatus={order.status}
             />
           </Card>
 

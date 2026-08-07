@@ -278,6 +278,35 @@ const th = {
     footer: "อีเมลนี้ส่งจากระบบรับงานของ {site} — ถ้าคุณไม่ได้เกี่ยวข้องกับงานนี้ ไม่ต้องทำอะไร",
   },
 
+  /** ไฟล์ส่งมอบ — ข้อความฝั่งครีเอเตอร์กับฝั่งลูกค้าอยู่ด้วยกัน */
+  delivery: {
+    title: "ไฟล์ส่งมอบ",
+    upload: "อัปโหลดไฟล์ส่งมอบ",
+    uploadHint: "ไฟล์ต้นฉบับได้ทุกชนิด (PSD, CLIP, ZIP, วิดีโอ) ไม่มีการบีบอัดหรือแปลงไฟล์",
+    uploading: "กำลังอัปโหลด…",
+    files: "ไฟล์ที่เตรียมไว้",
+    noFiles: "ยังไม่ได้อัปโหลดไฟล์",
+    note: "ข้อความถึงลูกค้า",
+    license: "สิทธิ์การใช้งาน",
+    licensePersonal: "ใช้ส่วนตัว",
+    licenseCommercial: "ใช้เชิงพาณิชย์",
+    licenseExclusive: "สิทธิ์ขาด",
+    prepare: "เตรียมส่งมอบ",
+    release: "ส่งมอบให้ลูกค้า",
+    releaseHint: "กดแล้วลูกค้าดาวน์โหลดได้ทันที และแก้รายการนี้ไม่ได้อีก",
+    released: "ส่งมอบแล้ว",
+    download: "ดาวน์โหลด",
+    downloading: "กำลังเตรียมลิงก์…",
+    lockedUntilPaid: "ดาวน์โหลดได้เมื่อชำระครบ",
+    linkWarning:
+      "ลิงก์ดาวน์โหลดมีอายุ 15 นาที และใครก็ตามที่ได้ลิงก์ไปก็เปิดได้ — การส่งต่อให้คนอื่นผิดเงื่อนไขการใช้งาน ไม่ใช่เรื่องที่ระบบกันได้",
+    quotaFull: "พื้นที่เก็บไฟล์เต็ม — ลบไฟล์เก่าหรืออัปเกรดเป็น Pro",
+    failed: "อัปโหลดไม่สำเร็จ ลองใหม่อีกครั้ง",
+    wrongState: "สถานะงานตอนนี้อัปโหลดไฟล์ส่งมอบไม่ได้",
+    notPaid: "ยังส่งมอบไม่ได้ — ลูกค้ายังจ่ายไม่ครบ",
+    noFilesYet: "ต้องมีไฟล์อย่างน้อยหนึ่งไฟล์ก่อนส่งมอบ",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -745,6 +774,7 @@ const th = {
     payment_reported: "ลูกค้าแจ้งโอนเงินงาน #{code}",
     payment_recorded_by_creator: "ครีเอเตอร์บันทึกว่าได้รับเงินงาน #{code} จากคุณแล้ว",
     payment_confirmed: "ครีเอเตอร์ยืนยันได้รับเงินงาน #{code}",
+    delivery_released: "ไฟล์งาน #{code} พร้อมให้ดาวน์โหลดแล้ว",
     empty: "ยังไม่มีการแจ้งเตือน",
   },
 
@@ -1017,6 +1047,34 @@ const en: Dictionary = {
     paymentConfirmedBody: "The creator confirmed receiving payment for \"{service}\"",
     viewOrder: "Open the order",
     footer: "Sent by {site} because you are part of this order. If that is not you, no action is needed.",
+  },
+
+  delivery: {
+    title: "Delivery files",
+    upload: "Upload delivery files",
+    uploadHint: "Any source format (PSD, CLIP, ZIP, video) — nothing is compressed or converted",
+    uploading: "Uploading…",
+    files: "Files ready",
+    noFiles: "No files uploaded yet",
+    note: "Message to the client",
+    license: "Usage rights",
+    licensePersonal: "Personal use",
+    licenseCommercial: "Commercial use",
+    licenseExclusive: "Exclusive rights",
+    prepare: "Prepare delivery",
+    release: "Deliver to the client",
+    releaseHint: "The client can download immediately, and this delivery cannot be edited afterwards",
+    released: "Delivered",
+    download: "Download",
+    downloading: "Preparing link…",
+    lockedUntilPaid: "Unlocks when the order is paid in full",
+    linkWarning:
+      "Download links last 15 minutes and work for anyone holding them — resharing breaks the licence, it is not something the system can prevent",
+    quotaFull: "Storage is full — remove old files or upgrade to Pro",
+    failed: "Upload failed. Try again.",
+    wrongState: "Files cannot be uploaded at this stage",
+    notPaid: "Cannot deliver yet — the order is not fully paid",
+    noFilesYet: "Attach at least one file before delivering",
   },
 
   legal: {
@@ -1480,6 +1538,7 @@ const en: Dictionary = {
     payment_reported: "A payment was reported on order #{code}",
     payment_recorded_by_creator: "The creator recorded a payment from you on order #{code}",
     payment_confirmed: "Your payment on order #{code} was confirmed",
+    delivery_released: "Files for order #{code} are ready to download",
     empty: "No notifications yet",
   },
 
