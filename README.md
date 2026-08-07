@@ -52,3 +52,4 @@ pnpm dev                                  # http://localhost:3450
 
 Next.js เวอร์ชันนี้มี breaking change จากที่คุ้นเคย — อ่าน `node_modules/next/dist/docs/`
 ก่อนเขียนโค้ดที่แตะ API ของ Next (`middleware.ts` เปลี่ยนชื่อเป็น `proxy.ts` เป็นต้น)
+
