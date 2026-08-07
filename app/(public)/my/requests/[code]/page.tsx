@@ -10,6 +10,7 @@ import { getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
+import { depositSatisfied } from "@/lib/orders/release";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
@@ -44,10 +45,7 @@ export default async function ClientRequestPage({ params }: Props) {
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
   const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
-  const amountDue =
-    order.depositCents > 0 && order.amountPaidCents < order.depositCents
-      ? order.depositCents - order.amountPaidCents
-      : remaining;
+  const amountDue = depositSatisfied(order) ? remaining : order.depositCents - order.amountPaidCents;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">

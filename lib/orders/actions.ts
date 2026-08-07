@@ -10,6 +10,7 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
 import { assertTransition, TransitionError, type Actor } from "./state-machine";
+import { canRelease, depositSatisfied } from "./release";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
 /**
@@ -95,11 +96,12 @@ export async function transitionOrder(input: {
    * ทั้งสองข้อเป็นด่านฝั่ง server — UI ซ่อนปุ่มให้ก็จริง แต่ Server Action
    * ถูกเรียกตรงได้ ห้ามให้ UI เป็นชั้นป้องกันเดียว
    */
-  if (to === "in_progress" && order.depositCents > 0 && order.amountPaidCents < order.depositCents) {
+  if (to === "in_progress" && !depositSatisfied(order)) {
     return { ok: false, error: "deposit_unpaid" };
   }
-  if (to === "delivered" && order.amountPaidCents < order.totalCents) {
-    // ส่งไฟล์จริงได้ต่อเมื่อจ่ายครบ — ตรงกับที่ delivery.releasedAt บังคับไว้อีกชั้น
+  if (to === "delivered" && !canRelease(order)) {
+    // เงื่อนไขเดียวกับด่านออก URL ดาวน์โหลด — เรียก canRelease() ทั้งคู่
+    // ห้ามเขียน `paid >= total` ซ้ำที่ไหนอีก ไม่งั้นสองด่านจะเพี้ยนออกจากกัน
     return { ok: false, error: "not_fully_paid" };
   }
 

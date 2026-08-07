@@ -83,13 +83,20 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
 
   if (order.isCreator) await recomputePaid(order.id);
 
-  // ลูกค้าแจ้งโอน → ครีเอเตอร์ต้องรู้ทันที เพราะต้องไปเช็คแอปธนาคารแล้วกดยืนยัน
+  /**
+   * แจ้ง **อีกฝ่าย** เสมอ ไม่ใช่ผู้รับตายตัว
+   *
+   * เดิมส่งไปที่ครีเอเตอร์ทั้งสองทาง — พอครีเอเตอร์เป็นคนบันทึกเอง
+   * `notify()` ตัดทิ้งเพราะผู้ส่งกับผู้รับเป็นคนเดียวกัน **ลูกค้าจึงไม่มีทางรู้เลย
+   * ว่ามีคนบันทึกยอดในนามของตัวเอง** ซึ่งเป็นรายการที่ปลดล็อกไฟล์งานได้
+   * ต้องเห็นทั้งสองฝั่งเสมอ ไม่งั้นการบันทึกฝ่ายเดียวจะกลายเป็นเรื่องเงียบ
+   */
   await notify({
-    userId: order.page.userId,
+    userId: order.isCreator ? order.clientUserId : order.page.userId,
     actorUserId: session.user.id,
-    type: "payment_reported",
+    type: order.isCreator ? "payment_recorded_by_creator" : "payment_reported",
     data: { code: v.code, amount: v.amountCents },
-    url: `/orders/${v.code}`,
+    url: order.isCreator ? `/my/requests/${v.code}` : `/orders/${v.code}`,
     entityType: "order",
     entityId: order.id,
   });

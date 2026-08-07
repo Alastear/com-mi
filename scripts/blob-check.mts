@@ -25,8 +25,9 @@ const CHECKS: Check[] = [
     label: "ไฟล์ส่งมอบ / WIP",
     env: "BLOB_PRIVATE_READ_WRITE_TOKEN",
     access: "private",
-    // ยังไม่บังคับจนกว่าจะทำระบบส่งไฟล์เสร็จ — แต่ต้องเตือนว่ายังไม่มี
-    required: false,
+    // บังคับแล้ว — ระบบส่งไฟล์พึ่ง store นี้ และถ้าไม่มี token
+    // โค้ดจะโยน error ทันทีแทนที่จะตกไปเขียน store สาธารณะเงียบ ๆ
+    required: true,
   },
 ];
 

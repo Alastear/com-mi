@@ -22,6 +22,9 @@ const EMAIL_WORTHY: readonly NotificationType[] = [
   "order_created",
   "payment_reported",
   "payment_confirmed",
+  // ครีเอเตอร์บันทึกยอดในนามลูกค้า — ลูกค้าต้องได้รู้แม้ไม่ได้เปิดเว็บอยู่
+  // เพราะเป็นรายการที่มีผลต่อเงินและปลดล็อกไฟล์งานได้
+  "payment_recorded_by_creator",
 ];
 
 export function shouldEmail(type: NotificationType): boolean {
@@ -58,7 +61,9 @@ export async function emailNotification(input: EmailInput): Promise<void> {
       ? e.orderCreatedSubject
       : input.type === "payment_reported"
         ? e.paymentReportedSubject
-        : e.paymentConfirmedSubject,
+        : input.type === "payment_recorded_by_creator"
+          ? e.paymentRecordedSubject
+          : e.paymentConfirmedSubject,
     input.data,
   );
 
@@ -72,7 +77,9 @@ export async function emailNotification(input: EmailInput): Promise<void> {
       ? e.orderCreatedBody
       : input.type === "payment_reported"
         ? e.paymentReportedBody
-        : e.paymentConfirmedBody,
+        : input.type === "payment_recorded_by_creator"
+          ? e.paymentRecordedBody
+          : e.paymentConfirmedBody,
     { ...input.data, amount },
   );
 

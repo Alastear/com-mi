@@ -12,6 +12,7 @@ import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
 import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
+import { canRelease, depositSatisfied } from "./release";
 
 /**
  * ตรรกะที่พลาดแล้วเสียเงินจริง — คุ้มที่จะมีเทสต์ถึงแม้โปรเจกต์ยังไม่มี test suite ใหญ่
@@ -200,35 +201,6 @@ describe("board", () => {
   });
 });
 
-describe("เงื่อนไขเรื่องเงิน", () => {
-  /**
-   * ตรรกะเดียวกับที่ transitionOrder ใช้ — เขียนคู่กันไว้ให้เห็นชัดว่ากติกาคืออะไร
-   * ถ้าแก้ที่ actions.ts แล้วลืมแก้ที่นี่ เทสต์จะไม่จับ แต่กติกายังอ่านออกจากที่เดียว
-   */
-  const canStart = (o: { depositCents: number; amountPaidCents: number }) =>
-    o.depositCents === 0 || o.amountPaidCents >= o.depositCents;
-  const canDeliver = (o: { totalCents: number; amountPaidCents: number }) =>
-    o.amountPaidCents >= o.totalCents;
-
-  it("ไม่บังคับมัดจำ (0) เริ่มงานได้เลย", () => {
-    assert.equal(canStart({ depositCents: 0, amountPaidCents: 0 }), true);
-  });
-
-  it("บังคับมัดจำแล้วยังจ่ายไม่ถึง เริ่มไม่ได้", () => {
-    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 0 }), false);
-    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 144_999 }), false);
-    assert.equal(canStart({ depositCents: 145_000, amountPaidCents: 145_000 }), true);
-  });
-
-  it("ส่งไฟล์จริงได้ต่อเมื่อจ่ายครบยอด", () => {
-    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 145_000 }), false);
-    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 289_999 }), false);
-    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 290_000 }), true);
-    // จ่ายเกิน (ทิป/โอนผิด) ต้องไม่บล็อก
-    assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 300_000 }), true);
-  });
-});
-
 describe("แยกไฟล์สาธารณะกับไฟล์ส่วนตัว", () => {
   it("ไฟล์ส่งมอบ สลิป WIP และไฟล์อ้างอิง ต้องไม่ใช่ชนิดสาธารณะ", () => {
     for (const k of ["final", "payment_proof", "wip", "reference"] as const) {
@@ -254,5 +226,26 @@ describe("แยกไฟล์สาธารณะกับไฟล์ส่�
     for (const bad of ["", "FINAL", "final ", "avatar; final"]) {
       assert.equal(isPublicKind(bad), false, bad);
     }
+  });
+});
+
+describe("เงื่อนไขปล่อยไฟล์ส่งมอบ", () => {
+  it("ออเดอร์ยอด ฿0 ต้องไม่ถือว่าจ่ายครบ", () => {
+    // เมนูตั้งราคา 0 ได้ และโหมด proposal ยังไม่มี action ไหนเขียน totalCents
+    // ถ้าเช็คแค่ paid >= total ออเดอร์แบบนั้นจะ "จ่ายครบ" ตั้งแต่วินาทีที่สร้าง
+    assert.equal(canRelease({ totalCents: 0, amountPaidCents: 0 }), false);
+    assert.equal(canRelease({ totalCents: 0, amountPaidCents: 100 }), false);
+  });
+
+  it("ต้องจ่ายครบจริงถึงปล่อย", () => {
+    assert.equal(canRelease({ totalCents: 290_000, amountPaidCents: 289_999 }), false);
+    assert.equal(canRelease({ totalCents: 290_000, amountPaidCents: 290_000 }), true);
+    assert.equal(canRelease({ totalCents: 290_000, amountPaidCents: 300_000 }), true);
+  });
+
+  it("มัดจำ 0 = ไม่บังคับ", () => {
+    assert.equal(depositSatisfied({ depositCents: 0, amountPaidCents: 0 }), true);
+    assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 144_999 }), false);
+    assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 145_000 }), true);
   });
 });
