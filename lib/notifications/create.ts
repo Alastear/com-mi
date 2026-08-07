@@ -1,6 +1,8 @@
 import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
+import { after } from "next/server";
+import { emailNotification, shouldEmail } from "@/lib/email/notify";
 import type { NotificationType } from "./types";
 
 /**
@@ -37,6 +39,24 @@ export async function notify(input: {
   } catch (err) {
     // เขียน log ไว้ให้ตามได้ แต่ห้ามให้กระทบการกระทำหลัก
     console.error("[notify] เขียนแจ้งเตือนไม่สำเร็จ", input.type, err);
+  }
+
+  /**
+   * อีเมลไปอยู่หลัง response — `after()` รันเมื่อ Next ส่งคำตอบกลับไปแล้ว
+   * ถ้าเรียกตรงนี้เลย ผู้ใช้จะรอ API ของ Resend ทุกครั้งที่กดปุ่ม
+   * ทั้งที่งานจริงบันทึกลง DB เสร็จไปก่อนหน้านั้นแล้ว
+   *
+   * เรียกเฉพาะชนิดที่คุ้มค่าส่ง — ข้อความในเธรดถี่เกินกว่าจะส่งทุกครั้ง
+   */
+  if (shouldEmail(input.type)) {
+    after(async () => {
+      await emailNotification({
+        userId: input.userId,
+        type: input.type,
+        data: input.data ?? {},
+        path: input.url,
+      });
+    });
   }
 }
 

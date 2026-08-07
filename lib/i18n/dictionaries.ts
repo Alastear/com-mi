@@ -257,6 +257,25 @@ const th = {
       "แพลตฟอร์มไม่ได้ถือเงินของคุณ เงินโอนจากธนาคารลูกค้าเข้าบัญชีครีเอเตอร์โดยตรง ระบบเพียงบันทึกและปลดล็อกไฟล์ส่งมอบเมื่อได้รับเงินครบ",
   },
 
+  /**
+   * ข้อความในอีเมล — แยกจาก notification.* เพราะอีเมลต้องอธิบายตัวเองได้
+   * คนเปิดอ่านนอกเว็บ ไม่มีบริบทรอบข้างเหมือนตอนเห็นในกระดิ่ง
+   */
+  email: {
+    orderCreatedSubject: "มีคำขอใหม่ #{code}",
+    orderCreatedBody: "{client} ส่งคำขอ \"{service}\" เข้ามา ยอด {amount}\n\nเปิดดูรายละเอียดและตอบกลับได้ที่หน้างาน",
+    statusSubject: "งาน #{code} เปลี่ยนเป็น {status}",
+    statusBody: "สถานะของงาน \"{service}\" เปลี่ยนเป็น {status} แล้ว",
+    messageSubject: "ข้อความใหม่ในงาน #{code}",
+    messageBody: "{sender} ส่งข้อความมา:\n\n{preview}",
+    paymentReportedSubject: "ลูกค้าแจ้งโอนเงินงาน #{code}",
+    paymentReportedBody: "{client} แจ้งว่าโอนแล้ว {amount}\n\nกรุณาเช็คในแอปธนาคารของคุณเองว่ายอดเข้าจริง แล้วค่อยกดยืนยัน — อย่าดูจากสลิปอย่างเดียว",
+    paymentConfirmedSubject: "ยืนยันได้รับเงินงาน #{code} แล้ว",
+    paymentConfirmedBody: "ครีเอเตอร์ยืนยันว่าได้รับเงินของงาน \"{service}\" แล้ว",
+    viewOrder: "เปิดหน้างาน",
+    footer: "อีเมลนี้ส่งจากระบบรับงานของ {site} — ถ้าคุณไม่ได้เกี่ยวข้องกับงานนี้ ไม่ต้องทำอะไร",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -978,6 +997,21 @@ const en: Dictionary = {
     scanHint: "Scan to pay the creator directly",
     noEscrowNote:
       "We never hold your money. Funds move bank-to-bank straight to the creator; we only record the payment and unlock the delivery files once it's complete.",
+  },
+
+  email: {
+    orderCreatedSubject: "New request #{code}",
+    orderCreatedBody: "{client} sent a request for \"{service}\" — {amount}\n\nOpen the order to see the brief and reply",
+    statusSubject: "Order #{code} is now {status}",
+    statusBody: "The status of \"{service}\" changed to {status}",
+    messageSubject: "New message on order #{code}",
+    messageBody: "{sender} wrote:\n\n{preview}",
+    paymentReportedSubject: "A payment was reported on order #{code}",
+    paymentReportedBody: "{client} reported paying {amount}\n\nCheck your own banking app that the amount really arrived before you confirm it — do not rely on the slip alone",
+    paymentConfirmedSubject: "Your payment on order #{code} was confirmed",
+    paymentConfirmedBody: "The creator confirmed receiving payment for \"{service}\"",
+    viewOrder: "Open the order",
+    footer: "Sent by {site} because you are part of this order. If that is not you, no action is needed.",
   },
 
   legal: {
