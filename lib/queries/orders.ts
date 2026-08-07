@@ -49,6 +49,10 @@ export async function getOrderForClient(code: string, clientUserId: string) {
         columns: { id: true, displayName: true, userId: true },
         with: { user: { columns: { handle: true, name: true, image: true } } },
       },
+      messages: {
+        orderBy: [asc(schema.message.createdAt)],
+        with: { sender: { columns: { name: true, image: true } } },
+      },
     },
   })) ?? null;
 }
@@ -137,6 +141,11 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
         answers: { orderBy: [asc(schema.orderAnswer.sortOrder)] },
         service: { columns: { slug: true, title: true, deliveryDays: true } },
         client: { columns: { name: true, image: true, email: true } },
+        // เธรดกับ timeline อยู่ตารางเดียวกัน เรียงตามเวลาแล้วได้ทั้งสองอย่างพร้อมกัน
+        messages: {
+          orderBy: [asc(schema.message.createdAt)],
+          with: { sender: { columns: { name: true, image: true } } },
+        },
       },
     })) ?? null
   );

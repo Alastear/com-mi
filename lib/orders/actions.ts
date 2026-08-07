@@ -1,11 +1,12 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { isOrderCode } from "./code";
 import { assertTransition, TransitionError, type Actor } from "./state-machine";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
@@ -110,4 +111,96 @@ export async function transitionOrder(input: {
   revalidatePath("/dashboard");
 
   return { ok: true, status: to };
+}
+
+const MessageSchema = z.object({
+  code: z.string().refine(isOrderCode, "bad_code"),
+  body: z.string().trim().min(1).max(4000),
+});
+
+export type SendMessageResult =
+  | { ok: true }
+  | { ok: false; error: "unauthenticated" | "not_found" | "invalid" | "rate_limited" };
+
+/**
+ * ส่งข้อความในเธรดของออเดอร์
+ *
+ * เธรดกับ timeline เป็นสตรีมเดียวกัน (ตาราง `message` เดียว) ข้อความคนพิมพ์
+ * จึงเรียงปนกับเหตุการณ์ระบบตามเวลาจริง — ไม่ต้องให้ UI merge สองแหล่ง
+ * และลูกค้าเห็นได้ทันทีว่า "ครีเอเตอร์เปลี่ยนสถานะตอนไหน เทียบกับที่คุยอะไรกันไว้"
+ */
+export async function sendOrderMessage(input: {
+  code: string;
+  body: string;
+}): Promise<SendMessageResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "unauthenticated" };
+
+  const parsed = MessageSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { code, body } = parsed.data;
+
+  const gate = await rateLimit(
+    `msg:${session.user.id}`,
+    LIMITS.sendMessage.limit,
+    LIMITS.sendMessage.windowSeconds,
+  );
+  if (!gate.ok) return { ok: false, error: "rate_limited" };
+
+  const db = getDb();
+  const order = await db.query.order.findFirst({
+    where: eq(schema.order.code, code),
+    columns: { id: true, clientUserId: true },
+    with: { page: { columns: { userId: true } } },
+  });
+  if (!order) return { ok: false, error: "not_found" };
+
+  const isCreator = order.page.userId === session.user.id;
+  const isClient = order.clientUserId === session.user.id;
+  // คนนอกตอบเหมือนไม่มีออเดอร์นี้ ไม่บอกว่ามีแต่เข้าไม่ได้
+  if (!isCreator && !isClient) return { ok: false, error: "not_found" };
+
+  const now = new Date();
+  await db.insert(schema.message).values({
+    id: newId("msg"),
+    orderId: order.id,
+    senderUserId: session.user.id,
+    body,
+    createdAt: now,
+    // คนส่งถือว่าอ่านข้อความตัวเองแล้ว ไม่งั้นจะเห็นตัวเลขค้างบนงานของตัวเอง
+    ...(isCreator ? { readByCreatorAt: now } : { readByClientAt: now }),
+  });
+
+  revalidatePath(`/orders/${code}`);
+  revalidatePath(`/my/requests/${code}`);
+  return { ok: true };
+}
+
+/** ทำเครื่องหมายว่าอ่านข้อความของอีกฝ่ายแล้ว — เรียกตอนเปิดหน้าเธรด */
+export async function markThreadRead(code: string): Promise<void> {
+  const session = await getSession();
+  if (!session || !isOrderCode(code)) return;
+
+  const db = getDb();
+  const order = await db.query.order.findFirst({
+    where: eq(schema.order.code, code),
+    columns: { id: true, clientUserId: true },
+    with: { page: { columns: { userId: true } } },
+  });
+  if (!order) return;
+
+  const isCreator = order.page.userId === session.user.id;
+  const isClient = order.clientUserId === session.user.id;
+  if (!isCreator && !isClient) return;
+
+  const now = new Date();
+  await db
+    .update(schema.message)
+    .set(isCreator ? { readByCreatorAt: now } : { readByClientAt: now })
+    .where(
+      and(
+        eq(schema.message.orderId, order.id),
+        isNull(isCreator ? schema.message.readByCreatorAt : schema.message.readByClientAt),
+      ),
+    );
 }

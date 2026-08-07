@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireSession } from "@/lib/auth-guard";
 import { getOrderForClient } from "@/lib/queries/orders";
+import { markThreadRead } from "@/lib/orders/actions";
+import { toThreadEntries } from "@/lib/orders/thread";
+import { OrderThread } from "@/components/app/order-thread";
+import { OrderActions } from "@/components/app/order-actions";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -27,6 +31,8 @@ export default async function ClientRequestPage({ params }: Props) {
   const order = await getOrderForClient(code, session.user.id);
   // ไม่ใช่ของเราก็ 404 เหมือนไม่มีอยู่จริง — ไม่บอกว่ามีออเดอร์นี้อยู่แต่เข้าไม่ได้
   if (!order) notFound();
+
+  await markThreadRead(code);
 
   const locale = await getLocale();
   const t = getDictionary(locale);
@@ -107,6 +113,23 @@ export default async function ClientRequestPage({ params }: Props) {
           </dl>
         </Card>
       ) : null}
+
+      {/*
+        เธรดกับปุ่มเป็นคอมโพเนนต์เดียวกับฝั่งครีเอเตอร์ ต่างกันแค่ `actor`
+        ปุ่มที่ลูกค้าเห็นจึงมาจาก state machine ชุดเดียวกัน — ไม่มีทางหลุดว่า
+        ฝั่งหนึ่งกดได้อีกฝั่งกดไม่ได้เพราะเขียนรายการปุ่มไว้คนละที่
+      */}
+      <div className="mt-4">
+        <OrderThread
+          code={order.code}
+          entries={toThreadEntries(order.messages)}
+          currentUserId={session.user.id}
+        />
+      </div>
+
+      <Card className="mt-4 p-4">
+        <OrderActions code={order.code} status={order.status as OrderStatus} actor="client" />
+      </Card>
 
       {order.tosSnapshot.length > 0 ? (
         <Card className="mt-4 gap-3 p-6">

@@ -67,8 +67,9 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
       ทุกเส้นทางคำนวณจาก state machine · เมนู "ย้ายไป…" ไม่ใช่ทางสำรอง แต่เป็นทางเดียว
       ของการเปลี่ยนสถานะสามแบบที่เกิดในคอลัมน์เดียวกัน
 - [x] `transitionOrder` — actor มาจาก session เท่านั้น + compare-and-set กันสองแท็บทับกัน
-- [ ] `/orders/[code]` — timeline+แชท, ไฟล์, action bar ตามสถานะ
-- [ ] `/my/requests/[code]` ใช้ component เดียวกัน (`viewer='client'`)
+- [x] `/orders/[code]` — timeline+แชท + action bar ที่ปุ่มมาจาก `allowedNext()` ล้วน
+- [x] `/my/requests/[code]` ใช้ `<OrderThread>` + `<OrderActions>` ตัวเดียวกัน ต่างแค่ `actor`
+      (ไฟล์แนบยังไม่ได้ทำ — รอ Blob store แบบ private)
 - [ ] อัปโหลด WIP + ลายน้ำ + ไฟล์ final เป็น private blob (ต้องมี Blob store ตัวที่สองแบบ private)
 - [ ] `<PromptPayQR>` + บันทึก/ยืนยันการชำระเงิน + gate การดาวน์โหลด
 - [ ] แจ้งเตือนในเว็บ (`notification` + polling + badge)

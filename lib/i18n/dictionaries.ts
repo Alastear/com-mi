@@ -507,6 +507,7 @@ const th = {
     showQr: "แสดง PromptPay QR",
     markPaid: "บันทึกว่าได้รับเงินแล้ว",
     writeMessage: "พิมพ์ข้อความ…",
+    sendTooFast: "ส่งข้อความถี่เกินไป รอสักครู่แล้วลองใหม่",
     send: "ส่ง",
     milestones: "งวดงาน",
     milestonesDesc: "แบ่งงานเป็นงวด กำหนดยอดมัดจำและวันครบกำหนดของแต่ละงวด",
@@ -564,6 +565,19 @@ const th = {
     waitingClient: "รอลูกค้าตอบกลับ",
     markComplete: "ยืนยันรับงาน",
     requestRevision: "ขอแก้ไข",
+    startReview: "เปิดอ่านคำขอ",
+    acceptOrder: "รับงานนี้",
+    cancel: "ยกเลิกงาน",
+    noActions: "ตอนนี้ยังไม่มีอะไรให้ทำ",
+  },
+
+  /** ข้อความบน timeline — DB เก็บเป็น key ไม่ใช่ข้อความ จะได้แปลตามภาษาของคนอ่าน */
+  orderEvent: {
+    order_created: "ลูกค้าส่งคำขอเข้ามา",
+    status_changed: "เปลี่ยนสถานะเป็น {status}",
+    byCreator: "โดยครีเอเตอร์",
+    byClient: "โดยลูกค้า",
+    bySystem: "โดยระบบ",
   },
 
   dashboard: {
@@ -1179,6 +1193,7 @@ const en: Dictionary = {
     showQr: "Show PromptPay QR",
     markPaid: "Mark as received",
     writeMessage: "Write a message…",
+    sendTooFast: "Too many messages — wait a moment and try again",
     send: "Send",
     milestones: "Milestones",
     milestonesDesc: "Split the job into stages with their own deposits and due dates",
@@ -1235,6 +1250,18 @@ const en: Dictionary = {
     waitingClient: "Waiting on the client",
     markComplete: "Confirm delivery",
     requestRevision: "Request a revision",
+    startReview: "Open this request",
+    acceptOrder: "Take this on",
+    cancel: "Cancel order",
+    noActions: "Nothing to do right now",
+  },
+
+  orderEvent: {
+    order_created: "Client sent the request",
+    status_changed: "Status changed to {status}",
+    byCreator: "by the creator",
+    byClient: "by the client",
+    bySystem: "automatically",
   },
 
   dashboard: {
