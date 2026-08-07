@@ -21,6 +21,7 @@ export type SetupStepId =
   | "service"
   | "portfolio"
   | "payout"
+  | "terms"
   | "publish";
 
 export type SetupStep = {
@@ -52,6 +53,7 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress | 
       bannerMediaId: true,
       avatarMediaId: true,
       promptpayId: true,
+      tos: true,
       isPublished: true,
     },
   });
@@ -88,6 +90,12 @@ export async function getSetupProgress(userId: string): Promise<SetupProgress | 
     { id: "service", done: services.n > 0, required: true, href: "/services" },
     { id: "portfolio", done: portfolio.n > 0, required: false, href: "/portfolio" },
     { id: "payout", done: Boolean(page.promptpayId), required: true, href: "/settings" },
+    /**
+     * ข้อตกลงไม่ได้ใส่ให้ตั้งแต่สร้างร้านแล้ว (ดูเหตุผลใน lib/shop/ensure.ts)
+     * จึงต้องมีข้อนี้คอยเตือน ไม่งั้นจะเปิดร้านรับงานจริงโดยไม่มีข้อตกลงเลย
+     * บังคับเป็น required เพราะเวลามีเรื่อง ข้อตกลงคือสิ่งเดียวที่ครีเอเตอร์ใช้อ้างได้
+     */
+    { id: "terms", done: page.tos.length > 0, required: true, href: "/shop" },
     { id: "publish", done: page.isPublished, required: true, href: "/shop" },
   ];
 

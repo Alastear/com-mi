@@ -1,14 +1,12 @@
 import { OrderBoard } from "@/components/app/order-board";
 import { requireCreator } from "@/lib/auth-guard";
 import { listOrdersForBoard } from "@/lib/queries/orders";
-import { getLocale } from "@/lib/i18n/server";
 import { ensureShop } from "@/lib/shop/ensure";
 import type { OrderStatus } from "@/lib/types";
 
 export default async function OrdersPage() {
-  const locale = await getLocale();
   const { user } = await requireCreator();
-  await ensureShop(user.id, user.name, locale);
+  await ensureShop(user.id, user.name);
 
   const rows = await listOrdersForBoard(user.id);
 

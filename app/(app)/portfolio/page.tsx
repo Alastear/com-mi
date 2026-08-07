@@ -1,13 +1,12 @@
 import { requireCreator } from "@/lib/auth-guard";
 import { getOwnShop } from "@/lib/queries/creator";
 import { ensureShop } from "@/lib/shop/ensure";
-import { getLocale } from "@/lib/i18n/server";
 import { PLANS } from "@/lib/billing/plans";
 import { PortfolioManager } from "./portfolio-manager";
 
 export default async function PortfolioPage() {
   const { user } = await requireCreator();
-  await ensureShop(user.id, user.name, await getLocale());
+  await ensureShop(user.id, user.name);
 
   const shop = await getOwnShop(user.id);
   /**

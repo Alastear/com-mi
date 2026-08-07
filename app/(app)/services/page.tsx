@@ -19,7 +19,7 @@ export default async function ServicesPage() {
   const t = getDictionary(locale);
 
   const { user } = await requireCreator();
-  await ensureShop(user.id, user.name, locale);
+  await ensureShop(user.id, user.name);
   const shop = await getOwnShop(user.id);
   const services = shop?.services ?? [];
 

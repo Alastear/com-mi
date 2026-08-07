@@ -40,7 +40,7 @@ async function assertOwned(userId: string, serviceId: string): Promise<string> {
 
 export async function createService() {
   const { user } = await requireCreator();
-  await ensureShop(user.id, user.name, await getLocale());
+  await ensureShop(user.id, user.name);
   const page = await ownPage(user.id);
 
   const live = page.services.filter((s) => !s.deletedAt);

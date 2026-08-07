@@ -7,7 +7,6 @@ import { getDb, schema } from "@/lib/db";
 import { getAuth } from "@/lib/auth";
 import { requireSession } from "@/lib/auth-guard";
 import { checkHandle } from "@/lib/handles";
-import { getLocale } from "@/lib/i18n/server";
 import { ensureShop } from "@/lib/shop/ensure";
 
 export type ClaimResult = { error: "format" | "reserved" | "taken" } | undefined;
@@ -46,7 +45,7 @@ export async function claimHandle(
     return { error: "taken" };
   }
 
-  await ensureShop(user.id, user.name, await getLocale());
+  await ensureShop(user.id, user.name);
 
   /**
    * ⚠️ ต้อง refresh cookie cache ทุกครั้งที่แก้ฟิลด์ของ user ตรง ๆ ผ่าน Drizzle

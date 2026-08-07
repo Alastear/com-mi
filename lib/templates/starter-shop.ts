@@ -174,6 +174,18 @@ export function starterShop(locale: Locale) {
   return locale === "en" ? EN : TH;
 }
 
+/**
+ * ร่างข้อตกลงตั้งต้น — **ข้อเสนอ ไม่ใช่ค่าเริ่มต้น**
+ *
+ * เคยยัดสี่ข้อนี้ให้ทุกร้านตอนสร้าง ผลคือครีเอเตอร์ที่ไม่เคยเปิดหน้า /shop
+ * ก็มีข้อตกลงที่ไม่ได้เขียนเองผูกอยู่ — และไม่ใช่ข้อความลอย ๆ ด้วย
+ * "มัดจำ 50%" กับ "ห้ามใช้เชิงพาณิชย์" คือเงื่อนไขที่ลูกค้าใช้อ้างได้จริง
+ * ตอนนี้จึงให้กดใส่เองจากหน้าแก้ไข จะได้อ่านก่อนที่มันจะกลายเป็นข้อตกลงของตัวเอง
+ */
+export function starterTos(locale: Locale): string[] {
+  return starterShop(locale).tos;
+}
+
 export const STARTER_TAGLINE: Record<Locale, string> = {
   th: "รับงาน commission — แก้ข้อความนี้ได้ในหน้าตั้งค่า",
   en: "Taking commissions — edit this line in settings",

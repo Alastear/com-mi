@@ -28,8 +28,11 @@ const STATUSES: ShopStatus[] = ["open", "waitlist", "closed", "vacation"];
 export function ShopEditor({
   handle,
   shop,
+  starterTos,
 }: {
   handle: string;
+  /** ร่างข้อตกลงตั้งต้น ส่งมาจาก server เพราะขึ้นกับภาษา — ไม่ได้ใส่ให้อัตโนมัติ ต้องกดเอง */
+  starterTos: string[];
   shop: {
     id: string;
     bannerUrl: string | null;
@@ -49,6 +52,12 @@ export function ShopEditor({
   const [status, setStatus] = useState(shop.status);
   const [publishing, startPublish] = useTransition();
   const router = useRouter();
+
+  /**
+   * ช่องข้อตกลงเป็น controlled เพราะปุ่ม "ใส่ร่างตั้งต้น" ต้องเขียนค่าลงไปได้
+   * ที่เหลือในฟอร์มยังเป็น uncontrolled ตามเดิม — ไม่มีเหตุให้ React ตามทุกตัวอักษร
+   */
+  const [tos, setTos] = useState(shop.tos.join("\n"));
 
   function togglePublish() {
     startPublish(async () => {
@@ -239,11 +248,26 @@ export function ShopEditor({
           </div>
           <Textarea
             name="tos"
-            defaultValue={shop.tos.join("\n")}
+            value={tos}
+            onChange={(e) => setTos(e.target.value)}
             rows={6}
             maxLength={4000}
             className="font-mono text-xs"
           />
+          {/* เสนอร่างเฉพาะตอนยังว่าง — ถ้าเขียนไว้แล้วปุ่มนี้มีแต่จะทับของเดิมทิ้ง */}
+          {tos.trim() === "" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setTos(starterTos.join("\n"))}
+              >
+                {t.shop.tosUseTemplate}
+              </Button>
+              <p className="text-xs text-muted-foreground">{t.shop.tosTemplateHint}</p>
+            </div>
+          ) : null}
         </Card>
 
         <Separator />

@@ -1,8 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
-import type { Locale } from "@/lib/i18n/config";
-import { starterShop } from "@/lib/templates/starter-shop";
 
 /**
  * รับประกันว่าผู้ใช้ที่มี handle แล้วต้องมีหน้าร้านเสมอ
@@ -13,15 +11,17 @@ import { starterShop } from "@/lib/templates/starter-shop";
  *   2. onboarding ล้มกลางคัน (ตั้ง handle สำเร็จแต่สร้างร้านไม่ทัน)
  * ถ้าไม่มีตัวนี้ ทั้งสองเคสจะเจอ 404 ตายตัวที่ /shop โดยแก้เองไม่ได้
  *
- * ⚠️ **ไม่สร้างเมนูตั้งต้นให้** — เดิมยัดเมนูตัวอย่าง 3 รายการให้ทุกคน
- * ผลคือครีเอเตอร์ใหม่เปิดเข้ามาแล้วเจอ "ภาพครึ่งตัว/ภาพเต็มตัว/ภาพชิบิ" พร้อมราคา
- * ที่ไม่ใช่ของตัวเอง แยกไม่ออกว่าอันไหนของจริงอันไหนตัวอย่าง และถ้าเผลอกดเผยแพร่
- * ก็จะรับงานตามราคาที่ไม่เคยตั้งเอง — ให้เริ่มจากศูนย์แล้วมีเช็กลิสต์พาทำแทน
+ * ⚠️ **สร้างร้านเปล่า ไม่ใส่เนื้อหาอะไรให้เลย** — ทั้งเมนู คำโปรย และข้อตกลง
+ * เดิมยัดเมนูตัวอย่าง 3 รายการให้ทุกคน ผลคือครีเอเตอร์ใหม่เปิดเข้ามาแล้วเจอ
+ * "ภาพครึ่งตัว/ภาพเต็มตัว/ภาพชิบิ" พร้อมราคาที่ไม่ใช่ของตัวเอง แยกไม่ออกว่า
+ * อันไหนของจริงอันไหนตัวอย่าง และถ้าเผลอกดเผยแพร่ก็รับงานตามราคาที่ไม่เคยตั้งเอง
  *
- * ส่วน TOS ยังใส่ร่างตั้งต้นให้ เพราะร้านที่ไม่มีข้อตกลงเลยคือความเสี่ยงของครีเอเตอร์เอง
- * เป็นข้อความล้วนที่แก้ทับได้ทันทีที่หน้า /shop ไม่ใช่ของที่ต้องลบทิ้งก่อนใช้งาน
+ * ข้อตกลงก็ตกอยู่ในกับดักเดียวกันและตามมาทีหลัง — "มัดจำ 50%" กับ
+ * "ห้ามใช้เชิงพาณิชย์" ผูกพันจริงพอ ๆ กับราคา ต่างกันแค่ไม่ใช่ตัวเลข
+ * ร่างตั้งต้นยังอยู่ที่ `starterTos` แต่ย้ายไปเป็นปุ่มให้กดใส่เองที่หน้า /shop
+ * และมีข้อในเช็กลิสต์คอยเตือน จะได้อ่านก่อนที่มันจะกลายเป็นข้อตกลงของตัวเอง
  */
-export async function ensureShop(userId: string, displayName: string, locale: Locale) {
+export async function ensureShop(userId: string, displayName: string) {
   const db = getDb();
 
   const existing = await db.query.creatorPage.findFirst({
@@ -30,7 +30,6 @@ export async function ensureShop(userId: string, displayName: string, locale: Lo
   });
   if (existing) return existing.id;
 
-  const seed = starterShop(locale);
   const pageId = newId("page");
 
   await db.insert(schema.creatorPage).values({
@@ -40,7 +39,7 @@ export async function ensureShop(userId: string, displayName: string, locale: Lo
     // ปล่อยว่างไว้ให้ครีเอเตอร์เขียนเอง — คำโปรยสำเร็จรูปจะไปโผล่บนหน้าร้านจริง
     // และทำให้เช็กลิสต์ติ๊กเองทั้งที่เจ้าของยังไม่ได้แตะ
     tagline: "",
-    tos: seed.tos,
+    tos: [],
     // ยังไม่ publish จนกว่าครีเอเตอร์จะกดเอง — กันหน้าร้านเปล่า ๆ หลุดออกไป
     isPublished: false,
   });

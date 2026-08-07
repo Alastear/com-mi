@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
   const { user } = await requireCreator();
-  const pageId = await ensureShop(user.id, user.name, locale);
+  const pageId = await ensureShop(user.id, user.name);
 
   const [allOrders, progress, usage] = await Promise.all([
     listOrdersForBoard(user.id),

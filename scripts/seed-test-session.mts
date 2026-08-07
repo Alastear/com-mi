@@ -6,6 +6,12 @@
  *
  * ⚠️ เครื่องมือสำหรับ dev เท่านั้น — อย่ารันกับฐานข้อมูล production
  *    ลบผู้ใช้ทดสอบทิ้งด้วย: pnpm db:unseed-test
+ *
+ * ⚠️ แต่ dev กับ production ใช้ฐานข้อมูล Neon ตัวเดียวกันอยู่ตอนนี้
+ *    ร้านของผู้ใช้ทดสอบจึงเคยหลุดไปโผล่ใน /explore บนเว็บจริงมาแล้ว
+ *    (ชื่อร้าน "ทดสอบ E2E" พร้อมเบอร์ PromptPay ที่ใส่ไว้ตอนทดสอบ)
+ *    ทุกครั้งที่รัน จึงบังคับ is_demo ให้ร้านของผู้ใช้ทดสอบเสมอ — ดูตรง ๆ ที่ /@handle ได้
+ *    แต่ไม่เข้าหน้าค้นหาและไม่เข้า sitemap ตามตัวกรองใน listPublicShops
  */
 import { neon } from "@neondatabase/serverless";
 import { makeSignature } from "better-auth/crypto";
@@ -46,6 +52,20 @@ await sql`
   insert into session (id, user_id, token, expires_at)
   values (${sessionId}, ${userId}, ${token}, ${expires.toISOString()})
 `;
+
+/**
+ * กันร้านของผู้ใช้ทดสอบไม่ให้ปนกับร้านจริงในหน้าค้นหา
+ *
+ * ต้องรันทุกครั้ง ไม่ใช่แค่ตอนสร้างผู้ใช้ เพราะร้านเกิดจากการเดิน onboarding ในเบราว์เซอร์
+ * ทีหลัง — ตอนที่สคริปต์นี้จบไปแล้ว ครั้งถัดไปที่รันจึงเป็นจุดที่ตามเก็บได้
+ */
+const demoed = await sql`
+  update creator_page set is_demo = true
+  where user_id in (select id from "user" where email like 'e2e-%@commi.local')
+    and is_demo = false
+  returning id
+`;
+if (demoed.length) console.error(`  (ตั้ง is_demo ให้ร้านทดสอบ ${demoed.length} ร้าน)`);
 
 // Better Auth เก็บคุกกี้เป็น "<token>.<signature>" — เซ็นด้วย secret เดียวกับที่ตั้งไว้
 const signature = await makeSignature(token, secret);
