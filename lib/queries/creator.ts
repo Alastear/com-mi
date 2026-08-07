@@ -100,9 +100,19 @@ export async function listPublicShops(
   /**
    * ค้นหาแบบ ILIKE บนชื่อร้านกับคำโปรย
    *
-   * ยังไม่ใช้ full-text search ของ Postgres เพราะ tsvector ไม่ตัดคำไทยให้
-   * (ต้องลง pg_trgm หรือพจนานุกรมเพิ่ม) และตอนนี้มีร้านหลักหน่วย — ILIKE เร็วพอ
-   * ถึงเวลาที่ช้าจริงค่อยเปลี่ยน จะได้รู้ด้วยว่าคนค้นด้วยคำแบบไหน
+   * ⚠️ **นี่คือคอขวดตัวถัดไป และรู้ตัวไว้แล้ว**
+   * `%คำ%` มี wildcard นำหน้า btree index จึงใช้ไม่ได้เลย ต้องอ่านทุกแถวเสมอ
+   * ส่วนการ "เรียงและกรอง" มี creator_page_public_idx รองรับแล้ว
+   * (วัดที่ 50,000 ร้าน: มี index อ่าน 24 แถว 0.04 ms · ไม่มี index อ่านทั้งตาราง)
+   *
+   * ไม่แก้ตอนนี้เพราะยังไม่รู้ว่าคนค้นด้วยคำแบบไหน และการเดาผิดแพงกว่ารอ
+   * **จุดที่ต้องกลับมาแก้:** ร้านเผยแพร่แล้วเกิน ~5,000 หรือหน้าค้นหาช้าเกิน 300 ms
+   * **วิธีแก้ที่เตรียมไว้:** เปิด pg_trgm แล้วทำ GIN index — รองรับ wildcard นำหน้า
+   *   และตัดคำไทยได้ดีกว่า tsvector ที่ต้องมีพจนานุกรมแยก
+   *     CREATE EXTENSION IF NOT EXISTS pg_trgm;
+   *     CREATE INDEX creator_page_search_idx ON creator_page
+   *       USING gin ((display_name || ' ' || tagline) gin_trgm_ops)
+   *       WHERE is_published AND NOT is_demo;
    */
   const conditions = [
     eq(schema.creatorPage.isPublished, true),

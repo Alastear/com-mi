@@ -1,0 +1,2 @@
+CREATE INDEX "creator_page_public_idx" ON "creator_page" USING btree ("updated_at" DESC NULLS LAST) WHERE "creator_page"."is_published" and not "creator_page"."is_demo";--> statement-breakpoint
+CREATE INDEX "service_kind_idx" ON "service" USING btree ("kind","creator_page_id") WHERE "service"."is_active" and "service"."deleted_at" is null;

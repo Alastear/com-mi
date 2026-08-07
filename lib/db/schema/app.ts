@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -62,7 +62,9 @@ export const media = pgTable(
 
 /* ── creator_page ──────────────────────────────────────────── */
 
-export const creatorPage = pgTable("creator_page", {
+export const creatorPage = pgTable(
+  "creator_page",
+  {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -114,7 +116,22 @@ export const creatorPage = pgTable("creator_page", {
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  (t) => [
+    /**
+     * หน้าค้นหาครีเอเตอร์: `where is_published and not is_demo order by updated_at desc`
+     *
+     * partial index — เก็บเฉพาะแถวที่หน้าค้นหาสนใจจริง
+     * ร้านที่ยังไม่เผยแพร่และร้านตัวอย่างไม่กินพื้นที่ index เลย
+     * และ planner ใช้ตัวเดียวได้ทั้งกรองและเรียง ไม่ต้อง sort ทีหลัง
+     *
+     * เพิ่มตอนตารางยังว่างโดยตั้งใจ — ทำทีหลังต้องล็อกตารางที่มีข้อมูลจริง
+     */
+    index("creator_page_public_idx")
+      .on(t.updatedAt.desc())
+      .where(sql`${t.isPublished} and not ${t.isDemo}`),
+  ],
+);
 
 /* ── service ───────────────────────────────────────────────── */
 
@@ -153,6 +170,13 @@ export const service = pgTable(
   (t) => [
     uniqueIndex("service_page_slug_idx").on(t.creatorPageId, t.slug),
     index("service_page_sort_idx").on(t.creatorPageId, t.sortOrder),
+    /**
+     * ตัวกรองหมวดบนหน้าค้นหา — หา creator_page_id ของร้านที่มีเมนูชนิดนี้
+     * partial เพราะหน้าค้นหาไม่เคยสนใจเมนูที่ปิดอยู่หรือถูกลบไปแล้ว
+     */
+    index("service_kind_idx")
+      .on(t.kind, t.creatorPageId)
+      .where(sql`${t.isActive} and ${t.deletedAt} is null`),
   ],
 );
 
