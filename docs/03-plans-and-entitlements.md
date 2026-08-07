@@ -96,6 +96,10 @@
 
 ---
 
+> ⚠️ **`lib/billing/plans.ts` คือแหล่งความจริง ไม่ใช่เอกสารนี้**
+> ถ้าสองที่ไม่ตรงกัน ให้ยึดโค้ดแล้วมาแก้เอกสาร — เคยหลุดกันมาแล้วเรื่อง
+> `tiers_per_service` / `options_per_service` ที่มีในเอกสารแต่ไม่เคยมีในโค้ด
+
 ## 4. Implementation
 
 ### 4.1 Single source of truth
@@ -103,11 +107,11 @@
 ```ts
 // lib/billing/plans.ts
 export const FEATURES = [
-  'push_notifications', 'discord_webhook', 'line_notify', 'instant_email',
-  'milestones', 'custom_form', 'conditional_fields', 'auctions',
-  'custom_theme', 'hide_badge', 'custom_domain',
+  'push_notifications', 'discord_webhook', 'line_messaging', 'instant_email',
+  'milestones', 'custom_form', 'auctions',
+  'custom_theme', 'hide_badge',
   'analytics', 'crm', 'export', 'invoice_pdf', 'calendar',
-  'waitlist_broadcast', 'notification_prefs', 'team_seats', 'api_access',
+  'waitlist_broadcast', 'notification_prefs', 'team_seats',
 ] as const
 export type Feature = (typeof FEATURES)[number]
 
@@ -144,8 +148,8 @@ export const PLANS = {
     label: 'Pro',
     priceCents: 15_900,
     features: new Set<Feature>([
-      'push_notifications', 'discord_webhook', 'line_notify', 'instant_email',
-      'milestones', 'custom_form', 'conditional_fields', 'auctions',
+      'push_notifications', 'discord_webhook', 'line_messaging', 'instant_email',
+      'milestones', 'custom_form', 'auctions',
       'custom_theme', 'hide_badge', 'analytics', 'crm', 'export',
       'invoice_pdf', 'calendar', 'waitlist_broadcast', 'notification_prefs',
     ]),

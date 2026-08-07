@@ -6,33 +6,42 @@
  * เพราะ plan อยู่ใน session cookie cache แล้ว (ไม่มี I/O)
  */
 
+/**
+ * ฟีเจอร์ที่แพ็กเกจปลดล็อก
+ *
+ * ตัดออกหลัง research คู่แข่ง (docs/00 §3) — scope ที่ตัดได้คือกำไรที่ถูกที่สุด:
+ *   custom_domain      ขัดกับกลยุทธ์กระจายของเราเอง (ลิงก์ com-mi/@handle คือสิ่งที่คนจำ)
+ *                      + ภาระ DNS/ใบรับรอง ให้แพ็กเกจที่ยังไม่มีผู้ใช้ และ VGen เองก็ไม่มี
+ *   api_access         ไม่มีหลักฐานความต้องการเลย และเป็นสัญญาถาวรสำหรับทีมคนเดียว
+ *   conditional_fields ไม่มีครีเอเตอร์ไทยคนไหนขอ logic แบบแตกกิ่ง — ที่ขอคือ TOS ภาษาไทย
+ *   calendar           เป็นแค่มุมมองของ order.dueAt และ free จำกัด 5 งานอยู่แล้ว
+ *                      แทนด้วยแถบ "ครบกำหนดสัปดาห์นี้" บนบอร์ด ซึ่งคนเห็นจริง
+ *
+ * `line_notify` → `line_messaging` — LINE Notify ถูกปิดไปแล้ว ทางที่ใช้ได้คือ Messaging API
+ * ซึ่งต้องมี Official Account และมีโควตาข้อความ (เป็นการแก้ชื่อกับลำดับ ไม่ใช่ตัดทิ้ง)
+ */
 export const FEATURES = [
   "push_notifications",
   "discord_webhook",
-  "line_notify",
+  "line_messaging",
   "instant_email",
   "milestones",
   "custom_form",
-  "conditional_fields",
   "auctions",
   "custom_theme",
   "hide_badge",
-  "custom_domain",
   "analytics",
   "crm",
   "export",
   "invoice_pdf",
-  "calendar",
   "waitlist_broadcast",
   "notification_prefs",
   "team_seats",
-  "api_access",
 ] as const;
 export type Feature = (typeof FEATURES)[number];
 
 export type Limits = {
   active_orders: number;
-  orders_per_month: number;
   services: number;
   portfolio_items: number;
   storage_bytes: number;
@@ -63,9 +72,13 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     priceCentsYearly: 0,
     features: new Set<Feature>(),
     limits: {
-      // ตัดสินใจไว้ที่ 5 (เดิมเสนอ 3) — free tier ต้องใช้จริงได้ไม่อึดอัด
+      /**
+       * ตัดสินใจไว้ที่ 5 (เดิมเสนอ 3) — free tier ต้องใช้จริงได้ไม่อึดอัด
+       *
+       * `orders_per_month` ถูกตัดทิ้ง: ไม่มีใครที่ติดเพดาน 5 งานพร้อมกัน
+       * จะไปถึง 20 งาน/เดือนได้ ลิมิตที่ไม่เคยทำงานมีแต่ทำให้ free tier ดูใจแคบ
+       */
       active_orders: 5,
-      orders_per_month: 20,
       services: 5,
       portfolio_items: 12,
       storage_bytes: 300 * MB,
@@ -81,11 +94,10 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     features: new Set<Feature>([
       "push_notifications",
       "discord_webhook",
-      "line_notify",
+      "line_messaging",
       "instant_email",
       "milestones",
       "custom_form",
-      "conditional_fields",
       "auctions",
       "custom_theme",
       "hide_badge",
@@ -93,13 +105,11 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       "crm",
       "export",
       "invoice_pdf",
-      "calendar",
       "waitlist_broadcast",
       "notification_prefs",
     ]),
     limits: {
       active_orders: UNLIMITED,
-      orders_per_month: UNLIMITED,
       services: UNLIMITED,
       portfolio_items: 300,
       storage_bytes: 20 * GB,
@@ -115,7 +125,6 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     features: new Set<Feature>(FEATURES),
     limits: {
       active_orders: UNLIMITED,
-      orders_per_month: UNLIMITED,
       services: UNLIMITED,
       portfolio_items: UNLIMITED,
       storage_bytes: 100 * GB,

@@ -33,7 +33,6 @@ export const config = {
     "/portfolio/:path*",
     "/listings/:path*",
     "/clients/:path*",
-    "/calendar/:path*",
     "/analytics/:path*",
     "/settings/:path*",
     "/my/:path*",

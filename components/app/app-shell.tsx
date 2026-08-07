@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
-  CalendarDays,
   Gavel,
   Images,
   LayoutDashboard,
@@ -48,7 +47,6 @@ function useNavItems() {
     { href: "/listings", label: t.nav.listings, icon: Gavel, pro: true },
     { href: "/portfolio", label: t.nav.portfolio, icon: Images },
     { href: "/clients", label: t.nav.clients, icon: Users, pro: true },
-    { href: "/calendar", label: t.nav.calendar, icon: CalendarDays, pro: true },
     { href: "/analytics", label: t.nav.analytics, icon: BarChart3, pro: true },
     { href: "/settings", label: t.nav.settings, icon: Settings },
   ] as const;
