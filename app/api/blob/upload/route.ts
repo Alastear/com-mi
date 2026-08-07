@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
-import { MEDIA_KINDS, type MediaKind } from "@/lib/media/kinds";
+import { isPublicKind, type MediaKind } from "@/lib/media/kinds";
 
 /**
  * ออก token ให้เบราว์เซอร์อัปโหลดตรงไป Blob
@@ -31,7 +31,15 @@ export async function POST(request: Request): Promise<Response> {
         if (!session) throw new Error("unauthorized");
 
         const kind = (JSON.parse(clientPayload ?? "{}") as { kind?: MediaKind }).kind;
-        if (!kind || !MEDIA_KINDS.includes(kind)) throw new Error("invalid kind");
+        /**
+         * ⚠️ ยอมเฉพาะชนิดที่อยู่ store **สาธารณะ** เท่านั้น
+         *
+         * เส้นทางนี้ออก token ให้ store สาธารณะ ถ้าปล่อยชนิดอย่าง `final` หรือ
+         * `payment_proof` ผ่าน ไฟล์ส่งมอบกับสลิปโอนเงินจะไปอยู่ที่ที่ใครมี URL ก็โหลดได้
+         * และจะไม่มี error ให้เห็นเลย — อัปโหลดสำเร็จปกติทุกอย่าง
+         * ไฟล์ส่วนตัวมีเส้นทางของตัวเองที่ตรวจสิทธิ์ระดับออเดอร์
+         */
+        if (!kind || !isPublicKind(kind)) throw new Error("invalid kind");
 
         const plan = (session.user.plan ?? "free") as PlanId;
         const limits = (PLANS[plan] ?? PLANS.free).limits;

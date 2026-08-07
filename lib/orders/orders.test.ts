@@ -11,6 +11,7 @@ import { quoteOrder, type PricingService } from "./pricing";
 import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
+import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
 
 /**
  * ตรรกะที่พลาดแล้วเสียเงินจริง — คุ้มที่จะมีเทสต์ถึงแม้โปรเจกต์ยังไม่มี test suite ใหญ่
@@ -225,5 +226,33 @@ describe("เงื่อนไขเรื่องเงิน", () => {
     assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 290_000 }), true);
     // จ่ายเกิน (ทิป/โอนผิด) ต้องไม่บล็อก
     assert.equal(canDeliver({ totalCents: 290_000, amountPaidCents: 300_000 }), true);
+  });
+});
+
+describe("แยกไฟล์สาธารณะกับไฟล์ส่วนตัว", () => {
+  it("ไฟล์ส่งมอบ สลิป WIP และไฟล์อ้างอิง ต้องไม่ใช่ชนิดสาธารณะ", () => {
+    for (const k of ["final", "payment_proof", "wip", "reference"] as const) {
+      assert.equal(isPrivateKind(k), true, k);
+      assert.equal(isPublicKind(k), false, `${k} ต้องออก token ของ store สาธารณะไม่ได้`);
+    }
+  });
+
+  it("รูปหน้าร้านยังเป็นชนิดสาธารณะ", () => {
+    for (const k of ["avatar", "banner", "portfolio", "service_cover"] as const) {
+      assert.equal(isPublicKind(k), true, k);
+      assert.equal(isPrivateKind(k), false, k);
+    }
+  });
+
+  it("ทุกชนิดต้องอยู่ฝั่งใดฝั่งหนึ่งเสมอ ไม่มีตกหล่น", () => {
+    for (const k of MEDIA_KINDS) {
+      assert.notEqual(isPublicKind(k), isPrivateKind(k), `${k} ต้องเป็นฝั่งเดียวเท่านั้น`);
+    }
+  });
+
+  it("ชนิดที่ไม่รู้จักไม่ถือว่าสาธารณะ", () => {
+    for (const bad of ["", "FINAL", "final ", "avatar; final"]) {
+      assert.equal(isPublicKind(bad), false, bad);
+    }
   });
 });
