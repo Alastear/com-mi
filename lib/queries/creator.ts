@@ -53,6 +53,25 @@ export async function getShopByHandle(handle: string) {
 
   const page = await db.query.creatorPage.findFirst({
     where: eq(schema.creatorPage.userId, owner.id),
+    /**
+     * ⚠️ **ตัดข้อมูลรับเงินออกตั้งแต่ในคิวรี ไม่ใช่ตอนแสดงผล**
+     *
+     * ผลของฟังก์ชันนี้ถูกส่งทั้งก้อนเข้า `<ServiceOrderFlow>` ซึ่งเป็น `"use client"`
+     * ทุกฟิลด์จึงถูก serialize ลงไปใน payload ของหน้าและใครก็อ่านได้จาก view-source
+     * เคยหลุดจริงบน production — `curl /@handle/s/<slug>` แล้วเจอเลข PromptPay
+     * ของครีเอเตอร์ ซึ่งส่วนใหญ่คือเบอร์มือถือส่วนตัว
+     *
+     * หน้าที่ต้องใช้เลขจริงคือหน้าจ่ายเงินของออเดอร์ ซึ่งใช้ `getOrderForClient`
+     * ที่จำกัดคอลัมน์ไว้แล้วและต้องเป็นคู่กรณีของออเดอร์นั้นถึงจะเรียกได้
+     *
+     * เขียนเป็น "ตัดออก" ไม่ใช่ "เลือกเข้า" โดยตั้งใจ — คอลัมน์ใหม่ที่เพิ่มทีหลัง
+     * จะได้ไหลไปหน้าร้านเองตามปกติ ส่วนของที่ต้องปิดถูกระบุชื่อไว้ตรงนี้ชัด ๆ
+     */
+    columns: {
+      promptpayId: false,
+      promptpayType: false,
+      promptpayName: false,
+    },
     with: {
       banner: true,
       avatar: true,
