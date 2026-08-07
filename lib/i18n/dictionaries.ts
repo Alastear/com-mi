@@ -717,6 +717,12 @@ const th = {
   notification: {
     title: "การแจ้งเตือน",
     markAllRead: "อ่านทั้งหมด",
+    /** ข้อความแจ้งเตือน — DB เก็บเป็น key + ข้อมูล แปลตอนแสดงเหมือน timeline */
+    order_created: "มีคำขอใหม่ #{code}",
+    order_status_changed: "งาน #{code} เปลี่ยนเป็น {status}",
+    order_message: "ข้อความใหม่ในงาน #{code}",
+    payment_reported: "ลูกค้าแจ้งโอนเงินงาน #{code}",
+    payment_confirmed: "ครีเอเตอร์ยืนยันได้รับเงินงาน #{code}",
     empty: "ยังไม่มีการแจ้งเตือน",
   },
 
@@ -1429,6 +1435,11 @@ const en: Dictionary = {
   notification: {
     title: "Notifications",
     markAllRead: "Mark all read",
+    order_created: "New request #{code}",
+    order_status_changed: "Order #{code} is now {status}",
+    order_message: "New message on order #{code}",
+    payment_reported: "A payment was reported on order #{code}",
+    payment_confirmed: "Your payment on order #{code} was confirmed",
     empty: "No notifications yet",
   },
 

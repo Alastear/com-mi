@@ -7,6 +7,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
 import { isOrderCode } from "@/lib/orders/code";
+import { notify } from "@/lib/notifications/create";
 
 /**
  * บันทึกการชำระเงิน — แพลตฟอร์มไม่ได้ประมวลผลเงิน แค่จดว่ามีการจ่าย
@@ -82,6 +83,17 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
 
   if (order.isCreator) await recomputePaid(order.id);
 
+  // ลูกค้าแจ้งโอน → ครีเอเตอร์ต้องรู้ทันที เพราะต้องไปเช็คแอปธนาคารแล้วกดยืนยัน
+  await notify({
+    userId: order.page.userId,
+    actorUserId: session.user.id,
+    type: "payment_reported",
+    data: { code: v.code, amount: v.amountCents },
+    url: `/orders/${v.code}`,
+    entityType: "order",
+    entityId: order.id,
+  });
+
   revalidatePath(`/orders/${v.code}`);
   revalidatePath(`/my/requests/${v.code}`);
   return { ok: true };
@@ -113,6 +125,17 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
   if (updated.length === 0) return { ok: false, error: "not_found" };
 
   await recomputePaid(order.id);
+
+  // ยืนยันแล้ว → ลูกค้าต้องรู้ว่าเงินถึงแล้ว ไม่ต้องมาถามซ้ำว่าได้รับหรือยัง
+  await notify({
+    userId: order.clientUserId,
+    actorUserId: session.user.id,
+    type: "payment_confirmed",
+    data: { code },
+    url: `/my/requests/${code}`,
+    entityType: "order",
+    entityId: order.id,
+  });
 
   revalidatePath(`/orders/${code}`);
   revalidatePath(`/my/requests/${code}`);

@@ -7,6 +7,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
 import { assertTransition, TransitionError, type Actor } from "./state-machine";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
@@ -138,6 +139,21 @@ export async function transitionOrder(input: {
     createdAt: now,
   });
 
+  /**
+   * แจ้งอีกฝ่ายเสมอ ไม่ใช่คนที่กด — `notify` ตัดกรณี actor === ผู้รับ ให้อยู่แล้ว
+   * ลิงก์ต่างกันตามฝั่ง เพราะสองหน้านี้เป็นคนละ route และอีกฝ่ายเข้าของอีกฝั่งไม่ได้
+   */
+  const recipient = actor === "creator" ? order.clientUserId : order.page.userId;
+  await notify({
+    userId: recipient,
+    actorUserId: session.user.id,
+    type: "order_status_changed",
+    data: { code, from, to },
+    url: actor === "creator" ? `/my/requests/${code}` : `/orders/${code}`,
+    entityType: "order",
+    entityId: order.id,
+  });
+
   revalidatePath("/orders");
   revalidatePath("/dashboard");
 
@@ -200,6 +216,16 @@ export async function sendOrderMessage(input: {
     createdAt: now,
     // คนส่งถือว่าอ่านข้อความตัวเองแล้ว ไม่งั้นจะเห็นตัวเลขค้างบนงานของตัวเอง
     ...(isCreator ? { readByCreatorAt: now } : { readByClientAt: now }),
+  });
+
+  await notify({
+    userId: isCreator ? order.clientUserId : order.page.userId,
+    actorUserId: session.user.id,
+    type: "order_message",
+    data: { code, preview: body.slice(0, 60) },
+    url: isCreator ? `/my/requests/${code}` : `/orders/${code}`,
+    entityType: "order",
+    entityId: order.id,
   });
 
   revalidatePath(`/orders/${code}`);

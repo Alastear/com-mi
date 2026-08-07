@@ -10,6 +10,7 @@ import { ACTIVE_STATUSES } from "@/lib/types";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { generateOrderCode } from "./code";
 import { quoteOrder } from "./pricing";
+import { notify } from "@/lib/notifications/create";
 
 /**
  * สร้างออเดอร์จากฟอร์มบรีฟ
@@ -206,6 +207,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       } else {
         await db.batch([insertOrder, insertItems, insertEvent]);
       }
+      // ออเดอร์ใหม่คือแจ้งเตือนที่สำคัญที่สุดสำหรับครีเอเตอร์ — คือรายได้ที่เพิ่งเข้ามา
+      await notify({
+        userId: owner.id,
+        actorUserId: session.user.id,
+        type: "order_created",
+        data: { code, service: service.title },
+        url: `/orders/${code}`,
+        entityType: "order",
+        entityId: orderId,
+      });
+
       return { ok: true, code };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
