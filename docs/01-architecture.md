@@ -430,6 +430,9 @@ export async function prepareImage(file: File) {
 
 ### ⚠️ Blob store ต้องสร้างเป็น **public** ตั้งแต่แรก (เจอจริงตอนต่อ Phase 1a)
 
+> สรุปที่ใช้จริง: store `blob-com-mi` (public, region `sin1`) — ตัว private ตัวแรกถูกลบทิ้งแล้ว
+> **token ของ store ไม่มี API ให้ดึงย้อนหลัง** ออกให้ตอนเชื่อมกับโปรเจกต์หรือดูจาก dashboard เท่านั้น
+
 โหมด access ของ store ถูกกำหนด**ตอนสร้าง store** เปลี่ยนทีหลังไม่ได้
 ถ้าสร้างเป็น private แล้วโค้ดเรียก `put(..., { access: "public" })` จะได้:
 
