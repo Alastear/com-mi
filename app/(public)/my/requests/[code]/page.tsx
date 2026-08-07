@@ -9,6 +9,10 @@ import { requireSession } from "@/lib/auth-guard";
 import { getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
+import { toPaymentRows } from "@/lib/payments/rows";
+import { PaymentPanel } from "@/components/app/payment-panel";
+import { PromptPayQR } from "@/components/app/promptpay-qr";
+import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
 import { formatMoney } from "@/lib/format";
@@ -37,6 +41,13 @@ export default async function ClientRequestPage({ params }: Props) {
   const locale = await getLocale();
   const t = getDictionary(locale);
   const handle = order.page.user?.handle ?? "";
+
+  // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
+  const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
+  const amountDue =
+    order.depositCents > 0 && order.amountPaidCents < order.depositCents
+      ? order.depositCents - order.amountPaidCents
+      : remaining;
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -126,6 +137,36 @@ export default async function ClientRequestPage({ params }: Props) {
           currentUserId={session.user.id}
         />
       </div>
+
+      <Card className="mt-4 gap-3 p-6">
+        <p className="font-medium">{t.payment.title}</p>
+        <PaymentPanel
+          code={order.code}
+          viewer="client"
+          totalCents={order.totalCents}
+          paidCents={order.amountPaidCents}
+          depositCents={order.depositCents}
+          currency={order.currency}
+          payments={toPaymentRows(order.payments)}
+          hasPayout={Boolean(order.page.promptpayId)}
+          /*
+            QR สร้างฝั่ง server แล้วส่งเป็น element ลงมา
+            หมายเลข PromptPay จึงไม่เคยถูก serialize ไปอยู่ใน payload ของหน้า
+            และ payload ที่ลูกค้าสแกนก็ไม่มีทางถูกแก้จากฝั่ง client
+          */
+          qr={
+            order.page.promptpayId ? (
+              <PromptPayQR
+                type={(order.page.promptpayType ?? "phone") as PromptPayType}
+                id={order.page.promptpayId}
+                payeeName={order.page.promptpayName}
+                amountSatang={amountDue}
+                locale={locale}
+              />
+            ) : undefined
+          }
+        />
+      </Card>
 
       <Card className="mt-4 p-4">
         <OrderActions code={order.code} status={order.status as OrderStatus} actor="client" />

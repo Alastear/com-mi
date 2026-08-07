@@ -13,6 +13,8 @@ import { requireCreator } from "@/lib/auth-guard";
 import { getOrderForCreator } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
+import { toPaymentRows } from "@/lib/payments/rows";
+import { PaymentPanel } from "@/components/app/payment-panel";
 import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
@@ -157,6 +159,21 @@ export default async function OrderPage({ params }: Props) {
                 {order.revisionsUsed} / {order.revisionsAllowed}
               </span>
             </div>
+          </Card>
+
+          <Card className="gap-3 p-5">
+            <p className="text-sm font-medium">{t.payment.title}</p>
+            <PaymentPanel
+              code={order.code}
+              viewer="creator"
+              totalCents={order.totalCents}
+              paidCents={order.amountPaidCents}
+              depositCents={order.depositCents}
+              currency={order.currency}
+              payments={toPaymentRows(order.payments)}
+              // ครีเอเตอร์ไม่ต้องเห็น QR ของตัวเอง แต่ต้องรู้ว่าตั้งค่ารับเงินแล้วหรือยัง
+              hasPayout={Boolean(order.page.promptpayId)}
+            />
           </Card>
 
           {order.privateNote ? (

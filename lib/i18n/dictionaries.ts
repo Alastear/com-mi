@@ -223,6 +223,40 @@ const th = {
     forCreatorsCta: "ดูสำหรับครีเอเตอร์",
   },
 
+  /**
+   * ข้อความรอบการชำระเงิน
+   *
+   * ⚠️ `irreversible` กับ `confirmReceived` เป็นข้อความที่ห้ามทำให้อ่อนลง
+   * ทั้งคู่มีไว้กันเคสที่ทำให้ผู้ใช้เสียเงินจริง (docs/00 §5.2.1)
+   */
+  payment: {
+    title: "การชำระเงิน",
+    qrAlt: "QR PromptPay สำหรับโอนเงิน",
+    scanToPay: "สแกนเพื่อโอน",
+    irreversible:
+      "โอนผ่าน PromptPay แล้วเรียกคืนไม่ได้ ทั้งเราและธนาคารยกเลิกให้ไม่ได้ — ตรวจชื่อผู้รับในแอปธนาคารให้ตรงก่อนกดยืนยันทุกครั้ง",
+    checkPayeeName: "แอปธนาคารจะแสดงชื่อบัญชีผู้รับก่อนยืนยัน ถ้าชื่อไม่ตรงกับที่คาด อย่าโอน",
+    amountDue: "ยอดที่ต้องชำระ",
+    depositDue: "มัดจำที่ต้องชำระ",
+    iPaid: "แจ้งว่าโอนแล้ว",
+    iPaidHint: "แนบสลิปไว้ให้ครีเอเตอร์ตรวจ (ไม่บังคับ)",
+    awaitingConfirm: "รอครีเอเตอร์ยืนยันว่าเงินเข้า",
+    confirmReceived: "ยืนยันว่าเงินเข้าบัญชีจริงแล้ว",
+    confirmReceivedHint:
+      "เช็คในแอปธนาคารของคุณเองว่ายอดเข้าจริง อย่าดูจากสลิปที่ลูกค้าส่งมาอย่างเดียว — สลิปปลอมทำได้ง่ายและแยกด้วยตาไม่ออก",
+    confirmed: "ยืนยันแล้ว",
+    method: "ช่องทาง",
+    recordedAt: "แจ้งเมื่อ",
+    noPayouts: "ครีเอเตอร์ยังไม่ได้ตั้งค่าการรับเงิน",
+    noPayoutsCreator: "ตั้งค่าหมายเลข PromptPay ก่อน ลูกค้าถึงจะโอนได้",
+    setup: "ไปตั้งค่า",
+    history: "รายการชำระเงิน",
+    empty: "ยังไม่มีการแจ้งชำระเงิน",
+    scanHint: "สแกนเพื่อโอนเข้าบัญชีของครีเอเตอร์โดยตรง",
+    noEscrowNote:
+      "แพลตฟอร์มไม่ได้ถือเงินของคุณ เงินโอนจากธนาคารลูกค้าเข้าบัญชีครีเอเตอร์โดยตรง ระบบเพียงบันทึกและปลดล็อกไฟล์ส่งมอบเมื่อได้รับเงินครบ",
+  },
+
   legal: {
     terms: "ข้อกำหนดการใช้งาน",
     privacy: "นโยบายความเป็นส่วนตัว",
@@ -642,11 +676,6 @@ const th = {
       "ไฟล์ถูกย่อและแปลงเป็น WebP ในเบราว์เซอร์ก่อนอัปโหลด แล้วส่งตรงไป Blob storage โดยไม่ผ่านเซิร์ฟเวอร์",
   },
 
-  payment: {
-    scanHint: "สแกนเพื่อโอนเข้าบัญชีของครีเอเตอร์โดยตรง",
-    noEscrowNote:
-      "แพลตฟอร์มไม่ได้ถือเงินของคุณ เงินโอนจากธนาคารลูกค้าเข้าบัญชีครีเอเตอร์โดยตรง ระบบเพียงบันทึกและปลดล็อกไฟล์ส่งมอบเมื่อได้รับเงินครบ",
-  },
 
   settings: {
     profile: "โปรไฟล์",
@@ -914,6 +943,35 @@ const en: Dictionary = {
     forCreatorsTitle: "Are you a creator?",
     forCreatorsBody: "Open a shop for free and run the whole job, from request to delivery",
     forCreatorsCta: "See it for creators",
+  },
+
+  payment: {
+    title: "Payment",
+    qrAlt: "PromptPay QR code",
+    scanToPay: "Scan to pay",
+    irreversible:
+      "A PromptPay transfer cannot be reversed — not by us, not by the bank. Check the payee name in your banking app matches before you confirm.",
+    checkPayeeName:
+      "Your banking app shows the recipient's account name before you confirm. If it is not who you expect, do not send.",
+    amountDue: "Amount due",
+    depositDue: "Deposit due",
+    iPaid: "I have paid",
+    iPaidHint: "Attach the slip for the creator to check (optional)",
+    awaitingConfirm: "Waiting for the creator to confirm the money arrived",
+    confirmReceived: "Confirm the money arrived in my account",
+    confirmReceivedHint:
+      "Check your own banking app that the amount really landed. Do not rely on the slip they sent — forged slips are easy to make and impossible to spot by eye.",
+    confirmed: "Confirmed",
+    method: "Method",
+    recordedAt: "Reported",
+    noPayouts: "This creator has not set up payments yet",
+    noPayoutsCreator: "Add your PromptPay number so clients can pay you",
+    setup: "Set it up",
+    history: "Payments",
+    empty: "No payments reported yet",
+    scanHint: "Scan to pay the creator directly",
+    noEscrowNote:
+      "We never hold your money. Funds move bank-to-bank straight to the creator; we only record the payment and unlock the delivery files once it's complete.",
   },
 
   legal: {
@@ -1330,11 +1388,6 @@ const en: Dictionary = {
       "Files are resized and converted to WebP in your browser, then uploaded straight to Blob storage without passing through the server.",
   },
 
-  payment: {
-    scanHint: "Scan to pay the creator directly",
-    noEscrowNote:
-      "We never hold your money. Funds move bank-to-bank straight to the creator; we only record the payment and unlock the delivery files once it's complete.",
-  },
 
   settings: {
     profile: "Profile",

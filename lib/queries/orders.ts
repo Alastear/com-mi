@@ -31,6 +31,7 @@ export async function getOrderForClient(code: string, clientUserId: string) {
       discountCents: true,
       totalCents: true,
       amountPaidCents: true,
+      depositCents: true,
       revisionsUsed: true,
       revisionsAllowed: true,
       tosSnapshot: true,
@@ -46,9 +47,18 @@ export async function getOrderForClient(code: string, clientUserId: string) {
       answers: { orderBy: [asc(schema.orderAnswer.sortOrder)] },
       service: { columns: { slug: true, title: true, deliveryDays: true } },
       page: {
-        columns: { id: true, displayName: true, userId: true },
+        columns: {
+          id: true,
+          displayName: true,
+          userId: true,
+          // ฝั่งลูกค้าต้องใช้สร้าง QR — เป็นข้อมูลที่ครีเอเตอร์ตั้งใจเปิดเผยให้คนจ่าย
+          promptpayType: true,
+          promptpayId: true,
+          promptpayName: true,
+        },
         with: { user: { columns: { handle: true, name: true, image: true } } },
       },
+      payments: { orderBy: [asc(schema.paymentRecord.createdAt)] },
       messages: {
         orderBy: [asc(schema.message.createdAt)],
         with: { sender: { columns: { name: true, image: true } } },
@@ -107,6 +117,7 @@ export async function listOrdersForBoard(creatorUserId: string) {
       currency: true,
       totalCents: true,
       amountPaidCents: true,
+      depositCents: true,
       revisionsUsed: true,
       revisionsAllowed: true,
       dueAt: true,
@@ -141,11 +152,13 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
         answers: { orderBy: [asc(schema.orderAnswer.sortOrder)] },
         service: { columns: { slug: true, title: true, deliveryDays: true } },
         client: { columns: { name: true, image: true, email: true } },
+        page: { columns: { promptpayId: true } },
         // เธรดกับ timeline อยู่ตารางเดียวกัน เรียงตามเวลาแล้วได้ทั้งสองอย่างพร้อมกัน
         messages: {
           orderBy: [asc(schema.message.createdAt)],
           with: { sender: { columns: { name: true, image: true } } },
         },
+        payments: { orderBy: [asc(schema.paymentRecord.createdAt)] },
       },
     })) ?? null
   );

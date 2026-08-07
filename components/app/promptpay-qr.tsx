@@ -1,140 +1,81 @@
-"use client";
-
-import { QrCode } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { useLocale } from "@/lib/i18n/client";
+import { encode } from "uqr";
+import { AlertTriangle } from "lucide-react";
+import { promptPayPayload } from "@/lib/payments/promptpay";
+import type { PromptPayType } from "@/lib/payments/promptpay-id";
+import { formatPromptPayId } from "@/lib/payments/promptpay-id";
 import { formatMoney } from "@/lib/format";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import type { Locale } from "@/lib/i18n/config";
 
 /**
- * PromptPay QR
+ * QR PromptPay ของออเดอร์หนึ่งใบ
  *
- * prototype วาดลายจำลองเพื่อให้เห็นเลย์เอาต์
- * ของจริงประกอบ EMVCo payload จาก PromptPay ID ของครีเอเตอร์ + จำนวนเงิน แล้ว render ฝั่ง client ล้วน
- * เงินโอนตรงจากลูกค้าเข้าบัญชีครีเอเตอร์ — แพลตฟอร์มไม่แตะเงิน (docs/00-product-overview.md §5.2)
- */
-const QR_CELLS = 25;
-
-/**
- * คำนวณช่องที่ต้องระบายจาก seed — เป็นฟังก์ชันบริสุทธิ์นอก component
+ * เป็น Server Component ล้วน — payload สร้างฝั่งเซิร์ฟเวอร์จากหมายเลขที่ครีเอเตอร์
+ * บันทึกไว้ ไม่ได้รับมาจาก client เลย ไม่งั้นมีคนแก้ปลายทางแล้วเงินไปผิดบัญชี
  *
- * ห้ามย้ายลอจิกนี้เข้าไปใน body ของคอมโพเนนต์: React Compiler ห้าม mutate
- * ตัวแปรที่ประกาศใน component scope ระหว่าง render (กฎ react-hooks/immutability)
+ * วาดเป็น SVG จากเมทริกซ์ตรง ๆ ไม่ใช้ canvas — คมทุกความละเอียด สแกนจากจอได้
+ * และไม่ต้องส่ง JavaScript ไปฝั่ง client เลยสักบรรทัด
+ *
+ * ⚠️ **คำเตือนเรื่องเรียกเงินคืนไม่ได้ต้องอยู่ติดกับ QR เสมอ**
+ * นี่คือจุดที่ผู้ใช้ตัดสินใจโอน ไม่ใช่หน้า help ที่ไม่มีใครเปิด (docs/00 §5.2.1)
  */
-function qrCells(seed: string): Array<[number, number]> {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  let state = h >>> 0 || 1;
-  const rand = () => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return (state >>> 0) % 100;
-  };
-
-  const isFinder = (x: number, y: number) => {
-    const inBox = (ox: number, oy: number) => x >= ox && x < ox + 7 && y >= oy && y < oy + 7;
-    return inBox(0, 0) || inBox(QR_CELLS - 7, 0) || inBox(0, QR_CELLS - 7);
-  };
-
-  const out: Array<[number, number]> = [];
-  for (let y = 0; y < QR_CELLS; y++) {
-    for (let x = 0; x < QR_CELLS; x++) {
-      if (isFinder(x, y)) continue;
-      if (rand() < 47) out.push([x, y]);
-    }
-  }
-  return out;
-}
-
-function FakeQr({ seed, size = 224 }: { seed: string; size?: number }) {
-  const cells = QR_CELLS;
-  const rects = qrCells(seed).map(([x, y]) => (
-    <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />
-  ));
-
-  const finder = (ox: number, oy: number) => (
-    <g key={`f${ox}-${oy}`}>
-      <rect x={ox} y={oy} width="7" height="7" fill="none" stroke="currentColor" strokeWidth="1" />
-      <rect x={ox + 2} y={oy + 2} width="3" height="3" />
-    </g>
-  );
-
-  return (
-    <svg
-      viewBox={`0 0 ${cells} ${cells}`}
-      width={size}
-      height={size}
-      className="text-foreground"
-      role="img"
-      aria-label="PromptPay QR"
-      shapeRendering="crispEdges"
-    >
-      <rect width={cells} height={cells} className="fill-background" />
-      <g fill="currentColor">
-        {rects}
-        {finder(0, 0)}
-        {finder(cells - 7, 0)}
-        {finder(0, cells - 7)}
-      </g>
-    </svg>
-  );
-}
-
-export function PromptPayQrDialog({
-  amountCents,
-  currency,
-  orderCode,
-  creatorName,
+export function PromptPayQR({
+  type,
+  id,
+  payeeName,
+  amountSatang,
+  locale,
 }: {
-  amountCents: number;
-  currency: string;
-  orderCode: string;
-  creatorName: string;
+  type: PromptPayType;
+  id: string;
+  payeeName: string | null;
+  amountSatang: number;
+  locale: Locale;
 }) {
-  const { t, locale } = useLocale();
+  const t = getDictionary(locale);
+  const payload = promptPayPayload({ type, id, amountSatang });
+  const qr = encode(payload, { ecc: "M", border: 2 });
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full">
-          <QrCode className="size-4" />
-          {t.order.showQr}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t.order.payment}</DialogTitle>
-          <DialogDescription>
-            {t.payment.scanHint}
-          </DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col items-center gap-3">
+      <div className="rounded-xl bg-white p-3">
+        <svg
+          viewBox={`0 0 ${qr.size} ${qr.size}`}
+          width={220}
+          height={220}
+          shapeRendering="crispEdges"
+          role="img"
+          aria-label={t.payment.qrAlt}
+        >
+          <rect width={qr.size} height={qr.size} fill="#fff" />
+          {qr.data.map((row, y) =>
+            row.map((on, x) =>
+              on ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill="#000" /> : null,
+            ),
+          )}
+        </svg>
+      </div>
 
-        <div className="flex flex-col items-center gap-3 py-2">
-          <div className="rounded-xl border bg-background p-4">
-            <FakeQr seed={orderCode} />
-          </div>
-          <p className="tabular text-2xl font-semibold">
-            {formatMoney(amountCents, currency, locale)}
-          </p>
-          <p className="text-sm text-muted-foreground">{creatorName}</p>
-          <p className="tabular font-mono text-xs text-muted-foreground">#{orderCode}</p>
-        </div>
-
-        <p className="rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
-          {t.payment.noEscrowNote}
+      <div className="text-center">
+        <p className="tabular text-lg font-semibold">
+          {formatMoney(amountSatang, "THB", locale)}
         </p>
-      </DialogContent>
-    </Dialog>
+        <p className="tabular text-sm text-muted-foreground">{formatPromptPayId(type, id)}</p>
+        {payeeName ? <p className="text-sm text-muted-foreground">{payeeName}</p> : null}
+      </div>
+
+      {/*
+        ข้อความนี้ห้ามย้ายไปที่อื่นและห้ามย่อ — เป็นราคาที่ผู้ใช้ต้องรู้ก่อนกดโอน
+        ของโมเดลที่แพลตฟอร์มไม่ถือเงิน ไม่มีใครเรียกคืนให้ได้ทั้งเราและธนาคาร
+      */}
+      <p className="flex max-w-xs items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs leading-relaxed text-warning">
+        <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span>{t.payment.irreversible}</span>
+      </p>
+
+      <p className="max-w-xs text-center text-xs text-muted-foreground">
+        {t.payment.checkPayeeName}
+      </p>
+    </div>
   );
 }
