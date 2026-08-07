@@ -5,8 +5,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   /**
    * ชั้นป้องกันจริง — proxy.ts เป็นแค่ UX gate เท่านั้น
    *
-   * requireCreator() พาคนที่ยังไม่มี handle ไป /onboarding ก่อน
-   * ไม่งั้นคนที่เพิ่งล็อกอินครั้งแรกจะไปโผล่ที่ dashboard ที่ยังตั้งค่าไม่เสร็จ
+   * ทั้งกลุ่มนี้คือ "ฝั่งครีเอเตอร์" ซึ่งต้องเปิดร้านแล้วถึงจะเข้าได้
+   * คนที่ล็อกอินแต่ยังไม่มีร้านไม่ได้ผิดอะไร เขาเป็นคนซื้อ — ที่ของเขาคือ /my/requests
+   * มาถึงตรงนี้โดยไม่มี handle แปลว่ากดปุ่ม "เปิดร้านของฉัน" มา จึงพาไปตั้งชื่อร้านต่อ
    * (/onboarding อยู่นอกกลุ่ม (app) จึงไม่วนลูป)
    */
   const { user } = await requireCreator();

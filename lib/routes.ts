@@ -21,4 +21,6 @@ export const shopHref = (handle: string) => dynamicHref(`/@${handle}`);
 export const serviceHref = (handle: string, slug: string) =>
   dynamicHref(`/@${handle}/s/${slug}`);
 
+/** ออเดอร์เดียวกันมีสองที่อยู่: ครีเอเตอร์ดูที่ /orders/<code> · ลูกค้าดูที่ /my/requests/<code> */
 export const orderHref = (code: string) => dynamicHref(`/orders/${code}`);
+export const orderRequestHref = (code: string) => dynamicHref(`/my/requests/${code}`);

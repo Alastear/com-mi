@@ -22,7 +22,17 @@ export async function requireSession() {
   return session;
 }
 
-/** ผู้ใช้ที่ยังไม่ได้ตั้ง handle = ยังทำ onboarding ไม่เสร็จ */
+/**
+ * ด่านของ "ฝั่งครีเอเตอร์" — ต้องเปิดร้านแล้วเท่านั้น
+ *
+ * ทุกคนที่ล็อกอินเป็น **คนซื้อ** โดยปริยาย ไม่ต้องจอง handle ไม่มีร้านถูกสร้างให้
+ * การเป็นครีเอเตอร์คือสิ่งที่กดเลือกเอง — คนที่มาจ้างวาดไม่ควรถูกบังคับให้ตั้งชื่อร้าน
+ * ก่อนจะได้ใช้อะไรสักอย่าง
+ *
+ * `handle` จึงเป็นตัวชี้ขาดว่า "เปิดร้านแล้วหรือยัง" และการเด้งไป /onboarding
+ * ไม่ใช่การบังคับอีกต่อไป — มาถึงตรงนี้ได้แปลว่ากดปุ่มเปิดร้านมาเอง
+ * (หน้าของคนซื้ออยู่ที่ /my/requests ซึ่งใช้ requireSession เฉย ๆ)
+ */
 export async function requireCreator() {
   const session = await requireSession();
   if (!session.user.handle) redirect("/onboarding");

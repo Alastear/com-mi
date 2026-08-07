@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import Link from "next/link";
 import { ArrowRight, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -96,6 +97,19 @@ export function OnboardingClient({ suggested }: { suggested: string }) {
           </form>
 
           <p className="text-xs leading-relaxed text-muted-foreground">{t.onboarding.canChange}</p>
+
+          {/*
+            * ทางออก — /onboarding ไม่ใช่ด่านบังคับอีกต่อไป คนที่กดมาผิดต้องกลับได้
+            * ไม่งั้นจะรู้สึกว่าติดอยู่และต้องตั้งชื่อร้านทั้งที่แค่อยากจ้างวาด
+            */}
+          <div className="border-t pt-4">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t.onboarding.buyerNote}
+            </p>
+            <Button asChild variant="ghost" size="sm" className="mt-1.5 -ml-2">
+              <Link href="/explore">{t.onboarding.buyerBack}</Link>
+            </Button>
+          </div>
         </Card>
       </div>
     </div>

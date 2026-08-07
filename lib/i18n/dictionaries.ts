@@ -61,6 +61,8 @@ const th = {
     explore: "ค้นหาครีเอเตอร์",
     forCreators: "สำหรับครีเอเตอร์",
     pricing: "ราคา",
+    openShop: "เปิดร้านของฉัน",
+    creatorArea: "หลังบ้านร้านฉัน",
     dashboard: "ภาพรวม",
     orders: "งานของฉัน",
     services: "เมนูรับงาน",
@@ -109,6 +111,8 @@ const th = {
     taken: "มีคนใช้ชื่อนี้แล้ว ลองชื่ออื่น",
     submit: "ใช้ชื่อนี้",
     canChange: "เปลี่ยนได้ทีหลังในหน้าตั้งค่า แต่ลิงก์เดิมจะใช้ไม่ได้ทันที",
+    buyerNote: "ขั้นตอนนี้สำหรับคนที่จะเปิดร้านรับงาน ถ้าคุณมาจ้างวาดอย่างเดียวไม่ต้องทำก็ได้",
+    buyerBack: "กลับไปหาครีเอเตอร์",
   },
 
   shop: {
@@ -640,6 +644,17 @@ const th = {
     signInFirst: "เข้าสู่ระบบก่อนส่งคำขอ — ข้อมูลที่กรอกไว้จะถูกเก็บไว้ให้",
   },
 
+  /** หน้ารวมคำขอของฝั่งลูกค้า — คนละชุดกับ order.* ที่พูดกับครีเอเตอร์ */
+  myRequests: {
+    title: "คำขอของฉัน",
+    subtitle: "งานที่คุณสั่งไว้ทั้งหมด กดเข้าไปดูความคืบหน้าและคุยกับครีเอเตอร์ได้",
+    emptyTitle: "ยังไม่ได้สั่งงานไว้",
+    emptyBody: "ลองหาครีเอเตอร์ที่ถูกใจ แล้วเลือกเมนูที่อยากได้",
+    emptyCta: "ค้นหาครีเอเตอร์",
+    from: "จาก",
+    orderedOn: "สั่งเมื่อ",
+  },
+
   orderStatus: {
     requested: "คำขอใหม่",
     reviewing: "กำลังพิจารณา",
@@ -859,6 +874,8 @@ const en: Dictionary = {
     explore: "Explore",
     forCreators: "For creators",
     pricing: "Pricing",
+    openShop: "Open my shop",
+    creatorArea: "Creator area",
     dashboard: "Overview",
     orders: "My work",
     services: "Commission menu",
@@ -906,6 +923,8 @@ const en: Dictionary = {
     taken: "Someone already has that one",
     submit: "Use this name",
     canChange: "You can change this later in settings, but the old link stops working immediately.",
+    buyerNote: "This step is for opening a shop. If you are only here to commission someone, you can skip it.",
+    buyerBack: "Back to browsing creators",
   },
 
   shop: {
@@ -1417,6 +1436,16 @@ const en: Dictionary = {
     creatorFull: "The creator's queue is full. Try again later.",
     rateLimited: "Too many requests. Try again in {n} minutes.",
     signInFirst: "Sign in to send your request — what you filled in will be kept",
+  },
+
+  myRequests: {
+    title: "My requests",
+    subtitle: "Everything you have ordered. Open one to follow progress and message the creator.",
+    emptyTitle: "Nothing ordered yet",
+    emptyBody: "Find a creator whose work you like, then pick what you want.",
+    emptyCta: "Explore creators",
+    from: "from",
+    orderedOn: "Ordered",
   },
 
   orderStatus: {

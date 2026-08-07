@@ -39,8 +39,8 @@ export function SignInClient() {
   const [loading, setLoading] = useState(false);
 
   // กลับไปหน้าที่ตั้งใจจะเข้าหลังล็อกอินเสร็จ — ต้องเป็น path ภายในเท่านั้น กัน open redirect
-  const raw = params.get("next") ?? "/dashboard";
-  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+  const raw = params.get("next") ?? "/";
+  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
 
   async function handleGoogle() {
     setLoading(true);
