@@ -37,5 +37,9 @@ export const config = {
     "/settings/:path*",
     "/my/:path*",
     "/onboarding",
+    // ผู้ดูแลแพลตฟอร์ม — ที่นี่กันแค่คนที่ยังไม่ล็อกอิน ส่วนการตรวจ role อยู่ที่
+    // requireAdmin() ใน layout และใน Server Action ทุกตัว
+    "/admin/:path*",
+    "/admin",
   ],
 };

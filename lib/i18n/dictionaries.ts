@@ -57,6 +57,35 @@ const th = {
     no: "ไม่มี",
   },
 
+  /**
+   * หลังบ้านผู้ดูแลแพลตฟอร์ม
+   *
+   * มีผู้ใช้คนเดียวและเป็นคนไทย แต่ยังผ่านพจนานุกรมตามกฎของโปรเจกต์ —
+   * ข้อยกเว้นที่ "หน้านี้คนใช้คนเดียว" คือจุดที่กฎเริ่มพัง และวันที่มีทีมงานเพิ่ม
+   * ก็ไม่มีใครกลับมาย้ายทีหลัง
+   */
+  admin: {
+    title: "ผู้ดูแลระบบ",
+    backToSite: "กลับหน้าเว็บ",
+    overview: "ภาพรวม",
+    totalUsers: "ผู้ใช้ทั้งหมด",
+    totalShops: "ร้านที่เปิด",
+    publishedShops: "เผยแพร่แล้ว",
+    totalOrders: "ออเดอร์ทั้งหมด",
+    shopsTitle: "ร้านทั้งหมด",
+    shopsHint: "รวมร้านที่ยังไม่เผยแพร่และร้านตัวอย่าง — หน้าค้นหาไม่แสดงสองอย่างนี้",
+    colShop: "ร้าน",
+    colOwner: "เจ้าของ",
+    colContact: "ติดต่อ",
+    colState: "สถานะ",
+    colUpdated: "แก้ล่าสุด",
+    notPublished: "ยังไม่เผยแพร่",
+    demoShop: "ร้านตัวอย่าง",
+    noPhone: "ไม่ได้ให้เบอร์",
+    noPayout: "ยังไม่ตั้งการรับเงิน",
+    empty: "ยังไม่มีร้านในระบบ",
+  },
+
   nav: {
     explore: "ค้นหาครีเอเตอร์",
     forCreators: "สำหรับครีเอเตอร์",
@@ -875,6 +904,28 @@ const en: Dictionary = {
     on: "On",
     yes: "Yes",
     no: "No",
+  },
+
+  admin: {
+    title: "Admin",
+    backToSite: "Back to site",
+    overview: "Overview",
+    totalUsers: "Users",
+    totalShops: "Shops",
+    publishedShops: "Published",
+    totalOrders: "Orders",
+    shopsTitle: "All shops",
+    shopsHint: "Includes unpublished and demo shops — neither appears in search",
+    colShop: "Shop",
+    colOwner: "Owner",
+    colContact: "Contact",
+    colState: "State",
+    colUpdated: "Updated",
+    notPublished: "Not published",
+    demoShop: "Demo",
+    noPhone: "No number",
+    noPayout: "No payout set",
+    empty: "No shops yet",
   },
 
   nav: {

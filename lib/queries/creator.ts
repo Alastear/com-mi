@@ -273,3 +273,33 @@ export async function getOwnShop(userId: string) {
     },
   });
 }
+
+/**
+ * รายชื่อร้านทั้งหมดสำหรับผู้ดูแล — **ไม่กรองอะไรเลย**
+ *
+ * ต่างจาก `listPublicShops` ตรงที่ต้องเห็นทุกอย่าง: ร้านที่ยังไม่เผยแพร่ ร้านตัวอย่าง
+ * และร้านที่ถูกระงับ ถ้าใช้คิวรีของหน้าค้นหาซ้ำ ผู้ดูแลจะมองไม่เห็นร้านที่มีปัญหา
+ * ซึ่งเป็นร้านชนิดเดียวที่เขาเปิดหน้านี้มาหา
+ *
+ * ดึงเลขรับเงินกับเบอร์ติดต่อมาด้วยโดยตั้งใจ — หน้านี้อยู่หลัง `requireAdmin()`
+ * และเหตุผลเดียวที่ต้องติดต่อครีเอเตอร์คือตอนมีเรื่อง
+ */
+export async function listAllShopsForAdmin(limit = 100) {
+  return getDb().query.creatorPage.findMany({
+    orderBy: [desc(schema.creatorPage.updatedAt)],
+    limit,
+    columns: {
+      id: true,
+      displayName: true,
+      status: true,
+      isPublished: true,
+      isDemo: true,
+      contactPhone: true,
+      promptpayId: true,
+      updatedAt: true,
+    },
+    with: {
+      user: { columns: { id: true, name: true, email: true, handle: true, role: true, createdAt: true } },
+    },
+  });
+}
