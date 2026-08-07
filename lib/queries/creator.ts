@@ -71,6 +71,7 @@ export async function getShopByHandle(handle: string) {
       promptpayId: false,
       promptpayType: false,
       promptpayName: false,
+      contactPhone: false,
     },
     with: {
       banner: true,

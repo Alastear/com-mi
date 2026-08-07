@@ -1,0 +1,1 @@
+ALTER TABLE "creator_page" ADD COLUMN "contact_phone" text;

@@ -15,6 +15,7 @@ import { requireCreator } from "@/lib/auth-guard";
 import { getOwnShop } from "@/lib/queries/creator";
 import { ensureShop } from "@/lib/shop/ensure";
 import { UserAvatar } from "@/components/user-avatar";
+import { ContactForm } from "./contact-form";
 import { PayoutForm } from "./payout-form";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
 
@@ -97,6 +98,15 @@ export default async function SettingsPage() {
               <p id="handle-note" className="mt-1.5 text-xs text-muted-foreground">
                 {t.settings.handleLocked} — {t.settings.handleLockedHint}
               </p>
+            </div>
+
+            <Separator />
+
+            <div>
+              <p className="font-medium">{t.settings.contactTitle}</p>
+              <div className="mt-3">
+                <ContactForm initial={shop?.contactPhone ?? ""} />
+              </div>
             </div>
 
             <Separator />

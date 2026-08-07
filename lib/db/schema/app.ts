@@ -146,6 +146,18 @@ export const creatorPage = pgTable(
     promptpayType: text("promptpay_type"),
     promptpayId: text("promptpay_id"),
     promptpayName: text("promptpay_name"),
+
+    /**
+     * เบอร์ติดต่อของครีเอเตอร์ — **ไว้ให้ผู้ดูแลติดต่อกลับเท่านั้น**
+     *
+     * ไม่ใช่ปัจจัยล็อกอิน ไม่ใช่ช่องทาง OTP และไม่โผล่บนหน้าร้าน
+     * แยกจาก `promptpayId` โดยตั้งใจถึงแม้ส่วนใหญ่จะเป็นเบอร์เดียวกัน —
+     * เลขรับเงินเปลี่ยนได้ตามบัญชีที่ใช้ ส่วนเบอร์ติดต่อคือตัวคน
+     * และการรวมสองอย่างเข้าด้วยกันแปลว่าเปลี่ยนบัญชีรับเงินแล้วติดต่อไม่ได้
+     *
+     * ⚠️ ต้องอยู่ในรายการที่ตัดออกใน `getShopByHandle` เสมอ (ดูเหตุผลที่นั่น)
+     */
+    contactPhone: text("contact_phone"),
   theme: jsonb("theme").$type<Record<string, string>>().notNull().default({}),
 
   isMature: boolean("is_mature").notNull().default(false),

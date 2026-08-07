@@ -792,6 +792,10 @@ const th = {
     promptpayInvalid: "หมายเลขไม่ถูกรูปแบบ — เบอร์โทร 10 หลัก หรือเลขบัตร 13 หลัก",
     promptpayVerifyNote:
       "สแกน QR ด้วยแอปธนาคารของคุณเองหนึ่งครั้งเพื่อตรวจว่าชื่อผู้รับถูกต้อง แล้วกดยกเลิก ไม่ต้องโอนจริง",
+    contactTitle: "เบอร์ติดต่อ",
+    contactPhone: "เบอร์โทรศัพท์",
+    contactPhoneHint: "ทีมงานใช้ติดต่อกลับเวลามีเรื่องเกี่ยวกับบัญชีหรืองานของคุณ — ไม่แสดงบนหน้าร้าน ลูกค้ามองไม่เห็น",
+    contactPhoneInvalid: "กรอกเป็นเบอร์มือถือ 10 หลักที่ขึ้นต้นด้วย 0 หรือเว้นว่างไว้ก็ได้",
     saved: "บันทึกแล้ว",
   },
 
@@ -1587,6 +1591,10 @@ const en: Dictionary = {
     promptpayInvalid: "Wrong format — 10 digits for a phone, 13 for a national ID",
     promptpayVerifyNote:
       "Scan the QR once with your own banking app to confirm the payee name, then cancel. No transfer needed.",
+    contactTitle: "Contact number",
+    contactPhone: "Phone number",
+    contactPhoneHint: "We use this to reach you about your account or a job — it never appears on your shop and clients cannot see it.",
+    contactPhoneInvalid: "Enter a 10-digit Thai mobile number starting with 0, or leave it blank.",
     saved: "Saved",
   },
 
