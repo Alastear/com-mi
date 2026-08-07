@@ -382,15 +382,15 @@ const th = {
       "ไม่ครับ เงินโอนจากลูกค้าเข้าบัญชีคุณโดยตรงผ่าน PromptPay หรือช่องทางที่คุณตั้งไว้ ระบบทำหน้าที่บันทึกและล็อกไฟล์ส่งมอบจนกว่าจะได้รับเงินครบเท่านั้น",
     freeLimitQ: "ใช้ฟรีแล้วเจอกำแพงตอนไหน",
     freeLimitA:
-      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ และผลงาน 12 ชิ้น ซึ่งครอบคลุมการรับงานทั่วไปได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องและอยากได้แจ้งเตือนทันที",
+      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 2 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องและอยากได้แจ้งเตือนทันที",
     downgradeQ: "ถ้ายกเลิก Pro ข้อมูลหายไหม",
     downgradeA:
       "ไม่หายครับ งานที่รับอยู่ทำต่อจนจบได้ตามปกติ ส่วนเมนูและผลงานที่เกินโควตาจะถูกซ่อนไว้เฉย ๆ กลับมาสมัคร Pro เมื่อไหร่ก็แสดงกลับทันที",
     freeBullets: {
       orders: "รับงานพร้อมกัน 5 งาน",
       services: "เมนูรับงาน 5 รายการ",
-      portfolio: "ผลงาน 12 ชิ้น",
-      storage: "พื้นที่เก็บไฟล์ 300 MB",
+      portfolio: "ผลงาน 30 ชิ้น (ลงคลิปได้)",
+      storage: "พื้นที่เก็บไฟล์ 2 GB",
       noEscrow: "เงินเข้าบัญชีคุณโดยตรง ไม่หัก % จากออเดอร์",
     },
     proBullets: {
@@ -1161,15 +1161,15 @@ const en: Dictionary = {
       "No. Clients pay you directly via PromptPay or whichever method you set up. We only record the payment and keep delivery files locked until the full amount is marked received.",
     freeLimitQ: "Where does the free plan run out?",
     freeLimitA:
-      "The free plan allows 5 concurrent orders, 5 menu items, and 12 portfolio pieces — comfortable for taking work casually. Pro is for people taking work continuously who want instant notifications.",
+      "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 2 GB of storage — enough room for video clips. Pro is for people taking work continuously who want instant notifications.",
     downgradeQ: "If I cancel Pro, do I lose my data?",
     downgradeA:
       "No. Orders in progress finish normally. Menu items and portfolio pieces over the quota are just hidden, and reappear the moment you resubscribe.",
     freeBullets: {
       orders: "5 concurrent orders",
       services: "5 menu items",
-      portfolio: "12 portfolio pieces",
-      storage: "300 MB of file storage",
+      portfolio: "30 portfolio pieces (video welcome)",
+      storage: "2 GB of file storage",
       noEscrow: "Money goes straight to you — no cut of your orders",
     },
     proBullets: {

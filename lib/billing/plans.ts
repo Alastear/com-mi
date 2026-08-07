@@ -80,9 +80,25 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
        */
       active_orders: 5,
       services: 5,
-      portfolio_items: 12,
-      storage_bytes: 300 * MB,
-      file_size_bytes: 20 * MB,
+      /**
+       * ขยับขึ้นตอนรองรับวิดีโอ (เดิม 12 ชิ้น / 300 MB / 20 MB ต่อไฟล์)
+       *
+       * คิดจากต้นทุนจริงของ Vercel Blob แล้วพบว่า **egress คือค่าใช้จ่ายจริง
+       * ไม่ใช่พื้นที่เก็บ** — ครีเอเตอร์ที่ใช้เต็ม 2 GB เสียค่าเก็บ ~฿1.6/เดือน
+       * ส่วนที่เหลือมาจากคนเข้ามาดู และร้านที่คนดูเยอะคือร้านที่พร้อมอัปเกรดอยู่แล้ว
+       * ต้นทุนจึงปรับตัวเอง — ให้พื้นที่เยอะได้โดยแทบไม่มีความเสี่ยง
+       * (Pro หนึ่งคนคุ้มค่าเก็บของครีเอเตอร์ฟรีที่ใช้เต็มโควตาได้ราว 100 คน)
+       *
+       * สิ่งที่ยังต้องคุมคือ **ขนาดต่อไฟล์** เพราะมันคุม egress ต่อการเปิดหนึ่งครั้ง
+       * 50 MB พอสำหรับคลิปตัวอย่าง 60 วินาที (≤40 MB) และไฟล์ส่งมอบทั่วไป
+       * ส่วนไฟล์ต้นฉบับก้อนใหญ่คือเหตุผลที่ Pro มีอยู่
+       *
+       * `delivery_retention_days: 90` คือตัวคุมการโตแบบไม่มีขอบเขตจริง ๆ
+       * ไฟล์ส่งมอบสะสมตามจำนวนออเดอร์ ไม่ใช่ตามพื้นที่ที่ตั้งไว้
+       */
+      portfolio_items: 30,
+      storage_bytes: 2 * GB,
+      file_size_bytes: 50 * MB,
       active_listings: 3,
       delivery_retention_days: 90,
     },
@@ -163,7 +179,7 @@ type ValueKey = keyof Dictionary["compare"]["values"];
  * ค่าของแต่ละช่อง:
  *   true / false        → เครื่องหมายถูก / ขีด
  *   { t: "unlimited" }  → ข้อความที่ต้องแปล ดึงจาก compare.values
- *   "300 MB"            → ข้อความที่ไม่ต้องแปล (ตัวเลข หน่วย)
+ *   "2 GB"              → ข้อความที่ไม่ต้องแปล (ตัวเลข หน่วย)
  */
 export type CompareValue = boolean | string | { t: ValueKey };
 
@@ -179,7 +195,7 @@ export const COMPARISON: ComparisonGroup[] = [
     key: "shop",
     rows: [
       { key: "shop", free: true, pro: true },
-      { key: "portfolio", free: "12", pro: "300" },
+      { key: "portfolio", free: "30", pro: "300" },
       { key: "theme", free: { t: "presets3" }, pro: true },
       { key: "badge", free: false, pro: true },
     ],
@@ -214,8 +230,8 @@ export const COMPARISON: ComparisonGroup[] = [
   {
     key: "other",
     rows: [
-      { key: "storage", free: "300 MB", pro: "20 GB" },
-      { key: "filesize", free: "20 MB", pro: "200 MB" },
+      { key: "storage", free: "2 GB", pro: "20 GB" },
+      { key: "filesize", free: "50 MB", pro: "200 MB" },
       { key: "retention", free: { t: "days90" }, pro: { t: "forever" } },
       { key: "analytics", free: false, pro: true },
     ],
