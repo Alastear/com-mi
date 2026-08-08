@@ -57,9 +57,18 @@ export async function POST(request: Request): Promise<Response> {
         /**
          * ⚠️ `pathname` มาจาก client และ **เซิร์ฟเวอร์แก้ไม่ได้** —
          * handleUpload เอาสตริงนี้ใส่ token ไปตรง ๆ การปฏิเสธจึงเป็นทางเดียวที่มี
-         * บังคับ prefix เป็น id ของออเดอร์ เพื่อไม่ให้เขียนทับไฟล์ของออเดอร์อื่น
+         * บังคับ prefix ให้ตรงกับออเดอร์ที่เพิ่งตรวจสิทธิ์ไปข้างบน เพื่อไม่ให้เขียนทับ
+         * ไฟล์ของออเดอร์อื่น
+         *
+         * ⚠️ ใช้ `code` ไม่ใช่ `order.id` — ฝั่ง client รู้จักออเดอร์จาก `code` เท่านั้น
+         * เดิมเช็คด้วย `order.id` ซึ่งเบราว์เซอร์ไม่มีทางรู้ ฝั่งนั้นจึงส่ง `deliveries/_/…`
+         * มาเป็นตัวยึดที่ ผลคือด่านนี้ปฏิเสธทุกครั้ง — **อัปไฟล์ส่งมอบไม่ได้เลยทั้งระบบ**
+         * (เจอตอนเดินทั้ง flow บน production ไม่ใช่จากการอ่านโค้ด)
+         *
+         * ความปลอดภัยเท่าเดิม: `code` ตัวนี้คือตัวที่เพิ่งยืนยันไปว่าเป็นออเดอร์ของผู้เรียก
+         * และ code ไม่ซ้ำกันทั้งระบบ การผูก path กับมันจึงผูกกับออเดอร์เดียวเท่านั้น
          */
-        if (!pathname.startsWith(`deliveries/${order.id}/`)) throw new Error("forbidden");
+        if (!pathname.startsWith(`deliveries/${code}/`)) throw new Error("forbidden");
 
         const gate = await rateLimit(
           `delivery:${session.user.id}`,

@@ -58,7 +58,9 @@ export function DeliveryPanel({
     setBusy(true);
     try {
       for (const file of Array.from(files).slice(0, 20)) {
-        const blob = await upload(`deliveries/_/${crypto.randomUUID()}`, file, {
+        // path ต้องขึ้นต้นด้วย `deliveries/<code>/` — ฝั่ง server ปฏิเสธถ้าไม่ตรง
+        // (เคยส่ง `_` เป็นตัวยึดที่ ทำให้อัปไฟล์ไม่ผ่านสักครั้ง)
+        const blob = await upload(`deliveries/${code}/${crypto.randomUUID()}`, file, {
           access: "public", // ชนิดใน SDK — store จริงถูกกำหนดโดย endpoint ที่ออก token
           handleUploadUrl: "/api/blob/delivery-upload",
           clientPayload: JSON.stringify({ code }),
