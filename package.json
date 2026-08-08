@@ -20,7 +20,8 @@
     "db:seed-demo": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-demo-shop.mts",
     "db:reset-creator": "dotenv -e .env.development.local -e .env.local -- tsx scripts/reset-creator.mts",
     "admin:grant": "dotenv -e .env.development.local -e .env.local -- tsx scripts/make-admin.mts",
-    "admin:revoke": "dotenv -e .env.development.local -e .env.local -- tsx scripts/make-admin.mts --revoke"
+    "admin:revoke": "dotenv -e .env.development.local -e .env.local -- tsx scripts/make-admin.mts --revoke",
+    "domain:switch": "tsx scripts/switch-domain.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
