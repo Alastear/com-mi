@@ -13,6 +13,7 @@ import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
 import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
 import { canRelease, depositSatisfied } from "./release";
+import { deliveryPrefix, isDeliveryPath } from "@/lib/delivery/path";
 
 /**
  * ตรรกะที่พลาดแล้วเสียเงินจริง — คุ้มที่จะมีเทสต์ถึงแม้โปรเจกต์ยังไม่มี test suite ใหญ่
@@ -454,5 +455,27 @@ describe("เงื่อนไขปล่อยไฟล์ส่งมอบ"
     assert.equal(depositSatisfied({ depositCents: 0, amountPaidCents: 0 }), true);
     assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 144_999 }), false);
     assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 145_000 }), true);
+  });
+});
+
+describe("ที่อยู่ไฟล์ส่งมอบ", () => {
+  it("client กับ server ประกอบ path ด้วยกฎเดียวกัน", () => {
+    const code = "D982XU43";
+    const built = `${deliveryPrefix(code)}${"f99acc8a-32e0"}`;
+    assert.ok(isDeliveryPath(built, code), "path ที่ client สร้างต้องผ่านด่าน server");
+  });
+
+  it("path ของออเดอร์อื่นถูกปฏิเสธ", () => {
+    assert.equal(isDeliveryPath(`${deliveryPrefix("AAAAAAAA")}x`, "BBBBBBBB"), false);
+  });
+
+  it("ตัวยึดที่แบบเก่าไม่ผ่านแล้ว — เคยเป็นเหตุให้อัปไฟล์ไม่ได้เลยทั้งระบบ", () => {
+    assert.equal(isDeliveryPath("deliveries/_/abc", "D982XU43"), false);
+  });
+
+  it("path ที่พยายามหลุดออกนอกโฟลเดอร์ของออเดอร์ถูกปฏิเสธ", () => {
+    for (const bad of ["deliveries/", "deliveries/D982XU43", "other/D982XU43/x", "/deliveries/D982XU43/x"]) {
+      assert.equal(isDeliveryPath(bad, "D982XU43"), false, bad);
+    }
   });
 });

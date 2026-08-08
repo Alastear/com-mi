@@ -8,6 +8,7 @@ import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
 import { isOrderCode } from "@/lib/orders/code";
+import { isDeliveryPath } from "./path";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 
 /**
@@ -52,7 +53,8 @@ export async function registerDeliveryFile(
   if (!order || order.page.userId !== session.user.id) return { ok: false, error: "forbidden" };
 
   // ตรวจ prefix ซ้ำอีกรอบกับออเดอร์ที่หาเอง ไม่ใช่เชื่อค่าที่ส่งมาคู่กัน
-  if (!v.pathname.startsWith(`deliveries/${order.id}/`)) return { ok: false, error: "forbidden" };
+  // กฎอยู่ที่ lib/delivery/path.ts จุดเดียว — เคยเขียนแยกกันแล้วเพี้ยนมาแล้ว
+  if (!isDeliveryPath(v.pathname, v.code)) return { ok: false, error: "forbidden" };
 
   // ขนาดจริงต้องอ่านจาก store ส่วนตัว — head() ที่ไม่มี token จะเข้าไม่ถึงไฟล์นี้
   const meta = await head(v.url, { token: privateBlobToken() });

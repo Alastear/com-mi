@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useDict } from "@/lib/i18n/client";
+import { deliveryPrefix } from "@/lib/delivery/path";
 import { formatBytes } from "@/lib/format";
 import { attachDelivery, deliverAndRelease, requestDeliveryDownload } from "@/lib/delivery/actions";
 import { registerDeliveryFile } from "@/lib/delivery/register";
@@ -58,9 +59,8 @@ export function DeliveryPanel({
     setBusy(true);
     try {
       for (const file of Array.from(files).slice(0, 20)) {
-        // path ต้องขึ้นต้นด้วย `deliveries/<code>/` — ฝั่ง server ปฏิเสธถ้าไม่ตรง
-        // (เคยส่ง `_` เป็นตัวยึดที่ ทำให้อัปไฟล์ไม่ผ่านสักครั้ง)
-        const blob = await upload(`deliveries/${code}/${crypto.randomUUID()}`, file, {
+        // กฎ path อยู่ที่ lib/delivery/path.ts — ฝั่ง server เทียบด้วยกฎเดียวกัน
+        const blob = await upload(`${deliveryPrefix(code)}${crypto.randomUUID()}`, file, {
           /**
            * ⚠️ ต้องเป็น "private" — เคยเขียนว่า "public" พร้อมคอมเมนต์ว่า
            * "store จริงถูกกำหนดโดย endpoint ที่ออก token" ซึ่ง **ไม่จริง**

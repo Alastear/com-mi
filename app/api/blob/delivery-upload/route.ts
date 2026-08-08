@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
 import { isOrderCode } from "@/lib/orders/code";
+import { isDeliveryPath } from "@/lib/delivery/path";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -68,7 +69,7 @@ export async function POST(request: Request): Promise<Response> {
          * ความปลอดภัยเท่าเดิม: `code` ตัวนี้คือตัวที่เพิ่งยืนยันไปว่าเป็นออเดอร์ของผู้เรียก
          * และ code ไม่ซ้ำกันทั้งระบบ การผูก path กับมันจึงผูกกับออเดอร์เดียวเท่านั้น
          */
-        if (!pathname.startsWith(`deliveries/${code}/`)) throw new Error("forbidden");
+        if (!isDeliveryPath(pathname, code)) throw new Error("forbidden");
 
         const gate = await rateLimit(
           `delivery:${session.user.id}`,
