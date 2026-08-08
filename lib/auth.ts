@@ -1,8 +1,27 @@
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+
+/** เส้นทางที่ทำให้เกิดการส่งรหัสออกไป — ทุกเส้นต้องผ่านลิมิตต่ออีเมล */
+const OTP_PATHS = new Set([
+  "/forget-password/email-otp",
+  "/sign-in/email-otp",
+  "/email-otp/send-verification-otp",
+  "/email-otp/request-password-reset",
+]);
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { getDb, schema } from "@/lib/db";
+import { emailOTP } from "better-auth/plugins/email-otp";
+import { LIMITS, rateLimit as pgRateLimit } from "@/lib/rate-limit";
+import { sendOtpEmail, sendPasswordChangedEmail } from "@/lib/email/auth-mails";
+
+/**
+ * อีเมลส่งถึงคนจริงได้หรือยัง
+ *
+ * `EMAIL_FROM` ตั้งได้ก็ต่อเมื่อยืนยันโดเมนกับ Resend แล้ว จึงใช้เป็นสวิตช์เดียว
+ * ของทั้งการสมัครด้วยรหัสผ่านและการกู้ด้วย OTP — สองอย่างนี้แยกกันไม่ได้
+ */
+const emailReady = !!process.env.EMAIL_FROM;
 
 /**
  * ⚠️ ต้อง lazy — ห้ามสร้าง instance ที่ top level
@@ -25,6 +44,34 @@ function createAuth() {
 
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
+
+  /**
+   * ล็อกอินด้วยอีเมล+รหัสผ่าน — **ปิดอยู่จนกว่าจะตั้ง `EMAIL_FROM`**
+   *
+   * ไม่ใช่แค่ "ทดสอบไม่ได้" แต่ใช้จริงไม่ได้: ตราบใดที่ยังไม่ยืนยันโดเมนกับ Resend
+   * ระบบส่งอีเมลได้เฉพาะถึงเจ้าของบัญชี Resend (ดู lib/email/send.ts) และ
+   * `sendEmail()` กลืน error โดยตั้งใจ คนสมัครจึงรอรหัสที่ไม่มีวันมาถึงโดยไม่มีอะไรบอก
+   *
+   * ปิดทั้งชุดดีกว่าเปิดครึ่งเดียว — สมัครได้แต่ยืนยันอีเมลไม่ได้ = บัญชีที่เข้าไม่ได้
+   * และกู้ไม่ได้ด้วย เพราะทางกู้ก็เดินผ่านอีเมลเหมือนกัน
+   */
+  emailAndPassword: {
+    enabled: emailReady,
+    /**
+     * บังคับยืนยันอีเมลก่อนเข้าใช้ครั้งแรก
+     *
+     * ถ้าไม่บังคับ ใครก็สมัครด้วยอีเมลคนอื่นแล้วยึดชื่อนั้นไว้ได้ และการเชื่อมกับ
+     * บัญชี Google ทีหลังก็จะเชื่อมเข้าบัญชีที่ไม่มีใครพิสูจน์ว่าเป็นเจ้าของอีเมล
+     */
+    requireEmailVerification: true,
+    minPasswordLength: 10,
+    async sendResetPassword() {
+      // ไม่ใช้ลิงก์รีเซ็ต — ทางกู้รหัสของเราคือรหัส OTP (ดู emailOTP ข้างล่าง)
+    },
+    async onPasswordReset({ user }) {
+      await sendPasswordChangedEmail(user.email);
+    },
+  },
 
   socialProviders: {
     google: {
@@ -83,8 +130,84 @@ function createAuth() {
     },
   },
 
+  /**
+   * ปิด endpoint ที่ไม่ได้ใช้ของ email-otp
+   *
+   * ทำงานใน `onRequest` คืน 404 ตั้งแต่ก่อนถึง rate limit และก่อน hook ของ plugin
+   * (ตรวจแล้วที่ dist/api/index.mjs:164) — เป็นชั้นนอกสุดจริง ๆ ไม่ใช่แค่ซ่อน UI
+   *
+   * รอบแรกใช้แค่ "ขอรหัสเพื่อเข้าสู่ระบบ" กับ "ตั้งรหัสผ่านใหม่" ที่เหลือ
+   * เป็นพื้นที่ให้โจมตีเปล่า ๆ โดยเฉพาะ check-verification-otp ที่ให้ลองรหัสได้
+   * โดยไม่สร้าง session — เหมาะกับการไล่เดารหัสพอดี
+   */
+  /**
+   * จำกัดการขอรหัส OTP **ต่ออีเมล** ก่อนเข้า endpoint
+   *
+   * ต้องอยู่ตรงนี้ ไม่ใช่ในตัวส่งเมล เพราะตัวส่งเมลถูกเรียกแบบ background task
+   * (ดูคอมเมนต์ที่ `sendVerificationOTP`) — throw ที่นั่นไม่มีผลกับ response
+   *
+   * ของ Better Auth เองผูกกับ IP และเก็บใน memory ซึ่งบน serverless
+   * แต่ละ instance นับแยกกัน จึงกันคนยิงจากหลาย IP ไม่ได้เลย ของเราอยู่บน Postgres
+   */
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (!OTP_PATHS.has(ctx.path)) return;
+      const email = (ctx.body as { email?: unknown } | undefined)?.email;
+      if (typeof email !== "string" || !email) return;
+
+      const gate = await pgRateLimit(
+        `otp:${email.toLowerCase()}`,
+        LIMITS.otpRequest.limit,
+        LIMITS.otpRequest.windowSeconds,
+      );
+      if (!gate.ok) {
+        throw APIError.from("TOO_MANY_REQUESTS", {
+          message: "otp_rate_limited",
+          code: "OTP_RATE_LIMITED",
+        });
+      }
+    }),
+  },
+
+  disabledPaths: [
+    "/email-otp/check-verification-otp",
+    "/email-otp/verify-email",
+    "/email-otp/change-email",
+    "/email-otp/request-email-change",
+  ],
+
   // nextCookies ต้องเป็น plugin ตัวสุดท้ายเสมอ — ทำให้ Server Action เซ็ตคุกกี้ได้
-  plugins: [nextCookies()],
+  plugins: [
+    ...(emailReady
+      ? [
+          emailOTP({
+            otpLength: 6,
+            /** 10 นาที ไม่ใช่ 5 ตามค่าเริ่มต้น — คนไทยส่วนใหญ่สลับไปเปิดแอปอีเมลบนมือถือ */
+            expiresIn: 600,
+            /** กรอกผิดครบสามครั้งรหัสตาย ต้องขอใหม่ — กันไล่เดาในหน้าต่างที่ยังไม่หมดอายุ */
+            allowedAttempts: 3,
+            /**
+             * ⚠️ ค่าเริ่มต้นของ Better Auth คือ `"plain"` — เก็บรหัสดิบไว้ในตาราง
+             * `verification` ใครอ่าน DB ได้ก็เห็นรหัสที่ยังใช้ได้ของทุกคน
+             */
+            storeOTP: "hashed",
+            /** สมัครบัญชีใหม่ด้วย OTP ไม่ได้ — ทางสมัครมีทางเดียวคือ Google หรือรหัสผ่าน */
+            disableSignUp: true,
+            /**
+             * ⚠️ **ห้ามใส่ด่านอะไรไว้ในนี้** — Better Auth เรียกผ่าน
+             * `runInBackgroundOrAwait()` (dist/plugins/email-otp/routes.mjs:481)
+             * ซึ่งบนแพลตฟอร์มที่มี background task จะยิงทิ้งไว้แล้วตอบ 200 ไปเลย
+             * `throw` ตรงนี้จึงไม่มีทางหยุดคำขอได้ — เคยใส่ลิมิตไว้ตรงนี้แล้วพบว่า
+             * ตัวนับขึ้นครบแต่ทุกคำขอยังตอบ 200 ลิมิตย้ายไปที่ `hooks.before` แทน
+             */
+            async sendVerificationOTP({ email, otp }) {
+              await sendOtpEmail(email, otp, 10);
+            },
+          }),
+        ]
+      : []),
+    nextCookies(),
+  ],
   });
 }
 

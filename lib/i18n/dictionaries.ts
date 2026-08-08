@@ -100,6 +100,17 @@ const th = {
     actionFailed: "ทำรายการไม่สำเร็จ",
   },
 
+  /** อีเมลของระบบล็อกอิน — แยกจาก email.* ที่เป็นเรื่องออเดอร์ */
+  authMail: {
+    otpSubject: "รหัสเข้าสู่ระบบของคุณ",
+    otpBody: "รหัสของคุณคือ {otp}\n\nใช้ได้ภายใน {minutes} นาที และใช้ได้ครั้งเดียว\nถ้าคุณไม่ได้เป็นคนขอ ไม่ต้องทำอะไร รหัสนี้จะหมดอายุไปเอง",
+    passwordChangedSubject: "รหัสผ่านของคุณถูกเปลี่ยน",
+    passwordChangedBody: "รหัสผ่านบัญชีนี้เพิ่งถูกเปลี่ยน\n\nถ้าไม่ใช่คุณ ให้รีบตั้งรหัสผ่านใหม่ทันทีด้วยการกดลืมรหัสผ่านที่หน้าเข้าสู่ระบบ",
+    existingSubject: "มีคนพยายามสมัครด้วยอีเมลนี้",
+    existingBodyGoogle: "อีเมลนี้มีบัญชีอยู่แล้วและเข้าสู่ระบบด้วย Google\n\nถ้าเป็นคุณเอง ให้กดปุ่มเข้าสู่ระบบด้วย Google ที่หน้าเข้าสู่ระบบ ถ้าอยากใช้รหัสผ่านด้วย ให้กดลืมรหัสผ่านเพื่อตั้งรหัสใหม่",
+    existingBodyPassword: "อีเมลนี้มีบัญชีอยู่แล้ว\n\nถ้าเป็นคุณเองและจำรหัสผ่านไม่ได้ ให้กดลืมรหัสผ่านที่หน้าเข้าสู่ระบบ",
+  },
+
   nav: {
     explore: "ค้นหาครีเอเตอร์",
     forCreators: "สำหรับครีเอเตอร์",
@@ -955,6 +966,16 @@ const en: Dictionary = {
     suspendUserHint: "Signs the account out immediately and blocks it from signing back in",
     blockedPaidWork: "Cannot suspend this account — work is fully paid but the files have not been released. Suspending now loses the client their money. Suspend the shop first to stop new orders, then let the outstanding work finish.",
     actionFailed: "That did not go through",
+  },
+
+  authMail: {
+    otpSubject: "Your sign-in code",
+    otpBody: "Your code is {otp}\n\nIt works for {minutes} minutes and can only be used once.\nIf you did not ask for it, do nothing — it expires on its own.",
+    passwordChangedSubject: "Your password was changed",
+    passwordChangedBody: "The password on this account was just changed.\n\nIf that was not you, set a new one straight away using the forgot-password link on the sign-in page.",
+    existingSubject: "Someone tried to sign up with this address",
+    existingBodyGoogle: "This address already has an account, and it signs in with Google.\n\nIf that is you, use the Google button on the sign-in page. If you would also like a password, use the forgot-password link to set one.",
+    existingBodyPassword: "This address already has an account.\n\nIf that is you and you cannot remember the password, use the forgot-password link on the sign-in page.",
   },
 
   nav: {

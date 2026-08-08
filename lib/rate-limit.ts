@@ -71,4 +71,13 @@ export const LIMITS = {
   sendMessage: { limit: 30, windowSeconds: 300 },
   /** ขอ token อัปโหลดไฟล์ส่งมอบ: 40 ครั้งต่อชั่วโมง (งานหนึ่งชิ้นมีหลายไฟล์ได้) */
   deliveryUpload: { limit: 40, windowSeconds: 3600 },
+  /**
+   * ขอรหัส OTP: 5 ครั้งต่อชั่วโมง **ต่ออีเมล**
+   *
+   * ต้องนับต่ออีเมล ไม่ใช่ต่อ IP — ตัวจำกัดของ Better Auth เองผูกกับ IP
+   * (createRateLimitKey(ip, path)) ซึ่งกันคนยิงจากหลาย IP ไม่ได้ และของมันเก็บใน
+   * memory ซึ่งบน serverless แต่ละ instance นับแยกกันจนแทบไม่มีผล
+   * ของเราอยู่บน Postgres จึงนับรวมกันจริงทุก instance
+   */
+  otpRequest: { limit: 5, windowSeconds: 3600 },
 } as const;
