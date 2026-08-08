@@ -8,6 +8,7 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
 import { formatDate } from "@/lib/format";
 import { formatPromptPayId } from "@/lib/payments/promptpay-id";
+import { SuspendControls } from "./suspend-controls";
 
 /**
  * ภาพรวมสำหรับผู้ดูแล — รอบแรกเป็นหน้าอ่านอย่างเดียว
@@ -67,6 +68,7 @@ export default async function AdminPage() {
                 <th className="p-3 font-medium">{t.colContact}</th>
                 <th className="p-3 font-medium">{t.colState}</th>
                 <th className="p-3 font-medium">{t.colUpdated}</th>
+                <th className="p-3 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -98,10 +100,25 @@ export default async function AdminPage() {
                         <Badge variant="secondary">{t.notPublished}</Badge>
                       ) : null}
                       {r.isDemo ? <Badge variant="outline">{t.demoShop}</Badge> : null}
+                      {r.suspendedAt ? (
+                        <Badge variant="destructive">{t.suspended}</Badge>
+                      ) : null}
+                      {r.user.suspendedAt ? (
+                        <Badge variant="destructive">{t.suspendedUser}</Badge>
+                      ) : null}
                     </div>
+                    {r.suspensionReason ? (
+                      <p className="mt-1 text-xs text-muted-foreground">{r.suspensionReason}</p>
+                    ) : null}
                   </td>
                   <td className="p-3 text-xs whitespace-nowrap text-muted-foreground">
                     {formatDate(r.updatedAt, locale)}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex flex-col items-end gap-1">
+                      <SuspendControls kind="shop" id={r.id} suspended={!!r.suspendedAt} />
+                      <SuspendControls kind="user" id={r.user.id} suspended={!!r.user.suspendedAt} />
+                    </div>
                   </td>
                 </tr>
               ))}

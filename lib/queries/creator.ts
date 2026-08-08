@@ -72,6 +72,10 @@ export async function getShopByHandle(handle: string) {
       promptpayType: false,
       promptpayName: false,
       contactPhone: false,
+      // `suspendedAt` ยังต้องอ่านได้ หน้าร้านต้องรู้ว่าถูกระงับเพื่อปิดปุ่มสั่งงาน
+      // แต่ "ใครสั่ง" กับ "เพราะอะไร" เป็นเรื่องภายใน ไม่ใช่ของที่ลูกค้าต้องเห็น
+      suspendedBy: false,
+      suspensionReason: false,
     },
     with: {
       banner: true,
@@ -96,7 +100,19 @@ export async function getShopByHandle(handle: string) {
   });
   if (!page) return null;
 
-  return { owner, ...page };
+  /**
+   * ร้านที่ถูกระงับแสดงต่อคนนอกเป็น "ปิดรับงาน"
+   *
+   * แปลงที่ read model จุดเดียว ไม่ใช่ให้ทุกหน้าจำไปเช็คเอง — หน้าร้าน ป้ายสถานะ
+   * และอะไรก็ตามที่ตัดสินใจจาก `status` จึงถูกต้องพร้อมกันโดยไม่ต้องแก้ทีละที่
+   *
+   * ใช้คำว่า "ปิดรับงาน" ไม่ใช่ "ถูกระงับ" — เรื่องระหว่างแพลตฟอร์มกับครีเอเตอร์
+   * ไม่ใช่สิ่งที่ต้องประกาศให้ลูกค้าเก่าที่แวะเข้ามาดูออเดอร์ตัวเองเห็น
+   * ส่วนค่าจริงยังอยู่ที่ `suspendedAt` ให้โค้ดที่ต้องรู้จริง ๆ อ่านได้
+   */
+  const status = page.suspendedAt ? "closed" : page.status;
+
+  return { owner, ...page, status };
 }
 
 /**
@@ -137,6 +153,9 @@ export async function listPublicShops(
   const conditions = [
     eq(schema.creatorPage.isPublished, true),
     eq(schema.creatorPage.isDemo, false),
+    // ร้านที่ผู้ดูแลระงับต้องหายจากหน้าค้นหา แต่ยังเปิดตรงด้วย URL ได้
+    // เพื่อให้ลูกค้าที่มีออเดอร์ค้างยังกลับเข้าไปคุยและรับงานได้
+    isNull(schema.creatorPage.suspendedAt),
   ];
   if (q) {
     const pattern = `%${q.replace(/[%_]/g, "\\$&")}%`;
@@ -297,9 +316,16 @@ export async function listAllShopsForAdmin(limit = 100) {
       contactPhone: true,
       promptpayId: true,
       updatedAt: true,
+      suspendedAt: true,
+      suspensionReason: true,
     },
     with: {
-      user: { columns: { id: true, name: true, email: true, handle: true, role: true, createdAt: true } },
+      user: {
+        columns: {
+          id: true, name: true, email: true, handle: true, role: true,
+          createdAt: true, suspendedAt: true, suspensionReason: true,
+        },
+      },
     },
   });
 }

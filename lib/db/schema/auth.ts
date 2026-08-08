@@ -22,6 +22,19 @@ export const user = pgTable("user", {
   planUntil: timestamp("plan_until", { withTimezone: true }),
   role: text("role").notNull().default("user"),
 
+  /**
+   * บัญชีถูกระงับเมื่อไร — null = ปกติ
+   *
+   * บังคับที่ `databaseHooks.session.create.before` ใน lib/auth.ts ซึ่งทำงานตอน
+   * "สร้าง session ใหม่" เท่านั้น จึงต้องลบ session เดิมทิ้งพร้อมกันตอนระงับ
+   * ไม่งั้นคนที่ล็อกอินค้างอยู่จะใช้ต่อได้จนกว่าคุกกี้จะหมดอายุ (30 วัน)
+   *
+   * เลือกวิธีนี้แทนการเช็คทุก request เพราะ `cookieCache` มีไว้เพื่อไม่ต้องยิง DB
+   * ทุกครั้ง — การเช็คทุก request จะล้มเหตุผลของ cache ทั้งหมด
+   */
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspensionReason: text("suspension_reason").notNull().default(""),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

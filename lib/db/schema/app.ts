@@ -158,6 +158,20 @@ export const creatorPage = pgTable(
      * ⚠️ ต้องอยู่ในรายการที่ตัดออกใน `getShopByHandle` เสมอ (ดูเหตุผลที่นั่น)
      */
     contactPhone: text("contact_phone"),
+
+    /**
+     * ร้านถูกผู้ดูแลระงับเมื่อไร — null = ปกติ
+     *
+     * ⚠️ **แยกจาก `isPublished` และ `status` โดยเด็ดขาด** สองอันนั้นเป็นของครีเอเตอร์
+     * ถ้าผู้ดูแลไปพลิก `isPublished` ครีเอเตอร์ก็พลิกกลับได้ทันทีจากหน้าร้านตัวเอง
+     * และเรายังทับสถานะที่เขาตั้งไว้เองทิ้งโดยไม่มีทางคืนค่าเดิม
+     *
+     * ระงับร้าน = ปิดการรับงานใหม่และซ่อนจากหน้าค้นหา — **ไม่แตะออเดอร์ที่ค้างอยู่**
+     * ลูกค้าที่จ่ายเงินไปแล้วต้องได้ไฟล์เสมอ ไม่ว่าใครจะถูกลงโทษ
+     */
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspendedBy: text("suspended_by"),
+    suspensionReason: text("suspension_reason").notNull().default(""),
   theme: jsonb("theme").$type<Record<string, string>>().notNull().default({}),
 
   isMature: boolean("is_mature").notNull().default(false),
@@ -353,3 +367,35 @@ export type ServiceTier = typeof serviceTier.$inferSelect;
 export type ServiceOption = typeof serviceOption.$inferSelect;
 export type PortfolioItem = typeof portfolioItem.$inferSelect;
 export type Media = typeof media.$inferSelect;
+
+/* ── admin_action — บันทึกสิ่งที่ผู้ดูแลทำ ─────────────────── */
+
+/**
+ * ประวัติการใช้อำนาจของผู้ดูแล
+ *
+ * มีตั้งแต่วันแรกที่มีปุ่มระงับ ไม่ใช่ค่อยเพิ่มทีหลัง — การกระทำที่ย้อนกลับไม่ได้
+ * และตอบไม่ได้ว่าใครทำเมื่อไรเพราะอะไร คือสิ่งที่แก้ย้อนหลังไม่ได้จริง ๆ
+ * ต่อให้ตอนนี้มีผู้ดูแลคนเดียวก็ตาม
+ *
+ * ไม่ผูก FK ไปที่เป้าหมาย เพราะเป้าหมายอาจถูกลบทีหลัง แต่บันทึกต้องอยู่ต่อ
+ */
+export const adminAction = pgTable(
+  "admin_action",
+  {
+    id: text("id").primaryKey(),
+    adminUserId: text("admin_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "set null" }),
+
+    /** suspend_shop | unsuspend_shop | suspend_user | unsuspend_user */
+    action: text("action").notNull(),
+    /** shop | user */
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    /** ข้อความที่ผู้ดูแลพิมพ์ตอนกด — บังคับให้มี ไม่ใช่ทางเลือก */
+    reason: text("reason").notNull().default(""),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("admin_action_target_idx").on(t.targetType, t.targetId, t.createdAt)],
+);

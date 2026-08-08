@@ -99,6 +99,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     },
   });
   if (!page || !page.isPublished) return { ok: false, error: "not_found" };
+  // ร้านถูกผู้ดูแลระงับ = รับงานใหม่ไม่ได้ แต่ออเดอร์เดิมเดินต่อได้ตามปกติ
+  // ตอบเหมือน "ร้านปิด" ไม่ใช่บอกว่าโดนระงับ — เรื่องระหว่างเรากับครีเอเตอร์
+  if (page.suspendedAt) return { ok: false, error: "shop_closed" };
   if (!ACCEPTING_STATUSES.has(page.status)) return { ok: false, error: "shop_closed" };
 
   const service = page.services.find((s) => s.slug === v.slug);

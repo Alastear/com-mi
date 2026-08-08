@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { getDb, schema } from "@/lib/db";
@@ -52,6 +53,33 @@ function createAuth() {
       plan: { type: "string", required: false, defaultValue: "free", input: false },
       planUntil: { type: "date", required: false, input: false },
       role: { type: "string", required: false, defaultValue: "user", input: false },
+      /** ผู้ดูแลระงับบัญชีนี้เมื่อไร — ตั้งได้จากฝั่ง server เท่านั้น */
+      suspendedAt: { type: "date", required: false, input: false },
+      suspensionReason: { type: "string", required: false, defaultValue: "", input: false },
+    },
+  },
+
+  /**
+   * บัญชีที่ถูกระงับสร้าง session ใหม่ไม่ได้
+   *
+   * ทำที่นี่ไม่ใช่เช็คทุก request เพราะ `cookieCache` ข้างบนมีไว้เพื่อไม่ต้องยิง DB
+   * ทุกครั้ง — ถ้าเช็คทุก request ก็ไม่เหลือเหตุผลของ cache เลย
+   *
+   * ⚠️ hook นี้ทำงานตอน "สร้าง" เท่านั้น session ที่ล็อกอินค้างอยู่ไม่ถูกแตะ
+   * ตอนกดระงับจึงต้องลบ session เดิมทิ้งด้วย (ดู lib/admin/actions.ts)
+   * ไม่งั้นคนที่เปิดค้างไว้ใช้ต่อได้อีก 30 วันตามอายุคุกกี้
+   */
+  databaseHooks: {
+    session: {
+      create: {
+        async before(session, ctx) {
+          if (!ctx) return;
+          const u = await ctx.context.internalAdapter.findUserById(session.userId);
+          if ((u as { suspendedAt?: Date | null } | null)?.suspendedAt) {
+            throw APIError.from("FORBIDDEN", { message: "account_suspended", code: "ACCOUNT_SUSPENDED" });
+          }
+        },
+      },
     },
   },
 
