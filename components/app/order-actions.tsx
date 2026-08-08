@@ -53,6 +53,8 @@ export function OrderActions({
               ? t.order.depositUnpaid
               : res.error === "not_fully_paid"
                 ? t.order.notFullyPaid
+                : res.error === "no_files"
+                  ? t.order.moveNoFiles
                 : res.error === "wrong_actor" || res.error === "not_allowed"
                   ? t.order.moveNotAllowed
                   : t.error.title,

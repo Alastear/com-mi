@@ -40,7 +40,8 @@ export type TransitionResult =
         | "wrong_actor"
         | "stale"
         | "deposit_unpaid"
-        | "not_fully_paid";
+        | "not_fully_paid"
+        | "no_files";
     };
 
 export async function transitionOrder(input: {
@@ -103,6 +104,25 @@ export async function transitionOrder(input: {
     // เงื่อนไขเดียวกับด่านออก URL ดาวน์โหลด — เรียก canRelease() ทั้งคู่
     // ห้ามเขียน `paid >= total` ซ้ำที่ไหนอีก ไม่งั้นสองด่านจะเพี้ยนออกจากกัน
     return { ok: false, error: "not_fully_paid" };
+  }
+  /**
+   * ส่งมอบต้องมีไฟล์จริง
+   *
+   * `deliverAndRelease()` กันข้อนี้ไว้แล้ว แต่ปุ่มเปลี่ยนสถานะบนหน้าออเดอร์
+   * เรียก action ตัวนี้ ไม่ได้ผ่านตัวนั้น จึงเดินอ้อมด่านไปได้ทั้งดุ้น
+   *
+   * ผลตอนเจอจริงบน production: กดปุ่มเดียวแล้วออเดอร์เป็น `delivered` ทันที
+   * โดยไม่มีแถว delivery เลย ลูกค้าได้แจ้งเตือนว่างานเสร็จแล้วเปิดไปเจอหน้าเปล่า
+   * ซ้ำร้ายกว่านั้นคือช่องอัปโหลดของครีเอเตอร์ขึ้นเฉพาะตอน in_progress/in_review/
+   * revision_requested — พอเป็น delivered แล้วจึงแนบไฟล์ตามทีหลังไม่ได้ด้วย
+   * และ `delivered` ครีเอเตอร์ถอยเองไม่ได้ ต้องรอลูกค้ากดขอแก้ไขเท่านั้น
+   */
+  if (to === "delivered") {
+    const dlv = await db.query.delivery.findFirst({
+      columns: { mediaIds: true },
+      where: eq(schema.delivery.orderId, order.id),
+    });
+    if (!dlv || dlv.mediaIds.length === 0) return { ok: false, error: "no_files" };
   }
 
   const now = new Date();
