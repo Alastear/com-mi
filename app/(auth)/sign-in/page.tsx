@@ -16,7 +16,8 @@ export default async function SignInPage() {
   // useSearchParams ต้องอยู่ใน Suspense ไม่งั้นทั้งหน้าถูกบังคับเป็น CSR
   return (
     <Suspense>
-      <SignInClient />
+      {/* ฟอร์มรหัสผ่านโผล่เฉพาะตอนอีเมลส่งถึงคนจริงได้ — เงื่อนไขเดียวกับใน lib/auth.ts */}
+      <SignInClient passwordEnabled={!!process.env.EMAIL_FROM} />
     </Suspense>
   );
 }

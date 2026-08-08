@@ -1,7 +1,7 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
-import { inferAdditionalFields } from "better-auth/client/plugins";
+import { emailOTPClient, inferAdditionalFields } from "better-auth/client/plugins";
 import type { Auth } from "@/lib/auth";
 
 /**
@@ -9,7 +9,12 @@ import type { Auth } from "@/lib/auth";
  * ที่เพิ่มไว้ใน additionalFields โดยไม่ต้องประกาศชนิดซ้ำ
  */
 export const authClient = createAuthClient({
-  plugins: [inferAdditionalFields<Auth>()],
+  /**
+   * `emailOTPClient` ใส่ไว้เสมอถึงแม้ฝั่ง server จะปิดอยู่ตอนยังไม่มีโดเมน
+   * มันแค่เพิ่มเมธอดให้เรียก ถ้า endpoint ปิดอยู่ก็ได้ 404 กลับมาตามปกติ —
+   * ทำให้ไม่ต้องมีสองเวอร์ชันของ client ที่ต้องคอยสลับตาม env
+   */
+  plugins: [inferAdditionalFields<Auth>(), emailOTPClient()],
 });
 
-export const { signIn, signOut, useSession } = authClient;
+export const { signIn, signUp, signOut, useSession, forgetPassword } = authClient;

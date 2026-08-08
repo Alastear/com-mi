@@ -6,9 +6,13 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/brand";
 import { useDict } from "@/lib/i18n/client";
-import { signIn } from "@/lib/auth-client";
+import { forgetPassword, signIn, signUp } from "@/lib/auth-client";
 
 function GoogleMark() {
   return (
@@ -33,7 +37,7 @@ function GoogleMark() {
   );
 }
 
-export function SignInClient() {
+export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) {
   const t = useDict();
   const params = useSearchParams();
   const [loading, setLoading] = useState(false);
@@ -41,6 +45,57 @@ export function SignInClient() {
   // กลับไปหน้าที่ตั้งใจจะเข้าหลังล็อกอินเสร็จ — ต้องเป็น path ภายในเท่านั้น กัน open redirect
   const raw = params.get("next") ?? "/";
   const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+
+  /** password = ฟอร์มปกติ · otp = กรอกรหัสที่ส่งไปทางอีเมล */
+  const [mode, setMode] = useState<"password" | "otp">("password");
+  const [signingUp, setSigningUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+
+  async function handlePassword() {
+    setLoading(true);
+    const res = signingUp
+      ? await signUp.email({ email, password, name: email.split("@")[0], callbackURL: next })
+      : await signIn.email({ email, password, callbackURL: next });
+    setLoading(false);
+    if (res.error) {
+      toast.error(res.error.message ?? t.auth.signInFailed);
+      return;
+    }
+    // สมัครใหม่ยังเข้าไม่ได้จนกว่าจะกดยืนยันในอีเมล — บอกให้ชัดแทนที่จะปล่อยงง
+    if (signingUp) toast.success(t.auth.checkEmail);
+    else window.location.assign(next);
+  }
+
+  /**
+   * ลืมรหัสผ่าน = ขอรหัสหกหลักทางอีเมลแล้วเอามาเข้าสู่ระบบเลย
+   * ไม่ใช่ลิงก์ตั้งรหัสใหม่ — คนที่ลืมรหัสส่วนใหญ่แค่อยากเข้าให้ได้ก่อน
+   */
+  async function requestOtp() {
+    if (!email) return;
+    setLoading(true);
+    const res = await forgetPassword.emailOtp({ email });
+    setLoading(false);
+    if (res.error) {
+      toast.error(res.error.code === "OTP_RATE_LIMITED" ? t.auth.tooManyOtp : t.error.title);
+      return;
+    }
+    // ตอบเหมือนกันเสมอไม่ว่าอีเมลนี้จะมีบัญชีหรือไม่ — ไม่ให้หน้านี้เป็นเครื่องมือตรวจอีเมล
+    setMode("otp");
+    toast.success(t.auth.otpSent);
+  }
+
+  async function submitOtp() {
+    setLoading(true);
+    const res = await signIn.emailOtp({ email, otp });
+    setLoading(false);
+    if (res.error) {
+      toast.error(res.error.message ?? t.error.title);
+      return;
+    }
+    window.location.assign(next);
+  }
 
   async function handleGoogle() {
     setLoading(true);
@@ -68,6 +123,96 @@ export function SignInClient() {
             <GoogleMark />
             {t.common.signInWithGoogle}
           </Button>
+
+          {/* ฟอร์มรหัสผ่านขึ้นเฉพาะตอนอีเมลใช้งานได้จริง — ดู emailReady ใน lib/auth.ts */}
+          {passwordEnabled ? (
+            <>
+              <div className="flex items-center gap-3">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">{t.auth.orDivider}</span>
+                <Separator className="flex-1" />
+              </div>
+
+              {mode === "password" ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="email">{t.auth.email}</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="mt-1.5"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">{t.auth.password}</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      autoComplete={signingUp ? "new-password" : "current-password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="mt-1.5"
+                    />
+                    {signingUp ? (
+                      <p className="mt-1.5 text-xs text-muted-foreground">{t.auth.passwordHint}</p>
+                    ) : null}
+                  </div>
+                  <Button onClick={handlePassword} disabled={loading || !email || !password} className="w-full">
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {signingUp ? t.auth.signUp : t.common.signIn}
+                  </Button>
+                  <div className="flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSigningUp((v) => !v)}
+                      className="text-muted-foreground underline underline-offset-2"
+                    >
+                      {signingUp ? t.auth.haveAccount : t.auth.noAccount}
+                    </button>
+                    {!signingUp ? (
+                      <button
+                        type="button"
+                        onClick={requestOtp}
+                        className="text-muted-foreground underline underline-offset-2"
+                      >
+                        {t.auth.forgot}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="otp">{t.auth.otpTitle}</Label>
+                    <Input
+                      id="otp"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                      placeholder={t.auth.otpCode}
+                      className="tabular mt-1.5 text-center text-lg tracking-widest"
+                    />
+                  </div>
+                  <Button onClick={submitOtp} disabled={loading || otp.length !== 6} className="w-full">
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : null}
+                    {t.auth.otpSubmit}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("password")}
+                    className="w-full text-center text-xs text-muted-foreground underline underline-offset-2"
+                  >
+                    {t.auth.otpBack}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : null}
 
           <p className="text-center text-xs leading-relaxed text-muted-foreground">
             {t.auth.tosNotice}{" "}
