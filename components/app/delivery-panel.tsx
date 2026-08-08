@@ -61,7 +61,14 @@ export function DeliveryPanel({
         // path ต้องขึ้นต้นด้วย `deliveries/<code>/` — ฝั่ง server ปฏิเสธถ้าไม่ตรง
         // (เคยส่ง `_` เป็นตัวยึดที่ ทำให้อัปไฟล์ไม่ผ่านสักครั้ง)
         const blob = await upload(`deliveries/${code}/${crypto.randomUUID()}`, file, {
-          access: "public", // ชนิดใน SDK — store จริงถูกกำหนดโดย endpoint ที่ออก token
+          /**
+           * ⚠️ ต้องเป็น "private" — เคยเขียนว่า "public" พร้อมคอมเมนต์ว่า
+           * "store จริงถูกกำหนดโดย endpoint ที่ออก token" ซึ่ง **ไม่จริง**
+           * @vercel/blob 2.7 ปฏิเสธตรง ๆ ว่า "Cannot use public access on a
+           * private store" การอัปไฟล์ส่งมอบจึงล้มทุกครั้งแม้ token จะออกให้แล้ว
+           * (ตรงกับ `access: "private"` ที่ lib/delivery/register.ts บันทึกลง DB อยู่แล้ว)
+           */
+          access: "private",
           handleUploadUrl: "/api/blob/delivery-upload",
           clientPayload: JSON.stringify({ code }),
           multipart: true,
