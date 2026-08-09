@@ -27,8 +27,11 @@ const FALLBACK_URL = "http://localhost:3450";
  *
  * ทางที่ได้ผลจริงคือปล่อยให้ไต่ได้ตามปกติ แล้วส่ง noindex กลับไปทุกหน้า
  * ตอนพร้อมเปิดจริงให้ลบตัวแปรนี้ออกจาก env แล้ว deploy — ไม่ต้องแก้โค้ด
+ *
+ * ⚠️ `.trim()` ไม่ใช่ของแถม — ตั้งค่าด้วย `echo "1" | vercel env add` ทีเดียว
+ * ค่าที่เก็บกลายเป็น `"1\n"` แล้วเทียบไม่ตรง ฟีเจอร์เลยเงียบไปทั้งอันโดยไม่มี error
  */
-export const IS_STAGING = process.env.SITE_NOINDEX === "1";
+export const IS_STAGING = process.env.SITE_NOINDEX?.trim() === "1";
 
 export function siteUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || FALLBACK_URL;

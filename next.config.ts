@@ -19,7 +19,8 @@ const nextConfig: NextConfig = {
    * เพราะรูปและไฟล์อื่นก็ถูก index แยกได้
    */
   async headers() {
-    if (process.env.SITE_NOINDEX !== "1") return [];
+    // trim ด้วยเหตุผลเดียวกับ IS_STAGING ใน lib/site.ts
+    if (process.env.SITE_NOINDEX?.trim() !== "1") return [];
     return [
       {
         source: "/:path*",
