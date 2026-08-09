@@ -14,6 +14,20 @@ const nextConfig: NextConfig = {
 
   typedRoutes: true,
 
+  /**
+   * รุ่นทดสอบต้องไม่เข้าดัชนี — ส่งหัวข้อนี้ทุก response ไม่ใช่แค่หน้า HTML
+   * เพราะรูปและไฟล์อื่นก็ถูก index แยกได้
+   */
+  async headers() {
+    if (process.env.SITE_NOINDEX !== "1") return [];
+    return [
+      {
+        source: "/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+    ];
+  },
+
   images: {
     // เราย่อ/แปลง WebP ฝั่ง browser ก่อนอัปโหลดอยู่แล้ว (docs/01-architecture.md §5)
     // จึงไม่ต้องเสียโควตา Image Optimization ของ Vercel ซ้ำอีกชั้น

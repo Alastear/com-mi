@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteUrl } from "@/lib/site";
+import { IS_STAGING, siteUrl } from "@/lib/site";
 
 const BASE = siteUrl();
 
@@ -23,6 +23,11 @@ export default function robots(): MetadataRoute.Robots {
         "/api/",
       ],
     },
-    sitemap: `${BASE}/sitemap.xml`,
+    /**
+     * รุ่นทดสอบไม่ประกาศ sitemap — ไม่ต้องชวนบอตมาไต่ทั้งเว็บ
+     * แต่ยัง `allow` ไว้โดยตั้งใจ เพื่อให้บอตอ่าน `X-Robots-Tag: noindex` เจอ
+     * (ดูเหตุผลเต็มที่ `IS_STAGING` ใน lib/site.ts)
+     */
+    ...(IS_STAGING ? {} : { sitemap: `${BASE}/sitemap.xml` }),
   };
 }

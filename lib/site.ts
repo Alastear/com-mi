@@ -17,6 +17,19 @@ export const DEMO_HANDLE = "nongfah";
 
 const FALLBACK_URL = "http://localhost:3450";
 
+/**
+ * เว็บนี้ยังเป็นรุ่นทดสอบหรือยัง — `SITE_NOINDEX=1` คือเปิดโหมดทดสอบ
+ *
+ * ⚠️ **กันการถูก index ด้วย `X-Robots-Tag: noindex` ไม่ใช่ `Disallow: /`**
+ * `Disallow` ห้ามแค่การ "ไต่" ไม่ได้ห้ามการ "เก็บเข้าดัชนี" — URL ที่มีคนลิงก์ถึง
+ * ยังโผล่ในผลค้นหาได้แบบไม่มีเนื้อหา และที่แย่กว่านั้นคือพอห้ามไต่แล้ว
+ * บอตจะ **มองไม่เห็น** คำสั่ง noindex ที่เราส่งไปเลย สองอย่างนี้จึงตีกันเอง
+ *
+ * ทางที่ได้ผลจริงคือปล่อยให้ไต่ได้ตามปกติ แล้วส่ง noindex กลับไปทุกหน้า
+ * ตอนพร้อมเปิดจริงให้ลบตัวแปรนี้ออกจาก env แล้ว deploy — ไม่ต้องแก้โค้ด
+ */
+export const IS_STAGING = process.env.SITE_NOINDEX === "1";
+
 export function siteUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || FALLBACK_URL;
 }
