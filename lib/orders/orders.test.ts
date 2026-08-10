@@ -7,7 +7,7 @@ import {
   isTerminal,
   TransitionError,
 } from "./state-machine";
-import { quoteOrder, type PricingService } from "./pricing";
+import { quoteFromLines, quoteOrder, type PricingService } from "./pricing";
 import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
@@ -502,5 +502,65 @@ describe("ด่านจ่ายเงิน", () => {
   it("ทุกสถานะถูกตัดสินอย่างชัดเจน ไม่มีตัวไหนหลุด", () => {
     // เพิ่มสถานะใหม่แล้วลืมคิดเรื่องเงิน = เทสต์นี้จะเตือน
     for (const s of ORDER_STATUSES) assert.equal(typeof canPay(s), "boolean", s);
+  });
+});
+
+describe("ใบเสนอราคาที่ครีเอเตอร์เขียนเอง", () => {
+  function invariants(q: ReturnType<typeof quoteFromLines>) {
+    assert.equal(q.totalCents, q.subtotalCents + q.addonsCents, "total = subtotal + addons");
+    const sum = q.lines.reduce((n, l) => n + l.unitPriceCents * l.quantity, 0);
+    assert.equal(sum, q.totalCents, "ผลรวมบรรทัดต้องเท่ายอดท้าย");
+    assert.equal(q.totalCents % 100, 0, "ยอดต้องลงตัวเป็นบาท");
+    for (const l of q.lines) assert.ok(Number.isInteger(l.unitPriceCents), l.label);
+  }
+
+  it("รวมบรรทัดถูกและเอกลักษณ์ครบ", () => {
+    const q = quoteFromLines([
+      { label: "ภาพครึ่งตัว", amountCents: 150_000 },
+      { label: "พื้นหลัง", amountCents: 30_000 },
+    ]);
+    assert.equal(q.totalCents, 180_000);
+    assert.equal(q.lines.length, 2);
+    invariants(q);
+  });
+
+  it("บรรทัดที่ไม่มีชื่อถูกทิ้ง ไม่ใช่คิดเป็นของฟรี", () => {
+    const q = quoteFromLines([
+      { label: "งานหลัก", amountCents: 100_000 },
+      { label: "   ", amountCents: 50_000 },
+    ]);
+    assert.equal(q.totalCents, 100_000);
+    assert.equal(q.lines.length, 1);
+    invariants(q);
+  });
+
+  it("เศษสตางค์ถูกปัดเป็นบาทตั้งแต่ต้นทาง", () => {
+    const q = quoteFromLines([{ label: "งาน", amountCents: 150_055 }]);
+    assert.equal(q.totalCents % 100, 0);
+    invariants(q);
+  });
+
+  it("ค่าที่พิมพ์เพี้ยนไม่ทำให้ยอดกลายเป็น NaN", () => {
+    for (const bad of [Number.NaN, Infinity, -Infinity]) {
+      const q = quoteFromLines([{ label: "งาน", amountCents: bad as number }]);
+      assert.ok(Number.isInteger(q.totalCents), String(bad));
+      invariants(q);
+    }
+  });
+
+  it("ใบเปล่าได้ยอดศูนย์ — ซึ่ง canRelease ปฏิเสธอยู่แล้ว", () => {
+    const q = quoteFromLines([]);
+    assert.equal(q.totalCents, 0);
+    assert.equal(canRelease({ totalCents: q.totalCents, amountPaidCents: 0 }), false);
+    invariants(q);
+  });
+
+  it("ส่วนลดเป็นบรรทัดติดลบได้ แต่ยอดรวมยังต้องสมเหตุสมผล", () => {
+    const q = quoteFromLines([
+      { label: "งาน", amountCents: 200_000 },
+      { label: "ส่วนลดลูกค้าเก่า", amountCents: -20_000 },
+    ]);
+    assert.equal(q.totalCents, 180_000);
+    invariants(q);
   });
 });

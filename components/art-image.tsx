@@ -74,11 +74,6 @@ type ArtImageProps = {
    * gradient ยังทำหน้าที่เป็น placeholder ระหว่างรูปจริงโหลดด้วย
    */
   src?: string | null;
-  /**
-   * จุดที่ต้องการให้เห็นเป็นเปอร์เซ็นต์ 0–100 — มาจาก `media.focalX/focalY`
-   * ไม่ส่ง = กึ่งกลาง (พฤติกรรมเดิมของ object-cover)
-   */
-  focal?: { x: number; y: number } | null;
   children?: React.ReactNode;
 };
 
@@ -89,7 +84,6 @@ export function ArtImage({
   ratio = 1,
   rounded = true,
   src,
-  focal,
   children,
 }: ArtImageProps) {
   return (
@@ -119,7 +113,6 @@ export function ArtImage({
             จุดที่เจ้าของรูปเลือกไว้ — ไม่ได้ตั้งก็ปล่อยให้ object-cover จัดกึ่งกลางเอง
             เขียนเป็น style เพราะค่าเป็นตัวเลขอิสระ ไม่ใช่ชุดคลาสที่ Tailwind เตรียมไว้
           */
-          style={focal ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
         />
       ) : (
         /* เกรนบาง ๆ ทำให้ gradient ไม่ดูเพียวเกินไป — ใส่เฉพาะตอนไม่มีรูปจริง */
@@ -150,15 +143,12 @@ export function ArtAvatar({
   alt,
   className,
   src,
-  focal,
 }: {
   seed: string;
   alt: string;
   className?: string;
   /** รูปจาก Google หรือที่อัปโหลดเอง — ไม่มีก็ใช้ gradient จาก seed */
   src?: string | null;
-  /** จุดที่เจ้าของรูปเลือกไว้ — ดู `media.focalX/focalY` */
-  focal?: { x: number; y: number } | null;
 }) {
   return (
     <div
@@ -179,7 +169,6 @@ export function ArtAvatar({
           loading="lazy"
           decoding="async"
           className="absolute inset-0 size-full object-cover"
-          style={focal ? { objectPosition: `${focal.x}% ${focal.y}%` } : undefined}
         />
       ) : null}
     </div>

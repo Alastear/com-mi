@@ -11,6 +11,7 @@ import {
   prepareImage,
 } from "@/lib/media/prepare";
 import { registerMedia } from "@/lib/media/actions";
+import { ImageCropper, type CropTarget } from "@/components/image-cropper";
 import type { PublicMediaKind } from "@/lib/media/kinds";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -27,17 +28,24 @@ export function MediaUploader({
   className,
   label,
   multiple = false,
+  crop,
 }: {
   kind: PublicMediaKind;
   onUploaded: (mediaId: string) => void | Promise<void>;
   className?: string;
   label?: string;
   multiple?: boolean;
+  /**
+   * ใส่แล้วจะเปิดหน้าต่างครอปก่อนอัป — ใช้กับรูปที่มีกรอบตายตัวอย่างแบนเนอร์กับรูปโปรไฟล์
+   * ไม่ใส่ = อัปตามสัดส่วนเดิมของไฟล์ (ผลงานในพอร์ตควรคงสัดส่วนที่ศิลปินตั้งใจ)
+   */
+  crop?: CropTarget;
 }) {
   const t = useDict();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [pendingCrop, setPendingCrop] = useState<File | null>(null);
   const [, startTransition] = useTransition();
 
   async function handleFiles(files: FileList | null) {
@@ -53,6 +61,12 @@ export function MediaUploader({
         if (file.size > MAX_SOURCE_BYTES) {
           toast.error(`${t.media.tooBig} (${formatBytes(MAX_SOURCE_BYTES)})`);
           continue;
+        }
+
+        // มีกรอบตายตัว = ให้คนเลือกเองก่อนว่าจะเอาส่วนไหน แล้วค่อยอัป
+        if (crop) {
+          setPendingCrop(file);
+          return;
         }
 
         const prepared = await prepareImage(file);
@@ -91,7 +105,54 @@ export function MediaUploader({
     }
   }
 
+  /** อัป blob ที่ครอปมาแล้ว — ข้าม prepareImage เพราะครอปคืนขนาดสุดท้ายมาให้แล้ว */
+  async function uploadCropped(blob: Blob) {
+    setPendingCrop(null);
+    setBusy(true);
+    try {
+      const up = await upload(`${kind}/${crypto.randomUUID()}.webp`, blob, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+        contentType: "image/webp",
+        clientPayload: JSON.stringify({ kind }),
+      });
+      const outW = crop?.outputWidth ?? 0;
+      const { id } = await registerMedia({
+        url: up.url,
+        pathname: up.pathname,
+        kind,
+        width: outW,
+        height: crop ? Math.round(outW / crop.ratio) : 0,
+        // ไม่คำนวณ thumbhash ให้รูปที่ครอปแล้ว — ต้องอ่านพิกเซลซ้ำอีกรอบเพื่อ placeholder
+        // ที่แบนเนอร์กับรูปโปรไฟล์แทบไม่ได้ประโยชน์ เพราะโหลดเร็วอยู่แล้วและมี gradient รองอยู่
+        thumbhash: "",
+      });
+      startTransition(() => {
+        void onUploaded(id);
+      });
+    } catch (err) {
+      console.error("[upload]", err);
+      toast.error(t.media.failed);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
   return (
+    <>
+    {crop ? (
+      <ImageCropper
+        file={pendingCrop}
+        target={crop}
+        onCancel={() => {
+          setPendingCrop(null);
+          setBusy(false);
+          if (inputRef.current) inputRef.current.value = "";
+        }}
+        onCropped={uploadCropped}
+      />
+    ) : null}
     <div
       onDragOver={(e) => {
         e.preventDefault();
@@ -136,5 +197,6 @@ export function MediaUploader({
         <span className="text-xs text-muted-foreground">{t.media.hint}</span>
       </label>
     </div>
+    </>
   );
 }

@@ -204,10 +204,10 @@ const th = {
   },
 
   media: {
-    focalLabel: "เลือกตำแหน่งที่จะแสดง",
-    focalHint: "ลากเพื่อเลือกส่วนที่จะแสดง",
-    focalSave: "บันทึกตำแหน่ง",
-    focalSaved: "บันทึกตำแหน่งแล้ว",
+    cropTitle: "จัดตำแหน่งรูป",
+    cropHint: "ลากเพื่อเลื่อน · เลื่อนแถบหรือหมุนล้อเมาส์เพื่อย่อขยาย",
+    cropZoom: "ย่อขยาย",
+    cropConfirm: "ใช้รูปนี้",
     choose: "เลือกรูป หรือลากมาวาง",
     hint: "PNG · JPG · WebP — ระบบย่อและแปลงเป็น WebP ให้ในเบราว์เซอร์ก่อนอัปโหลด",
     uploading: "กำลังอัปโหลด…",
@@ -1098,10 +1098,10 @@ const en: Dictionary = {
   },
 
   media: {
-    focalLabel: "Choose which part shows",
-    focalHint: "Drag to choose what shows",
-    focalSave: "Save position",
-    focalSaved: "Position saved",
+    cropTitle: "Position the image",
+    cropHint: "Drag to move · use the slider or scroll to zoom",
+    cropZoom: "Zoom",
+    cropConfirm: "Use this image",
     choose: "Choose an image, or drop one here",
     hint: "PNG · JPG · WebP — resized and converted to WebP in your browser before upload",
     uploading: "Uploading…",

@@ -39,7 +39,7 @@ export type Selection = {
 
 export type PriceLine = {
   label: string;
-  kind: "base" | "tier" | "option" | "multiplier";
+  kind: "base" | "tier" | "option" | "multiplier" | "custom";
   unitPriceCents: number;
   quantity: number;
   sourceId: string | null;
@@ -228,4 +228,63 @@ export function quoteOrder(service: PricingService, selection: Selection): Quote
     addonsCents,
     totalCents: subtotalCents + addonsCents,
   };
+}
+
+/* ── ใบเสนอราคาที่ครีเอเตอร์เขียนเอง ────────────────────────────────── */
+
+export type QuoteLineInput = {
+  label: string;
+  /** จำนวนเงินของบรรทัดนี้ หน่วยสตางค์ — ครีเอเตอร์กรอกเป็นบาทแล้วแปลงที่ขอบฟอร์ม */
+  amountCents: number;
+};
+
+/**
+ * ประกอบใบเสนอราคาจากบรรทัดที่ครีเอเตอร์เขียน
+ *
+ * เป็นสูตรราคา **ตัวที่สอง** ของระบบ ต่างจาก `quoteOrder` ที่คิดจากเมนู —
+ * ตัวนี้รับตัวเลขที่คนพิมพ์มาตรง ๆ จึงต้องถูกบังคับด้วยเอกลักษณ์ชุดเดียวกัน
+ * ไม่งั้นจะมีสองนิยามของคำว่า "ราคาออเดอร์" ที่เพี้ยนออกจากกันได้:
+ *
+ *   1. `totalCents === subtotalCents + addonsCents`
+ *   2. ผลรวมของทุกบรรทัดเท่ากับ `totalCents`
+ *   3. ทุกยอดลงตัวเป็นบาท
+ *
+ * ทำให้ข้อ 1 จริงด้วยการยกทุกบรรทัดเป็น `subtotal` และให้ `addons` เป็นศูนย์ —
+ * ใบเสนอราคาที่เขียนเองไม่มีแนวคิด "ของเสริม" แยกจาก "ค่างานหลัก" อยู่แล้ว
+ * ทุกบรรทัดคือสิ่งที่ตกลงกันมา ไม่ได้มาจากเมนู
+ */
+/** ทำให้เป็นจำนวนเต็มสตางค์ที่ลงตัวเป็นบาท — ค่าที่ไม่ใช่ตัวเลขจำกัดกลายเป็น 0 */
+function toBaht(value: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(Math.trunc(n) / 100) * 100;
+}
+
+export function quoteFromLines(lines: readonly QuoteLineInput[]): Quote {
+  const clean = lines
+    .map((l) => ({
+      label: l.label.trim(),
+      /**
+       * ปัดเป็นบาทเต็มตั้งแต่ต้นทาง เอกลักษณ์ข้อ 3 จึงจริงโดยโครงสร้าง ไม่ใช่โดยบังเอิญ
+       *
+       * ⚠️ ต้องเช็ค `isFinite` ไม่ใช่แค่ `|| 0` — `Math.trunc(Infinity)` คือ `Infinity`
+       * และ `Infinity || 0` ก็ยังเป็น `Infinity` ยอดรวมจะกลายเป็น Infinity ทั้งใบ
+       * (`NaN` ตกที่ `|| 0` ได้ แต่ `Infinity` ไม่ตก — เทสต์จับได้ตอนเขียนพอดี)
+       */
+      amountCents: toBaht(l.amountCents),
+    }))
+    // บรรทัดไม่มีชื่อคือช่องที่ผู้ใช้เผลอเว้นไว้ ไม่ใช่ของฟรี — ทิ้งไปทั้งบรรทัด
+    .filter((l) => l.label.length > 0 && l.amountCents !== 0);
+
+  const priceLines: PriceLine[] = clean.map((l) => ({
+    label: l.label,
+    kind: "custom",
+    unitPriceCents: l.amountCents,
+    quantity: 1,
+    sourceId: null,
+  }));
+
+  const subtotalCents = priceLines.reduce((n, l) => n + l.unitPriceCents, 0);
+
+  return { lines: priceLines, subtotalCents, addonsCents: 0, totalCents: subtotalCents };
 }

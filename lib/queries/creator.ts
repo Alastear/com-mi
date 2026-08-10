@@ -201,8 +201,8 @@ export async function listPublicShops(
     columns: { id: true, displayName: true, tagline: true, status: true },
     with: {
       user: { columns: { handle: true } },
-      banner: { columns: { url: true, focalX: true, focalY: true } },
-      avatar: { columns: { url: true, focalX: true, focalY: true } },
+      banner: { columns: { url: true } },
+      avatar: { columns: { url: true } },
       services: {
         where: and(eq(schema.service.isActive, true), isNull(schema.service.deletedAt)),
         orderBy: [asc(schema.service.basePriceCents)],
