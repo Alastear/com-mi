@@ -77,11 +77,6 @@ export function PricingClient() {
             </button>
           ))}
         </div>
-        {cycle === "yearly" && (
-          <Badge variant="secondary" className="ml-3 self-center">
-            {t.pricing.yearlyBadge}
-          </Badge>
-        )}
       </div>
 
       {/* การ์ดแพ็กเกจ */}
@@ -114,21 +109,35 @@ export function PricingClient() {
               ปุ่มพาไป /dashboard เหมือนเดิมและตอนนี้ตรงกับความจริงแล้ว — ยังไม่มีอะไรให้จ่าย
               (ก่อนหน้านี้เขียนว่า "เลือกแพ็กเกจนี้" ทั้งที่กดแล้วไม่มีอะไรเกิดขึ้น)
             */}
-            <p className="tabular mt-5 flex items-baseline gap-1">
-              {/*
-                Free ฟรีถาวรอยู่แล้ว เขียนว่า "ทดลองใช้ฟรี" จะกลายเป็นบอกว่าเดี๋ยวจะหมดอายุ
-                ช่วงเบต้าจึงมีผลกับแพ็กเกจที่มีราคาเท่านั้น
-              */}
-              <span className="text-3xl font-semibold">
-                {tier.price > 0 ? t.pricing.betaPrice : formatMoney(0, "THB", locale)}
-              </span>
-            </p>
-            {tier.price > 0 ? (
-              <p className="tabular mt-1 text-sm text-muted-foreground">
-                {t.pricing.betaLater} {formatMoney(tier.price, "THB", locale)}
-                {cycle === "monthly" ? t.pricing.perMonth : t.pricing.perYear}
+            {/*
+              บล็อกราคาสูงเท่ากันทั้งสองการ์ดเพื่อให้ปุ่มอยู่ระนาบเดียวกัน
+              Pro มีบรรทัด "ราคาหลังหมดช่วงเบต้า" ส่วน Free ไม่มี — ถ้าไม่กันที่ไว้
+              ปุ่มของ Free จะลอยสูงกว่าและอ่านแล้วเหมือนสองการ์ดคนละชุด
+              กันที่ด้วย min-h ไม่ใช่ใส่บรรทัดเปล่า เพราะบรรทัดเปล่าโปรแกรมอ่านหน้าจอจะอ่านออกมาด้วย
+            */}
+            <div className="mt-5 flex min-h-20 flex-col justify-start">
+              <p className="tabular flex items-baseline gap-1">
+                {/*
+                  Free ฟรีถาวรอยู่แล้ว เขียนว่า "ทดลองใช้ฟรี" จะกลายเป็นบอกว่าเดี๋ยวจะหมดอายุ
+                  ช่วงเบต้าจึงมีผลกับแพ็กเกจที่มีราคาเท่านั้น
+                */}
+                <span className="text-3xl font-semibold">
+                  {tier.price > 0 ? t.pricing.betaPrice : formatMoney(0, "THB", locale)}
+                </span>
               </p>
-            ) : null}
+              {tier.price > 0 ? (
+                <p className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                  <span>
+                    {t.pricing.betaLater} {formatMoney(tier.price, "THB", locale)}
+                    {cycle === "monthly" ? t.pricing.perMonth : t.pricing.perYear}
+                  </span>
+                  {/* ป้ายส่วนลดอยู่ติดกับราคาที่มันลด ไม่ใช่ลอยอยู่ข้างปุ่มสลับ */}
+                  {cycle === "yearly" ? (
+                    <Badge variant="secondary">{t.pricing.yearlyBadge}</Badge>
+                  ) : null}
+                </p>
+              ) : null}
+            </div>
 
             <Button
               asChild
