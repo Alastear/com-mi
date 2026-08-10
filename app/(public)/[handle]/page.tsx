@@ -33,6 +33,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+/** คอลัมน์คู่ → จุดเดียว · null เมื่อยังไม่เคยตั้ง ให้ object-cover จัดกึ่งกลางเอง */
+function focalOf(m: { focalX: number | null; focalY: number | null } | null | undefined) {
+  return m && m.focalX !== null && m.focalY !== null ? { x: m.focalX, y: m.focalY } : null;
+}
+
 export default async function CreatorPage({ params }: Props) {
   const { handle } = await params;
   // ต้องอยู่ในตัวหน้า ไม่ใช่ generateMetadata — redirect จาก metadata ไม่มีผลกับ response
@@ -79,6 +84,7 @@ export default async function CreatorPage({ params }: Props) {
         <ArtImage
           seed={shop.id}
           src={shop.banner?.url}
+          focal={focalOf(shop.banner)}
           alt=""
           rounded={false}
           className="h-40 w-full sm:h-52 sm:rounded-2xl lg:h-60"
@@ -98,6 +104,7 @@ export default async function CreatorPage({ params }: Props) {
             <ArtAvatar
               seed={shop.userId}
               src={avatarSrc}
+              focal={focalOf(shop.avatar)}
               alt={shop.displayName}
               className="size-24 ring-4 ring-background sm:size-28"
             />

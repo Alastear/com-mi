@@ -19,6 +19,11 @@ import { SERVICE_KINDS, type ShopStatus } from "@/lib/types";
  * เดิมหน้านี้ปั้นครีเอเตอร์ปลอมสามคนจากข้อมูลจำลองชุดเดียว ซึ่งกดเข้าไปแล้ว 404 ทั้งหมด
  * ยอมให้หน้าว่างดีกว่าโชว์ร้านที่ไม่มีตัวตน — คนกดแล้วเจอหน้าเสียจะไม่กลับมาอีก
  */
+/** คอลัมน์คู่ → จุดเดียว (ดู lib/db/schema/app.ts → media.focalX) */
+function focalOf(m: { focalX: number | null; focalY: number | null } | null | undefined) {
+  return m && m.focalX !== null && m.focalY !== null ? { x: m.focalX, y: m.focalY } : null;
+}
+
 export default async function ExplorePage(props: PageProps<"/explore">) {
   const locale = await getLocale();
   const t = getDictionary(locale);
@@ -109,6 +114,7 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
                   <ArtImage
                     seed={c.id}
                     src={c.banner?.url}
+                    focal={focalOf(c.banner)}
                     alt=""
                     ratio={2.6}
                     rounded={false}
@@ -118,6 +124,7 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
                     <ArtAvatar
                       seed={c.id + "-avatar"}
                       src={c.avatar?.url}
+                      focal={focalOf(c.avatar)}
                       alt={c.displayName}
                       className="size-14 ring-4 ring-card"
                     />

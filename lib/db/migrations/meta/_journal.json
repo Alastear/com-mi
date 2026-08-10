@@ -99,6 +99,13 @@
       "when": 1786198397599,
       "tag": "0013_green_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1786353312398,
+      "tag": "0014_soft_marvel_boy",
+      "breakpoints": true
     }
   ]
 }

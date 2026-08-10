@@ -204,6 +204,10 @@ const th = {
   },
 
   media: {
+    focalLabel: "เลือกตำแหน่งที่จะแสดง",
+    focalHint: "ลากเพื่อเลือกส่วนที่จะแสดง",
+    focalSave: "บันทึกตำแหน่ง",
+    focalSaved: "บันทึกตำแหน่งแล้ว",
     choose: "เลือกรูป หรือลากมาวาง",
     hint: "PNG · JPG · WebP — ระบบย่อและแปลงเป็น WebP ให้ในเบราว์เซอร์ก่อนอัปโหลด",
     uploading: "กำลังอัปโหลด…",
@@ -1094,6 +1098,10 @@ const en: Dictionary = {
   },
 
   media: {
+    focalLabel: "Choose which part shows",
+    focalHint: "Drag to choose what shows",
+    focalSave: "Save position",
+    focalSaved: "Position saved",
     choose: "Choose an image, or drop one here",
     hint: "PNG · JPG · WebP — resized and converted to WebP in your browser before upload",
     uploading: "Uploading…",

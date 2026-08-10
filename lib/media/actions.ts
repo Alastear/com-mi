@@ -187,3 +187,35 @@ export async function removePortfolioItem(itemId: string) {
   revalidatePath("/portfolio");
   if (user.handle) revalidatePath(`/${user.handle}`);
 }
+
+/**
+ * บันทึกจุดที่เจ้าของรูปอยากให้เห็น
+ *
+ * เก็บเป็นเปอร์เซ็นต์ไม่ใช่พิกเซล เพราะรูปถูกย่อก่อนอัปโหลดและกรอบที่แสดง
+ * ก็เปลี่ยนความสูงตามขนาดจอ — เปอร์เซ็นต์เป็นค่าเดียวที่ยังหมายถึงจุดเดิมเสมอ
+ *
+ * ไม่แตะไฟล์ต้นฉบับเลย ครีเอเตอร์จึงเลื่อนกี่ครั้งก็ได้โดยไม่ต้องอัปใหม่
+ * และย้อนกลับได้ตลอด ต่างจากการครอปทิ้งซึ่งทำครั้งเดียวจบ
+ */
+export async function setMediaFocal(
+  mediaId: string,
+  focal: { x: number; y: number },
+): Promise<{ ok: boolean }> {
+  const { user } = await requireCreator();
+  const db = getDb();
+
+  // ปัดเข้าในช่วง 0–100 แทนที่จะปฏิเสธ — ค่าที่เกินมาจากการลากเลยขอบ ไม่ใช่เจตนาร้าย
+  const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(Number(n) || 0)));
+
+  const updated = await db
+    .update(schema.media)
+    .set({ focalX: clamp(focal.x), focalY: clamp(focal.y) })
+    // เงื่อนไขเจ้าของอยู่ใน where ไม่ใช่อ่านมาเช็คก่อน — เขียนทับรูปคนอื่นไม่ได้เลย
+    .where(and(eq(schema.media.id, mediaId), eq(schema.media.ownerUserId, user.id)))
+    .returning({ id: schema.media.id });
+
+  if (updated.length === 0) return { ok: false };
+
+  revalidatePath("/shop");
+  return { ok: true };
+}

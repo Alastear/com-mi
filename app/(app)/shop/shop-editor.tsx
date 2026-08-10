@@ -18,6 +18,7 @@ import { shopUrl, shopUrlDisplay } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { saveShop, setPublished, type SaveShopResult } from "./actions";
 import { MediaUploader } from "@/components/media-uploader";
+import { FocalPicker } from "@/components/focal-picker";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { setShopImage } from "@/lib/media/actions";
 import { useRouter } from "next/navigation";
@@ -37,6 +38,10 @@ export function ShopEditor({
     id: string;
     bannerUrl: string | null;
     avatarUrl: string | null;
+    bannerMediaId: string | null;
+    avatarMediaId: string | null;
+    bannerFocal: { x: number; y: number } | null;
+    avatarFocal: { x: number; y: number } | null;
     displayName: string;
     tagline: string;
     about: string;
@@ -118,13 +123,27 @@ export function ShopEditor({
       {/* รูปหน้าร้าน */}
       <Card className="mt-5 gap-4 p-5">
         <p className="font-medium">{t.media.banner}</p>
-        <ArtImage
-          seed={shop.id}
-          src={shop.bannerUrl}
-          alt={t.media.banner}
-          ratio={null}
-          className="h-32 w-full sm:h-40"
-        />
+        {/*
+          มีรูปแล้วให้ลากเลือกตำแหน่งได้เลย ตัวเลือกตำแหน่งทำหน้าที่พรีวิวไปในตัว
+          จึงไม่ต้องมี ArtImage อีกอันมาแสดงซ้ำ
+          สัดส่วน 4.4 ใกล้เคียงแบนเนอร์จริงบนจอใหญ่ (max-w-6xl กว้าง ~1152 สูง h-60 = 240)
+        */}
+        {shop.bannerMediaId && shop.bannerUrl ? (
+          <FocalPicker
+            mediaId={shop.bannerMediaId}
+            src={shop.bannerUrl}
+            ratio={4.4}
+            initial={shop.bannerFocal}
+          />
+        ) : (
+          <ArtImage
+            seed={shop.id}
+            src={shop.bannerUrl}
+            alt={t.media.banner}
+            ratio={null}
+            className="h-32 w-full sm:h-40"
+          />
+        )}
         <MediaUploader
           kind="banner"
           label={t.media.banner}
@@ -139,12 +158,24 @@ export function ShopEditor({
 
         <p className="font-medium">{t.media.avatar}</p>
         <div className="flex items-center gap-4">
-          <ArtAvatar
-            seed={handle}
-            src={shop.avatarUrl}
-            alt={t.media.avatar}
-            className="size-20 shrink-0"
-          />
+          {shop.avatarMediaId && shop.avatarUrl ? (
+            <div className="w-40 shrink-0">
+              <FocalPicker
+                mediaId={shop.avatarMediaId}
+                src={shop.avatarUrl}
+                ratio={1}
+                circle
+                initial={shop.avatarFocal}
+              />
+            </div>
+          ) : (
+            <ArtAvatar
+              seed={handle}
+              src={shop.avatarUrl}
+              alt={t.media.avatar}
+              className="size-20 shrink-0"
+            />
+          )}
           <MediaUploader
             kind="avatar"
             label={t.media.avatar}

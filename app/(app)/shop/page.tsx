@@ -6,6 +6,11 @@ import { starterTos } from "@/lib/templates/starter-shop";
 import { getLocale } from "@/lib/i18n/server";
 import { ShopEditor } from "./shop-editor";
 
+/** แปลงคอลัมน์คู่ให้เป็นจุดเดียว — null เมื่อยังไม่เคยตั้ง แล้วให้ object-cover จัดกึ่งกลางเอง */
+function focalOf(m: { focalX: number | null; focalY: number | null } | null | undefined) {
+  return m && m.focalX !== null && m.focalY !== null ? { x: m.focalX, y: m.focalY } : null;
+}
+
 export default async function ShopPage() {
   const { user } = await requireCreator();
 
@@ -24,6 +29,11 @@ export default async function ShopPage() {
         id: shop.id,
         bannerUrl: shop.banner?.url ?? null,
         avatarUrl: shop.avatar?.url ?? user.image ?? null,
+        bannerMediaId: shop.bannerMediaId,
+        avatarMediaId: shop.avatarMediaId,
+        // จุดโฟกัสมีค่าก็ต่อเมื่อตั้งไว้ทั้งคู่ — ตั้งครึ่งเดียวไม่มีความหมาย
+        bannerFocal: focalOf(shop.banner),
+        avatarFocal: focalOf(shop.avatar),
         displayName: shop.displayName,
         tagline: shop.tagline,
         about: shop.about,
