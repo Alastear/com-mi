@@ -10,7 +10,7 @@ import { getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
-import { depositSatisfied } from "@/lib/orders/release";
+import { canPay, depositSatisfied } from "@/lib/orders/release";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { readDelivery } from "@/lib/delivery/read";
@@ -140,6 +140,17 @@ export default async function ClientRequestPage({ params }: Props) {
         />
       </div>
 
+      {/*
+        ก่อนครีเอเตอร์ตอบรับ ไม่ต้องมีช่องทางจ่ายเงินให้เห็นเลย
+        โอนไปก่อนแล้วครีเอเตอร์ปฏิเสธงาน = เงินอยู่บัญชีเขาแล้วและเราคืนให้ไม่ได้
+        (แพลตฟอร์มไม่ได้ถือเงิน) — ด่านจริงอยู่ที่ `recordPayment` ตรงนี้แค่ไม่ล่อให้จ่าย
+      */}
+      {!canPay(order.status as OrderStatus) ? (
+        <Card className="mt-4 gap-1.5 p-6">
+          <p className="font-medium">{t.payment.awaitingApproval}</p>
+          <p className="text-sm text-muted-foreground">{t.payment.awaitingApprovalBody}</p>
+        </Card>
+      ) : (
       <Card className="mt-4 gap-3 p-6">
         <p className="font-medium">{t.payment.title}</p>
         <PaymentPanel
@@ -169,6 +180,7 @@ export default async function ClientRequestPage({ params }: Props) {
           }
         />
       </Card>
+      )}
 
       {delivery ? (
         <Card className="mt-4 gap-3 p-6">

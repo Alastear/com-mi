@@ -1,3 +1,5 @@
+import type { OrderStatus } from "@/lib/types";
+
 /**
  * เงื่อนไข "จ่ายครบแล้ว" — จุดเดียวในระบบ
  *
@@ -18,4 +20,30 @@ export function depositSatisfied(order: {
   amountPaidCents: number;
 }): boolean {
   return order.depositCents === 0 || order.amountPaidCents >= order.depositCents;
+}
+
+/**
+ * ออเดอร์นี้รับเงินได้หรือยัง — **ครีเอเตอร์ต้องตอบรับก่อนเสมอ**
+ *
+ * เดิมแผงจ่ายเงินกับ QR พร้อมเพย์แสดงตลอดโดยไม่ดูสถานะเลย ลูกค้าจึงโอนได้ทันที
+ * ที่กดส่งคำขอ ก่อนครีเอเตอร์จะทันเห็นด้วยซ้ำ ซึ่งพังได้จริงสองทาง:
+ * ครีเอเตอร์ปฏิเสธงานทีหลังแล้วเงินโอนไปแล้ว (แพลตฟอร์มไม่ได้ถือเงิน คืนให้ไม่ได้)
+ * หรือครีเอเตอร์อยากปรับราคาก่อน แต่ลูกค้าจ่ายราคาเดิมไปแล้ว
+ *
+ * เขียนเป็นรายการที่ "อนุญาต" ไม่ใช่รายการที่ "ห้าม" — สถานะใหม่ที่เพิ่มทีหลัง
+ * จะถูกปฏิเสธไว้ก่อนจนกว่าจะมีคนตัดสินใจ ดีกว่าเปิดรับเงินโดยไม่มีใครคิดถึง
+ *
+ * `completed` ยังจ่ายได้ เพราะงานที่แบ่งจ่ายมักเคลียร์ยอดหลังรับงาน
+ */
+const PAYABLE_STATUSES: readonly OrderStatus[] = [
+  "accepted",
+  "in_progress",
+  "in_review",
+  "revision_requested",
+  "delivered",
+  "completed",
+];
+
+export function canPay(status: OrderStatus): boolean {
+  return PAYABLE_STATUSES.includes(status);
 }

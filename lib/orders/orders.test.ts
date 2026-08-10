@@ -12,7 +12,7 @@ import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
 import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
-import { canRelease, depositSatisfied } from "./release";
+import { canPay, canRelease, depositSatisfied } from "./release";
 import { deliveryPrefix, isDeliveryPath } from "@/lib/delivery/path";
 
 /**
@@ -477,5 +477,30 @@ describe("ที่อยู่ไฟล์ส่งมอบ", () => {
     for (const bad of ["deliveries/", "deliveries/D982XU43", "other/D982XU43/x", "/deliveries/D982XU43/x"]) {
       assert.equal(isDeliveryPath(bad, "D982XU43"), false, bad);
     }
+  });
+});
+
+describe("ด่านจ่ายเงิน", () => {
+  it("จ่ายไม่ได้ก่อนครีเอเตอร์ตอบรับ", () => {
+    for (const s of ["requested", "reviewing", "quoted"] as const) {
+      assert.equal(canPay(s), false, s);
+    }
+  });
+
+  it("จ่ายได้ตั้งแต่ตอบรับจนถึงรับงานเสร็จ", () => {
+    for (const s of ["accepted", "in_progress", "in_review", "revision_requested", "delivered", "completed"] as const) {
+      assert.equal(canPay(s), true, s);
+    }
+  });
+
+  it("ออเดอร์ที่ตายแล้วรับเงินไม่ได้", () => {
+    for (const s of ["declined", "cancelled", "expired"] as const) {
+      assert.equal(canPay(s), false, s);
+    }
+  });
+
+  it("ทุกสถานะถูกตัดสินอย่างชัดเจน ไม่มีตัวไหนหลุด", () => {
+    // เพิ่มสถานะใหม่แล้วลืมคิดเรื่องเงิน = เทสต์นี้จะเตือน
+    for (const s of ORDER_STATUSES) assert.equal(typeof canPay(s), "boolean", s);
   });
 });

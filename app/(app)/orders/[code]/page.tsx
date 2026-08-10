@@ -17,7 +17,7 @@ import { toPaymentRows } from "@/lib/payments/rows";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { readDelivery } from "@/lib/delivery/read";
-import { canRelease } from "@/lib/orders/release";
+import { canPay, canRelease } from "@/lib/orders/release";
 import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
@@ -165,6 +165,15 @@ export default async function OrderPage({ params }: Props) {
             </div>
           </Card>
 
+          {/* ก่อนตอบรับ ลูกค้ายังจ่ายไม่ได้ — บอกครีเอเตอร์ตรง ๆ ว่าปุ่มไหนเป็นตัวปลด */}
+          {!canPay(order.status as OrderStatus) ? (
+            <Card className="gap-1.5 p-5">
+              <p className="text-sm font-medium">{t.payment.title}</p>
+              <p className="text-sm text-muted-foreground">
+                {t.payment.awaitingApprovalCreator}
+              </p>
+            </Card>
+          ) : (
           <Card className="gap-3 p-5">
             <p className="text-sm font-medium">{t.payment.title}</p>
             <PaymentPanel
@@ -179,6 +188,7 @@ export default async function OrderPage({ params }: Props) {
               hasPayout={Boolean(order.page.promptpayId)}
             />
           </Card>
+          )}
 
           <Card className="gap-3 p-5">
             <DeliveryPanel

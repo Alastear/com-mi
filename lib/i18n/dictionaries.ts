@@ -308,6 +308,9 @@ const th = {
    * ทั้งคู่มีไว้กันเคสที่ทำให้ผู้ใช้เสียเงินจริง (docs/00 §5.2.1)
    */
   payment: {
+    awaitingApproval: "รอครีเอเตอร์ตอบรับ",
+    awaitingApprovalBody: "ยังไม่ต้องโอนตอนนี้ — ครีเอเตอร์จะตรวจงานและยืนยันราคาก่อน แล้วช่องทางชำระเงินจะขึ้นให้เอง",
+    awaitingApprovalCreator: "ลูกค้ายังจ่ายไม่ได้จนกว่าคุณจะกดรับงาน — ปรับราคาให้ตรงกับที่ตกลงกันก่อนได้",
     title: "การชำระเงิน",
     qrAlt: "QR PromptPay สำหรับโอนเงิน",
     scanToPay: "สแกนเพื่อโอน",
@@ -1185,6 +1188,9 @@ const en: Dictionary = {
   },
 
   payment: {
+    awaitingApproval: "Waiting for the creator",
+    awaitingApprovalBody: "Nothing to pay yet — the creator will look at the brief and confirm the price, then payment opens up here.",
+    awaitingApprovalCreator: "The client cannot pay until you take this on — adjust the price to match what you agreed first.",
     title: "Payment",
     qrAlt: "PromptPay QR code",
     scanToPay: "Scan to pay",

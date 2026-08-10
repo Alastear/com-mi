@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { isTerminal } from "@/lib/orders/state-machine";
+import { canPay } from "@/lib/orders/release";
 import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
 import { notify } from "@/lib/notifications/create";
@@ -72,15 +72,15 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
   if (!order) return { ok: false, error: "not_found" };
 
   /**
-   * ออเดอร์ที่จบไปแล้วรับเงินเพิ่มไม่ได้
+   * รับเงินได้เฉพาะออเดอร์ที่ครีเอเตอร์ตอบรับแล้วและยังไม่ตาย
    *
-   * เดิมไม่ได้อ่านสถานะเลย — แจ้งโอนเข้าออเดอร์ที่ยกเลิก ปฏิเสธ หรือหมดอายุไปแล้วได้
-   * ซึ่งทำให้ `amountPaidCents` ของออเดอร์ที่ตายแล้วขยับ และบัญชีเงินของออเดอร์นั้น
-   * เล่าเรื่องที่ไม่เคยเกิดขึ้น
+   * ครอบสองเรื่องพร้อมกัน (ดู `canPay` ใน lib/orders/release.ts):
+   *   ยังไม่ตอบรับ — ลูกค้าโอนก่อนที่ครีเอเตอร์จะได้ดูงานหรือปรับราคา
+   *   ตายแล้ว      — ยกเลิก/ปฏิเสธ/หมดอายุ แล้วยังมีเงินขยับ
    *
-   * ไม่รวม `completed` — จ่ายส่วนที่เหลือหลังรับงานเป็นเรื่องปกติของงานที่แบ่งจ่าย
+   * ⚠️ ด่านนี้ต้องอยู่ที่นี่ ไม่ใช่แค่ซ่อนปุ่มในหน้าเว็บ — Server Action ยิงตรงได้
    */
-  if (isTerminal(order.status as OrderStatus) && order.status !== "completed") {
+  if (!canPay(order.status as OrderStatus)) {
     return { ok: false, error: "order_closed" };
   }
 
