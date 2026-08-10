@@ -56,32 +56,38 @@ export async function emailNotification(input: EmailInput): Promise<void> {
   const t = getDictionary(locale);
   const e = t.email;
 
-  const subject = fill(
-    input.type === "order_created"
-      ? e.orderCreatedSubject
-      : input.type === "payment_reported"
-        ? e.paymentReportedSubject
-        : input.type === "payment_recorded_by_creator"
-          ? e.paymentRecordedSubject
-          : e.paymentConfirmedSubject,
-    input.data,
-  );
+  /**
+   * จับคู่ชนิด → ข้อความแบบตารางตายตัว
+   *
+   * เดิมเป็นสายเทอร์นารีที่ปลายทางสุดท้ายคือ "ยืนยันเงินเข้า" — ชนิดใดก็ตามที่ถูกเพิ่ม
+   * เข้า `EMAIL_WORTHY` โดยลืมเพิ่มสาขา จะไม่ได้ "ไม่ส่งอีเมล" แต่จะ **ส่งอีเมล
+   * ยืนยันเงินเข้าให้ลูกค้า** เรื่องผิดชนิดไปเลย ตารางนี้ทำให้ลืมแล้วเงียบไม่ได้
+   */
+  const TEMPLATES: Partial<Record<NotificationType, { subject: string; body: string }>> = {
+    order_created: { subject: e.orderCreatedSubject, body: e.orderCreatedBody },
+    payment_reported: { subject: e.paymentReportedSubject, body: e.paymentReportedBody },
+    payment_recorded_by_creator: {
+      subject: e.paymentRecordedSubject,
+      body: e.paymentRecordedBody,
+    },
+    payment_confirmed: { subject: e.paymentConfirmedSubject, body: e.paymentConfirmedBody },
+  };
+
+  const template = TEMPLATES[input.type];
+  if (!template) {
+    // อยู่ใน EMAIL_WORTHY แต่ไม่มีข้อความ — เงียบไว้ดีกว่าส่งเรื่องผิด แต่ต้องรู้ว่าเกิด
+    console.error("[email] ไม่มีข้อความสำหรับชนิด:", input.type);
+    return;
+  }
+
+  const subject = fill(template.subject, input.data);
 
   const amount =
     typeof input.data.amount === "number"
       ? formatMoney(input.data.amount, "THB", locale)
       : String(input.data.amount ?? "");
 
-  const body = fill(
-    input.type === "order_created"
-      ? e.orderCreatedBody
-      : input.type === "payment_reported"
-        ? e.paymentReportedBody
-        : input.type === "payment_recorded_by_creator"
-          ? e.paymentRecordedBody
-          : e.paymentConfirmedBody,
-    { ...input.data, amount },
-  );
+  const body = fill(template.body, { ...input.data, amount });
 
   const { html, text } = emailLayout({
     heading: subject,

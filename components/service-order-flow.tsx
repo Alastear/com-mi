@@ -428,8 +428,13 @@ export function ServiceOrderFlow({
                   <ShieldCheck className="size-4 text-primary" />
                   {t.creator.tosTitle}
                 </p>
-                <ol className="space-y-2 text-sm text-muted-foreground">
-                  {shop.tos.slice(0, 3).map((line, i) => (
+                {/*
+                  ⚠️ ห้าม slice — เคยโชว์แค่ 3 ข้อแรกทั้งที่ `createOrder` แช่ทั้งอาร์เรย์
+                  ลงใน `tosSnapshot` ลูกค้าจึงติ๊ก "ยอมรับ" กับข้อที่ไม่เคยเห็น
+                  ยาวก็ให้เลื่อนเอา ดีกว่าผูกพันคนกับสิ่งที่เราไม่ได้แสดง
+                */}
+                <ol className="max-h-56 space-y-2 overflow-y-auto text-sm text-muted-foreground">
+                  {shop.tos.map((line, i) => (
                     <li key={line} className="flex gap-2">
                       <span className="tabular">{i + 1}.</span>
                       <span>{line}</span>

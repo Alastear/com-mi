@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
@@ -112,17 +112,27 @@ export async function unsuspendShop(input: z.input<typeof Target>): Promise<Admi
  */
 async function paidButUndelivered(userId: string): Promise<number> {
   const db = getDb();
+  /**
+   * ⚠️ ต้องเป็น "ไม่มีแถวไหนที่ปล่อยแล้ว" ไม่ใช่ join แล้วดูว่ามีแถวที่ยังไม่ปล่อย
+   *
+   * ออเดอร์หนึ่งใบมี `delivery` ได้หลายแถว — trigger ในฐานข้อมูลบอกให้สร้างแถวใหม่
+   * แทนการแก้แถวที่ปล่อยไปแล้ว รอบแก้งานจึงเพิ่มแถวเสมอ
+   * ถ้า leftJoin แล้วกรอง `released_at is null` ออเดอร์ที่ส่งงานไปแล้วและกำลังแก้อยู่
+   * จะถูกนับว่า "ลูกค้ายังไม่ได้ไฟล์" ทั้งที่ได้ไปแล้ว — บล็อกเกินความจำเป็น
+   */
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(schema.order)
     .innerJoin(schema.creatorPage, eq(schema.creatorPage.id, schema.order.creatorPageId))
-    .leftJoin(schema.delivery, eq(schema.delivery.orderId, schema.order.id))
     .where(
       and(
         eq(schema.creatorPage.userId, userId),
         gt(schema.order.totalCents, 0),
         sql`${schema.order.amountPaidCents} >= ${schema.order.totalCents}`,
-        isNull(schema.delivery.releasedAt),
+        sql`not exists (
+          select 1 from ${schema.delivery} d
+          where d.order_id = ${schema.order.id} and d.released_at is not null
+        )`,
       ),
     );
   return row?.n ?? 0;

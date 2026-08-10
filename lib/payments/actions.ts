@@ -6,6 +6,8 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
+import { isTerminal } from "@/lib/orders/state-machine";
+import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
 import { notify } from "@/lib/notifications/create";
 
@@ -34,13 +36,13 @@ const RecordSchema = z.object({
 
 export type PaymentResult =
   | { ok: true }
-  | { ok: false; error: "unauthenticated" | "not_found" | "invalid" | "forbidden" };
+  | { ok: false; error: "unauthenticated" | "not_found" | "invalid" | "forbidden" | "order_closed" };
 
 /** ผู้เกี่ยวข้องกับออเดอร์ใบนี้ — ใช้ซ้ำทั้งสอง action */
 async function resolveOrder(code: string, userId: string) {
   const order = await getDb().query.order.findFirst({
     where: eq(schema.order.code, code),
-    columns: { id: true, code: true, clientUserId: true, totalCents: true },
+    columns: { id: true, code: true, clientUserId: true, totalCents: true, status: true },
     with: { page: { columns: { userId: true } } },
   });
   if (!order) return null;
@@ -68,6 +70,19 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
 
   const order = await resolveOrder(v.code, session.user.id);
   if (!order) return { ok: false, error: "not_found" };
+
+  /**
+   * ออเดอร์ที่จบไปแล้วรับเงินเพิ่มไม่ได้
+   *
+   * เดิมไม่ได้อ่านสถานะเลย — แจ้งโอนเข้าออเดอร์ที่ยกเลิก ปฏิเสธ หรือหมดอายุไปแล้วได้
+   * ซึ่งทำให้ `amountPaidCents` ของออเดอร์ที่ตายแล้วขยับ และบัญชีเงินของออเดอร์นั้น
+   * เล่าเรื่องที่ไม่เคยเกิดขึ้น
+   *
+   * ไม่รวม `completed` — จ่ายส่วนที่เหลือหลังรับงานเป็นเรื่องปกติของงานที่แบ่งจ่าย
+   */
+  if (isTerminal(order.status as OrderStatus) && order.status !== "completed") {
+    return { ok: false, error: "order_closed" };
+  }
 
   const now = new Date();
   await getDb().insert(schema.paymentRecord).values({
