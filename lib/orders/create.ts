@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { ACTIVE_STATUSES } from "@/lib/types";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { generateOrderCode } from "./code";
@@ -109,7 +109,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
   // โควตาออเดอร์ที่กำลังดำเนินอยู่ของ **ครีเอเตอร์** ไม่ใช่ของลูกค้า
   // — เป็นลิมิตของแพ็กเกจฝั่งคนรับงาน
-  const plan = (owner.plan ?? "free") as PlanId;
+  // โควตาของ **ครีเอเตอร์เจ้าของร้าน** ไม่ใช่ของลูกค้า — ช่วงเบต้ายกให้เท่า Pro
+  const plan = effectivePlan((owner.plan ?? "free") as PlanId);
   const maxActive = PLANS[plan]?.limits.active_orders ?? PLANS.free.limits.active_orders;
   if (Number.isFinite(maxActive)) {
     const [{ n }] = await db

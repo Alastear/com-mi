@@ -9,7 +9,7 @@ import { newId } from "@/lib/db/id";
 import { requireCreator } from "@/lib/auth-guard";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { PLANS } from "@/lib/billing/plans";
+import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { ensureShop } from "@/lib/shop/ensure";
 import { slugify, uniqueSlug } from "@/lib/services/slug";
 import { dynamicHref } from "@/lib/routes";
@@ -45,8 +45,8 @@ export async function createService() {
   const page = await ownPage(user.id);
 
   const live = page.services.filter((s) => !s.deletedAt);
-  // TODO Phase 2: อ่านลิมิตจาก plan จริงของผู้ใช้ผ่าน entitlements
-  if (live.length >= PLANS.free.limits.services) redirect("/services");
+  const plan = effectivePlan((user.plan ?? "free") as PlanId);
+  if (live.length >= PLANS[plan].limits.services) redirect("/services");
 
   const t = getDictionary(await getLocale());
   const id = newId("svc");

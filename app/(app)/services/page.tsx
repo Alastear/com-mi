@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
-import { PLANS } from "@/lib/billing/plans";
+import { effectivePlan, formatLimit, PLANS, type PlanId } from "@/lib/billing/plans";
 import { dynamicHref } from "@/lib/routes";
 import { requireCreator } from "@/lib/auth-guard";
 import { getOwnShop } from "@/lib/queries/creator";
@@ -23,8 +23,7 @@ export default async function ServicesPage() {
   const shop = await getOwnShop(user.id);
   const services = shop?.services ?? [];
 
-  // TODO Phase 2: อ่านลิมิตจาก plan จริงของผู้ใช้ผ่าน entitlements
-  const max = PLANS.free.limits.services;
+  const max = PLANS[effectivePlan((user.plan ?? "free") as PlanId)].limits.services;
   const atLimit = services.length >= max;
 
   return (
@@ -33,7 +32,7 @@ export default async function ServicesPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{t.nav.services}</h1>
           <p className="tabular text-sm text-muted-foreground">
-            {services.length} / {max}
+            {services.length} / {formatLimit(max, t.compare.values.unlimited)}
           </p>
         </div>
         <form action={createService}>

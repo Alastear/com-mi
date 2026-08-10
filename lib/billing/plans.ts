@@ -151,6 +151,25 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
   },
 };
 
+/**
+ * ช่วงเบต้า — ทุกคนได้ของเท่า Pro โดยไม่ต้องจ่าย
+ *
+ * เจ้าของตัดสินใจเปิดให้ใช้เต็มทุกฟีเจอร์จนกว่าจะเริ่มเก็บเงินจริง
+ * ทำที่นี่จุดเดียวแทนการไปแก้ทุกที่ที่อ่านลิมิต เพราะจุดที่อ่านลิมิตมีเจ็ดแห่ง
+ * และการลืมแก้แห่งเดียวแปลว่ามีคนโดนบล็อกทั้งที่หน้าเว็บบอกว่าใช้ได้
+ *
+ * ⚠️ **หน้า /pricing ประกาศเรื่องนี้ไว้แล้ว** ถ้าปิดสวิตช์นี้โดยไม่แก้หน้านั้น
+ * เว็บจะสัญญาสิ่งที่โค้ดไม่ทำให้ ซึ่งแย่กว่าไม่เคยสัญญาเลย
+ *
+ * ปิดตอนเริ่มเก็บเงิน: ลบ `BETA_FREE_PRO` ออก แล้วแก้ข้อความในหน้า /pricing พร้อมกัน
+ */
+export const BETA_FREE_PRO = true;
+
+/** แพ็กเกจที่ใช้ตัดสินสิทธิ์จริง — ช่วงเบต้าทุกคนถูกยกเป็น pro */
+export function effectivePlan(plan: PlanId): PlanId {
+  return BETA_FREE_PRO && plan === "free" ? "pro" : plan;
+}
+
 export function can(plan: PlanId, feature: Feature): boolean {
   return PLANS[plan].features.has(feature);
 }
@@ -161,6 +180,17 @@ export function limitOf(plan: PlanId, key: LimitKey): number {
 
 export function isUnlimited(value: number): boolean {
   return !Number.isFinite(value);
+}
+
+/**
+ * ลิมิตสำหรับแสดงผล
+ *
+ * ⚠️ ลิมิตของ Pro เป็น `Infinity` — เอาไปใส่ JSX ตรง ๆ จะได้คำว่า "Infinity"
+ * บนหน้าจอผู้ใช้ (เจอจริงตอนเปิดเบต้าให้ทุกคนได้สิทธิ์ Pro หน้าเมนูขึ้น "1 / Infinity")
+ * ทุกที่ที่โชว์ลิมิตต้องผ่านฟังก์ชันนี้ ไม่ใช่จำเอาเอง
+ */
+export function formatLimit(value: number, unlimitedLabel: string): string {
+  return isUnlimited(value) ? unlimitedLabel : String(value);
 }
 
 /**

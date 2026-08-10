@@ -2,7 +2,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { isPublicKind, type MediaKind } from "@/lib/media/kinds";
 import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/media/video";
 
@@ -43,7 +43,7 @@ export async function POST(request: Request): Promise<Response> {
         if (!kind || !isPublicKind(kind)) throw new Error("invalid kind");
 
         const plan = (session.user.plan ?? "free") as PlanId;
-        const limits = (PLANS[plan] ?? PLANS.free).limits;
+        const limits = (PLANS[effectivePlan(plan)] ?? PLANS.free).limits;
 
         // โควตาพื้นที่: รวมจากแถวใน media (ถูกและเร็วกว่าไล่นับไฟล์ใน Blob store)
         const [used] = await getDb()

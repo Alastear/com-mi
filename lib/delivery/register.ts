@@ -9,7 +9,7 @@ import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
 import { isOrderCode } from "@/lib/orders/code";
 import { isDeliveryPath } from "./path";
-import { PLANS, type PlanId } from "@/lib/billing/plans";
+import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 
 /**
  * บันทึกไฟล์ส่งมอบที่เพิ่งอัปโหลดลงตาราง media
@@ -59,7 +59,7 @@ export async function registerDeliveryFile(
   // ขนาดจริงต้องอ่านจาก store ส่วนตัว — head() ที่ไม่มี token จะเข้าไม่ถึงไฟล์นี้
   const meta = await head(v.url, { token: privateBlobToken() });
 
-  const plan = (session.user.plan ?? "free") as PlanId;
+  const plan = effectivePlan((session.user.plan ?? "free") as PlanId);
   const limit = (PLANS[plan] ?? PLANS.free).limits.storage_bytes;
   const [used] = await db
     .select({ total: sql<string>`coalesce(sum(${schema.media.bytes}), 0)` })

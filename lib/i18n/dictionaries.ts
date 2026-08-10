@@ -443,6 +443,11 @@ const th = {
   },
 
   pricing: {
+    betaBadge: "ช่วงเบต้า",
+    betaPrice: "ทดลองใช้ฟรี",
+    betaNote: "ช่วงเบต้าเปิดให้ทุกคนใช้ฟีเจอร์เต็มแบบไม่มีค่าใช้จ่าย จะแจ้งล่วงหน้าก่อนเริ่มเก็บเงินจริง",
+    betaLater: "ราคาหลังหมดช่วงเบต้า",
+    betaCta: "เริ่มใช้ฟรีเลย",
     title: "ราคา",
     subtitle: "ลูกค้าที่มาสั่งงานคุณใช้ฟรีเสมอ เราเก็บค่าบริการจากครีเอเตอร์เท่านั้น",
     monthly: "รายเดือน",
@@ -1311,6 +1316,11 @@ const en: Dictionary = {
   },
 
   pricing: {
+    betaBadge: "Beta",
+    betaPrice: "Free while in beta",
+    betaNote: "Everyone gets every feature at no cost during beta. We will tell you before any charging starts.",
+    betaLater: "Price after beta",
+    betaCta: "Start free",
     title: "Pricing",
     subtitle: "Clients never pay us. We only charge creators.",
     monthly: "Monthly",

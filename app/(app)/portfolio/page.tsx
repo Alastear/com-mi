@@ -1,7 +1,7 @@
 import { requireCreator } from "@/lib/auth-guard";
 import { getOwnShop } from "@/lib/queries/creator";
 import { ensureShop } from "@/lib/shop/ensure";
-import { PLANS } from "@/lib/billing/plans";
+import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { PortfolioManager } from "./portfolio-manager";
 
 export default async function PortfolioPage() {
@@ -33,6 +33,6 @@ export default async function PortfolioPage() {
     height: p.media?.height ?? null,
   }));
 
-  // TODO Phase 2: อ่านลิมิตจาก plan ของผู้ใช้จริงผ่าน entitlements
-  return <PortfolioManager items={items} max={PLANS.free.limits.portfolio_items} />;
+  const plan = effectivePlan((user.plan ?? "free") as PlanId);
+  return <PortfolioManager items={items} max={PLANS[plan].limits.portfolio_items} />;
 }

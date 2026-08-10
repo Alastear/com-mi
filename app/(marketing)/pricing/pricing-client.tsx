@@ -47,6 +47,10 @@ export function PricingClient() {
       <div className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{t.pricing.title}</h1>
         <p className="mx-auto mt-3 max-w-lg text-muted-foreground">{t.pricing.subtitle}</p>
+        {/* คำอธิบายช่วงเบต้าอยู่บนสุด ก่อนที่คนจะไปเห็นตัวเลขในการ์ด */}
+        <p className="mx-auto mt-4 max-w-xl rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          {t.pricing.betaNote}
+        </p>
       </div>
 
       {/* สลับรายเดือน / รายปี */}
@@ -95,30 +99,43 @@ export function PricingClient() {
             {tier.highlight && (
               <Badge className="absolute -top-2.5 left-6 gap-1">
                 <Sparkles className="size-3" />
-                {t.pricing.popular}
+                {t.pricing.betaBadge}
               </Badge>
             )}
 
             <p className="text-lg font-semibold">{tier.name}</p>
             <p className="mt-1 text-sm text-muted-foreground">{tier.desc}</p>
 
+            {/*
+              ช่วงเบต้า: ทุกแพ็กเกจฟรีจริง ๆ จึงโชว์ "ทดลองใช้ฟรี" เป็นราคาหลัก
+              แล้วเก็บตัวเลขจริงไว้เป็นบรรทัดรอง — ไม่ใช่ขีดฆ่าเพื่อให้ดูเหมือนลดราคา
+              เพราะยังไม่มีใครเคยจ่ายราคานั้น การขีดฆ่าจึงเป็นการอ้างส่วนลดที่ไม่มีอยู่จริง
+
+              ปุ่มพาไป /dashboard เหมือนเดิมและตอนนี้ตรงกับความจริงแล้ว — ยังไม่มีอะไรให้จ่าย
+              (ก่อนหน้านี้เขียนว่า "เลือกแพ็กเกจนี้" ทั้งที่กดแล้วไม่มีอะไรเกิดขึ้น)
+            */}
             <p className="tabular mt-5 flex items-baseline gap-1">
+              {/*
+                Free ฟรีถาวรอยู่แล้ว เขียนว่า "ทดลองใช้ฟรี" จะกลายเป็นบอกว่าเดี๋ยวจะหมดอายุ
+                ช่วงเบต้าจึงมีผลกับแพ็กเกจที่มีราคาเท่านั้น
+              */}
               <span className="text-3xl font-semibold">
-                {formatMoney(tier.price, "THB", locale)}
+                {tier.price > 0 ? t.pricing.betaPrice : formatMoney(0, "THB", locale)}
               </span>
-              {tier.price > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {cycle === "monthly" ? t.pricing.perMonth : t.pricing.perYear}
-                </span>
-              )}
             </p>
+            {tier.price > 0 ? (
+              <p className="tabular mt-1 text-sm text-muted-foreground">
+                {t.pricing.betaLater} {formatMoney(tier.price, "THB", locale)}
+                {cycle === "monthly" ? t.pricing.perMonth : t.pricing.perYear}
+              </p>
+            ) : null}
 
             <Button
               asChild
               className="mt-5 w-full"
               variant={tier.highlight ? "default" : "outline"}
             >
-              <Link href="/dashboard">{tier.cta}</Link>
+              <Link href="/dashboard">{t.pricing.betaCta}</Link>
             </Button>
 
             <ul className="mt-6 space-y-2.5 text-sm">

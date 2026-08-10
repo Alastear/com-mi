@@ -9,6 +9,7 @@ import { PortfolioUploader } from "@/components/portfolio-uploader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useDict } from "@/lib/i18n/client";
+import { formatLimit } from "@/lib/billing/plans";
 import { removePortfolioItem } from "@/lib/media/actions";
 
 type Item = {
@@ -57,7 +58,7 @@ export function PortfolioManager({
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{t.nav.portfolio}</h1>
           <p className="tabular text-sm text-muted-foreground">
-            {items.length} / {max}
+            {items.length} / {formatLimit(max, t.compare.values.unlimited)}
           </p>
         </div>
       </div>

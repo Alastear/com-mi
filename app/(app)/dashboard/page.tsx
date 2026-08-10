@@ -17,7 +17,7 @@ import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/types";
 import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { PLANS } from "@/lib/billing/plans";
+import { effectivePlan, formatLimit, isUnlimited, PLANS, type PlanId } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 import { orderHref, shopHref } from "@/lib/routes";
 import { shopUrl } from "@/lib/site";
@@ -55,8 +55,7 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   const storageUsed = usage.storageBytes;
-  // TODO Phase 2: อ่านลิมิตจาก plan จริงของผู้ใช้ผ่าน entitlements
-  const freeLimits = PLANS.free.limits;
+  const freeLimits = PLANS[effectivePlan((user.plan ?? "free") as PlanId)].limits;
 
   const stats = [
     { label: t.dashboard.newRequests, value: newRequests.length, icon: Inbox, tone: "text-info" },
@@ -227,14 +226,14 @@ export default async function DashboardPage() {
               label={t.dashboard.quotaOrders}
               used={usage.activeOrders}
               max={freeLimits.active_orders}
-              display={`${usage.activeOrders} / ${freeLimits.active_orders}`}
+              display={`${usage.activeOrders} / ${formatLimit(freeLimits.active_orders, t.compare.values.unlimited)}`}
               overLabel={t.dashboard.overQuota}
             />
             <Quota
               label={t.dashboard.quotaServices}
               used={usage.services}
               max={freeLimits.services}
-              display={`${usage.services} / ${freeLimits.services}`}
+              display={`${usage.services} / ${formatLimit(freeLimits.services, t.compare.values.unlimited)}`}
               overLabel={t.dashboard.overQuota}
             />
             <Quota
@@ -303,14 +302,15 @@ function Quota({
   display: string;
   overLabel: string;
 }) {
-  const percent = Math.min(100, Math.round((used / max) * 100));
+  // ไม่จำกัด = ไม่มีอะไรให้วัดเป็นเปอร์เซ็นต์ แถบจึงว่างไว้แทนที่จะโชว์ 0% เหมือนยังไม่ได้ใช้
+  const percent = isUnlimited(max) ? 0 : Math.min(100, Math.round((used / max) * 100));
 
   /**
    * เกินโควตาได้จริงและเป็นสถานะที่ตั้งใจรองรับ — เช่นคนที่ลด Pro → Free
    * แล้วยังมีงานค้างเกินลิมิต (docs/03-plans-and-entitlements.md §5)
    * ต้องแสดงให้รู้ว่า "เกิน" ไม่ใช่ปล่อยให้แถบเต็มสีปกติจนดูเหมือนระบบพัง
    */
-  const over = used > max;
+  const over = Number.isFinite(max) && used > max;
 
   return (
     <div>
