@@ -29,6 +29,7 @@ export default async function ListingsPage() {
       </p>
 
       <LockedFeature
+        variant="soon"
         className="mt-6"
         description={
           t.listings.lockDesc

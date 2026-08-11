@@ -27,7 +27,7 @@ export default async function AnalyticsPage() {
         {t.analytics.desc}
       </p>
 
-      <LockedFeature className="mt-6">
+      <LockedFeature variant="soon" className="mt-6">
         <div className="space-y-4 p-4">
           <div className="grid gap-4 sm:grid-cols-3">
             {[

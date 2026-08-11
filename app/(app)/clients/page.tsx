@@ -26,6 +26,7 @@ export default async function ClientsPage() {
       </p>
 
       <LockedFeature
+        variant="soon"
         className="mt-6"
         description={
           t.clients.lockDesc

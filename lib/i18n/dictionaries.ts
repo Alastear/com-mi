@@ -935,6 +935,8 @@ const th = {
   locked: {
     title: "ฟีเจอร์นี้อยู่ในแพ็กเกจ Pro",
     cta: "ดูรายละเอียด Pro",
+    soonTitle: "กำลังพัฒนาอยู่",
+    soonNote: "ภาพข้างหลังเป็นตัวอย่างหน้าตา ยังไม่ใช่ข้อมูลจริงของคุณ",
   },
 
   empty: {
@@ -1844,6 +1846,8 @@ const en: Dictionary = {
   locked: {
     title: "This is a Pro feature",
     cta: "See what Pro includes",
+    soonTitle: "Still being built",
+    soonNote: "What you see behind this is a mock-up, not your real data",
   },
 
   empty: {

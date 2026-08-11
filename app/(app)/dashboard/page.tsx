@@ -186,6 +186,7 @@ export default async function DashboardPage() {
           <div className="mt-6">
             <h2 className="mb-3 font-semibold">{t.nav.analytics}</h2>
             <LockedFeature
+              variant="soon"
               description={t.analytics.lockDesc}
             >
               <Card className="gap-4 p-5">
