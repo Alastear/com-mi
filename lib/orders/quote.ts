@@ -158,6 +158,8 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
     senderUserId: session.user.id,
     isSystemEvent: true,
     eventType: "quote_issued",
+    // ต้องบอกว่าใครทำ ไม่งั้น timeline ขึ้นว่า "โดยระบบ" ทั้งที่ครีเอเตอร์เป็นคนกด
+    eventData: { actor: "creator" },
     createdAt: now,
   });
 
@@ -333,6 +335,7 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
       senderUserId: session.user.id,
       isSystemEvent: true,
       eventType: "quote_accepted",
+      eventData: { actor: "client" },
       createdAt: now,
     }),
   ]);

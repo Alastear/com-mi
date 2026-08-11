@@ -102,6 +102,7 @@ export default async function OrderPage({ params }: Props) {
                       amountCents: i.unitPriceCents * i.quantity,
                     }))
               }
+              outstandingCents={liveQuote ? liveQuote.totalCents : null}
               /*
                 กู้เปอร์เซ็นต์คืนจากจำนวนเงินที่เก็บไว้ — เก็บเป็นเงินเพราะด่านมัดจำ
                 เทียบกับยอดที่จ่ายมาตรง ๆ การปัดเป็นบาทเต็มทำให้เพี้ยนได้ไม่ถึง 1%

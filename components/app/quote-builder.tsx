@@ -42,12 +42,20 @@ export function QuoteBuilder({
   currency,
   initialLines,
   initialDepositPercent,
+  outstandingCents,
 }: {
   code: string;
   currency: string;
   /** บรรทัดตั้งต้น — ใบที่เปิดอยู่ถ้ามี ไม่งั้นใช้รายการที่ลูกค้าสั่ง */
   initialLines: Array<{ label: string; amountCents: number }>;
   initialDepositPercent: number;
+  /**
+   * ยอดของใบที่ส่งไปแล้วและยังรอลูกค้าอยู่ — `null` คือยังไม่เคยส่ง
+   *
+   * ต้องบอกให้ชัด ไม่งั้นครีเอเตอร์เปิดหน้ามาเจอฟอร์มที่มีตัวเลขกรอกไว้แล้ว
+   * แต่แยกไม่ออกว่า "ส่งไปแล้ว" หรือ "ยังเป็นแค่ร่าง" — แล้วก็กดส่งซ้ำ
+   */
+  outstandingCents: number | null;
 }) {
   const { t, locale } = useLocale();
   const [rows, setRows] = useState<Row[]>(() =>
@@ -108,6 +116,12 @@ export function QuoteBuilder({
         <p className="font-medium">{t.quote.builderTitle}</p>
         <p className="text-sm text-muted-foreground">{t.quote.builderHint}</p>
       </div>
+
+      {outstandingCents !== null ? (
+        <p className="tabular rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2 text-sm">
+          {t.quote.outstanding.replace("{amount}", formatMoney(outstandingCents, currency, locale))}
+        </p>
+      ) : null}
 
       <div className="space-y-2">
         {rows.map((r) => (
@@ -221,7 +235,8 @@ export function QuoteBuilder({
 
       <Button onClick={submit} disabled={pending || totalBaht <= 0} className={cn("w-full")}>
         {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-        {t.quote.send}
+        {/* ส่งทับใบเดิมคือคนละเรื่องกับส่งครั้งแรก — ปุ่มต้องบอกว่ากำลังจะทับ */}
+        {outstandingCents !== null ? t.quote.resend : t.quote.send}
       </Button>
     </Card>
   );
