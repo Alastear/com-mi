@@ -10,12 +10,13 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { UserAvatar } from "@/components/user-avatar";
 import { requireCreator } from "@/lib/auth-guard";
-import { getOrderForCreator } from "@/lib/queries/orders";
+import { getLiveQuote, getOrderForCreator } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
+import { QuoteBuilder } from "@/components/app/quote-builder";
 import { readDelivery } from "@/lib/delivery/read";
 import { canPay, canRelease } from "@/lib/orders/release";
 import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
@@ -46,6 +47,13 @@ export default async function OrderPage({ params }: Props) {
   const days = order.dueAt ? daysUntil(order.dueAt) : null;
   const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
   const remaining = order.totalCents - order.amountPaidCents;
+
+  /**
+   * ออกใบเสนอราคาได้ก่อนลูกค้าตอบรับเท่านั้น — หลังจากนั้นราคาถือว่าตกลงกันแล้ว
+   * และมีเงินเข้ามาเกี่ยวข้องได้ การเปลี่ยนราคาทีหลังต้องเป็นเรื่องที่คุยกันใหม่
+   */
+  const quotable = ["requested", "reviewing", "quoted"].includes(order.status);
+  const liveQuote = quotable ? await getLiveQuote(order.id) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 lg:py-8">
@@ -80,6 +88,32 @@ export default async function OrderPage({ params }: Props) {
             entries={toThreadEntries(order.messages)}
             currentUserId={user.id}
           />
+
+          {quotable ? (
+            <QuoteBuilder
+              code={order.code}
+              currency={order.currency}
+              /* ตั้งต้นจากใบที่ค้างอยู่ ถ้าไม่มีก็จากรายการที่ลูกค้าสั่งมา */
+              initialLines={
+                liveQuote
+                  ? liveQuote.lines
+                  : order.items.map((i) => ({
+                      label: i.label,
+                      amountCents: i.unitPriceCents * i.quantity,
+                    }))
+              }
+              /*
+                กู้เปอร์เซ็นต์คืนจากจำนวนเงินที่เก็บไว้ — เก็บเป็นเงินเพราะด่านมัดจำ
+                เทียบกับยอดที่จ่ายมาตรง ๆ การปัดเป็นบาทเต็มทำให้เพี้ยนได้ไม่ถึง 1%
+                `Math.round` จึงคืนปุ่มเดิมที่ครีเอเตอร์เคยกดไว้เสมอ
+              */
+              initialDepositPercent={
+                liveQuote && liveQuote.totalCents > 0
+                  ? Math.round((liveQuote.depositCents / liveQuote.totalCents) * 100)
+                  : 50
+              }
+            />
+          ) : null}
 
           {order.answers.length > 0 ? (
             <Card className="gap-3 p-5">

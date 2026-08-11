@@ -7,7 +7,7 @@ import {
   isTerminal,
   TransitionError,
 } from "./state-machine";
-import { quoteFromLines, quoteOrder, type PricingService } from "./pricing";
+import { depositFor, quoteFromLines, quoteOrder, type PricingService } from "./pricing";
 import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
@@ -25,6 +25,18 @@ describe("state machine", () => {
     assert.equal(canTransition("requested", "delivered", "client"), false);
     assert.equal(canTransition("accepted", "delivered", "client"), false);
     assert.throws(() => assertTransition("requested", "delivered", "client"), TransitionError);
+  });
+
+  it("ครีเอเตอร์เสนอราคาจากคำขอใหม่ได้เลย ไม่ต้องกด reviewing ก่อน", () => {
+    /**
+     * เจอตอนทดสอบในเบราว์เซอร์: กดส่งใบเสนอราคาแล้วได้ wrong_status กลับมา
+     * เพราะเส้น requested → quoted ไม่มีอยู่ ทั้งที่ requested คือสถานะที่
+     * ควรเสนอราคาได้มากที่สุด — ครีเอเตอร์ต้องกดปุ่มที่ไม่มีความหมายก่อนหนึ่งครั้ง
+     */
+    assert.equal(canTransition("requested", "quoted", "creator"), true);
+    assert.equal(canTransition("reviewing", "quoted", "creator"), true);
+    // ลูกค้าตั้งราคาให้ตัวเองไม่ได้
+    assert.equal(canTransition("requested", "quoted", "client"), false);
   });
 
   it("ลูกค้ากดยอมรับใบเสนอราคาได้ แต่ครีเอเตอร์กดแทนไม่ได้", () => {
@@ -562,5 +574,52 @@ describe("ใบเสนอราคาที่ครีเอเตอร์�
     ]);
     assert.equal(q.totalCents, 180_000);
     invariants(q);
+  });
+});
+
+describe("depositFor", () => {
+  it("คิดเป็นเปอร์เซ็นต์ของยอดรวมและลงตัวเป็นบาท", () => {
+    assert.equal(depositFor(100_000, 50), 50_000);
+    assert.equal(depositFor(100_000, 25), 25_000);
+    assert.equal(depositFor(100_000, 100), 100_000);
+  });
+
+  it("ไม่มีมัดจำเมื่อเปอร์เซ็นต์เป็นศูนย์", () => {
+    assert.equal(depositFor(100_000, 0), 0);
+  });
+
+  it("ยอดที่หารไม่ลงตัวยังปัดเป็นบาทเต็ม", () => {
+    // ฿333 ครึ่งหนึ่งคือ ฿166.50 — ต้องได้บาทเต็ม ไม่ใช่เศษสตางค์
+    const d = depositFor(33_300, 50);
+    assert.equal(d % 100, 0);
+    assert.equal(d, 16_700);
+  });
+
+  it("ไม่มีทางเกินยอดรวม", () => {
+    // ยอดที่ปัดขึ้นแล้วแซงยอดรวมต้องถูกตรึงไว้ที่ยอดรวม
+    assert.equal(depositFor(100, 100), 100);
+    assert.equal(depositFor(50, 100), 50);
+  });
+
+  it("ค่าที่ไม่ใช่ตัวเลขจำกัดกลายเป็นศูนย์ ไม่ใช่ NaN", () => {
+    // เหตุผลเดียวกับ quoteFromLines — มัดจำ NaN คือด่านที่เทียบแล้ว false ตลอด
+    assert.equal(depositFor(Number.NaN, 50), 0);
+    assert.equal(depositFor(100_000, Number.NaN), 0);
+    assert.equal(depositFor(Number.POSITIVE_INFINITY, 50), 0);
+  });
+
+  it("ยอดรวมติดลบหรือศูนย์ไม่มีมัดจำ", () => {
+    assert.equal(depositFor(0, 50), 0);
+    assert.equal(depositFor(-10_000, 50), 0);
+  });
+
+  it("เปอร์เซ็นต์ที่กู้คืนจากจำนวนเงินตรงกับปุ่มที่กด", () => {
+    // หน้าครีเอเตอร์กู้ค่าเดิมด้วย round(deposit/total*100) — ต้องได้ปุ่มเดิมคืน
+    for (const total of [10_000, 33_300, 99_900, 150_000, 777_700]) {
+      for (const pct of [0, 25, 50, 100]) {
+        const d = depositFor(total, pct);
+        assert.equal(Math.round((d / total) * 100), pct, `${total} @ ${pct}%`);
+      }
+    }
   });
 });

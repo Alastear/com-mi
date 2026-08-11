@@ -288,3 +288,22 @@ export function quoteFromLines(lines: readonly QuoteLineInput[]): Quote {
 
   return { lines: priceLines, subtotalCents, addonsCents: 0, totalCents: subtotalCents };
 }
+
+/**
+ * มัดจำเป็นจำนวนเงิน คิดจากเปอร์เซ็นต์ของยอดรวม
+ *
+ * อยู่ที่นี่เพราะมีคนใช้สองฝั่ง: ฟอร์มของครีเอเตอร์ที่พรีวิวให้เห็นก่อนกดส่ง
+ * และ `issueQuote()` ที่เขียนลงฐานข้อมูลจริง ถ้าต่างคนต่างคิด ตัวเลขที่ครีเอเตอร์
+ * เห็นตอนกดส่งกับตัวเลขที่ลูกค้าต้องจ่ายมีสิทธิ์ไม่ตรงกัน — และคนที่รู้ตัวคือลูกค้า
+ *
+ * เก็บผลเป็น "เงิน" ไม่ใช่ "เปอร์เซ็นต์" เพราะด่าน `depositSatisfied()`
+ * เทียบกับ `amountPaidCents` ตรง ๆ ถ้าเก็บเปอร์เซ็นต์ก็ต้องคำนวณซ้ำทุกจุดที่ใช้
+ *
+ * ไม่มีทางเกินยอดรวม และลงตัวเป็นบาทเสมอเหมือนทุกยอดในระบบ
+ */
+export function depositFor(totalCents: number, percent: number): number {
+  if (!Number.isFinite(totalCents) || !Number.isFinite(percent)) return 0;
+  if (totalCents <= 0 || percent <= 0) return 0;
+  const pct = Math.min(100, percent);
+  return Math.min(totalCents, Math.round((totalCents * pct) / 100 / 100) * 100);
+}

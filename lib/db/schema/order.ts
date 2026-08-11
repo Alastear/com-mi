@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { creatorPage, media, service } from "./app";
@@ -368,3 +369,60 @@ export const deliveryIssuanceRelations = relations(deliveryIssuance, ({ one }) =
 }));
 
 export type DeliveryIssuance = typeof deliveryIssuance.$inferSelect;
+
+/* ── order_quote — ใบเสนอราคาที่ครีเอเตอร์เขียนเอง ────────────── */
+
+/**
+ * ใบเสนอราคาหนึ่งใบ = ข้อเสนอหนึ่งครั้ง
+ *
+ * ⚠️ **ครีเอเตอร์เขียนใบนี้ได้ แต่เขียน `order.totalCents` ไม่ได้**
+ * ราคาบนออเดอร์ถูกเขียนตอนลูกค้ากดยอมรับเท่านั้น และการกดนั้นต้องระบุ `quoteId`
+ * ที่กำลังยอมรับ — ไม่งั้นครีเอเตอร์ที่แก้ราคาขึ้นตอนลูกค้าเปิดหน้าค้างไว้
+ * จะผูกลูกค้ากับตัวเลขที่ไม่เคยอ่าน แถวที่ตั้งราคาจึงต้องเป็นแถวเดียวกับ
+ * ที่บันทึกว่าใครตกลงอะไรเมื่อไร
+ *
+ * แก้ราคาใหม่ = ออกใบใหม่แล้วปิดใบเก่า ไม่ใช่เขียนทับ — ประวัติการต่อรองจึงอ่านย้อนได้
+ */
+export const orderQuote = pgTable(
+  "order_quote",
+  {
+    id: text("id").primaryKey(),
+    orderId: text("order_id")
+      .notNull()
+      .references(() => order.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").notNull(),
+
+    /** บรรทัดราคาในรูปเดียวกับที่ `order_item` ต้องการ — ตอนยอมรับคือคัดลอก ไม่ใช่แปลง */
+    lines: jsonb("lines").$type<Array<{ label: string; amountCents: number }>>().notNull(),
+
+    subtotalCents: integer("subtotal_cents").notNull(),
+    addonsCents: integer("addons_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull(),
+    /** มัดจำที่ต้องจ่ายก่อนเริ่มงาน — 0 = ไม่บังคับมัดจำ */
+    depositCents: integer("deposit_cents").notNull().default(0),
+
+    note: text("note").notNull().default(""),
+
+    /** หมดอายุแล้วกดยอมรับไม่ได้ — ครีเอเตอร์จะได้ไม่ติดราคาเก่าตลอดกาล */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** ออกใบใหม่ทับ — ใบเก่ายังอยู่เพื่อให้ย้อนอ่านได้ แต่กดยอมรับไม่ได้แล้ว */
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_quote_order_idx").on(t.orderId, t.createdAt),
+    /**
+     * ใบที่ยังเปิดอยู่มีได้ใบเดียวต่อออเดอร์
+     * partial unique — ใบที่ถูกปิดหรือยอมรับไปแล้วไม่กินโควตานี้
+     */
+    uniqueIndex("order_quote_live_idx")
+      .on(t.orderId)
+      .where(sql`${t.supersededAt} is null and ${t.acceptedAt} is null`),
+  ],
+);
+
+export const orderQuoteRelations = relations(orderQuote, ({ one }) => ({
+  order: one(order, { fields: [orderQuote.orderId], references: [order.id] }),
+}));

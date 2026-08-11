@@ -21,6 +21,14 @@ type Transition = { to: OrderStatus; by: readonly Actor[] };
 const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   requested: [
     { to: "reviewing", by: ["creator"] },
+    /**
+     * ส่งใบเสนอราคาจากคำขอใหม่ได้เลย ไม่ต้องกด "กำลังดู" ก่อน
+     *
+     * เดิมไม่มีเส้นนี้ ครีเอเตอร์ที่คุยราคากันจบในแชตแล้วจึงต้องกดปุ่มที่ไม่มี
+     * ความหมายกับใครเลยหนึ่งครั้งก่อนถึงจะเสนอราคาได้ — `issueQuote()` เรียกแล้ว
+     * ได้ `wrong_status` กลับมาทั้งที่สถานะนั้นควรเสนอราคาได้ที่สุด
+     */
+    { to: "quoted", by: ["creator"] },
     // instant mode ข้ามการเสนอราคาไปเลย — ราคาตายตัวอยู่แล้ว
     { to: "accepted", by: ["creator"] },
     { to: "declined", by: ["creator"] },

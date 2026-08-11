@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { requireSession } from "@/lib/auth-guard";
-import { getOrderForClient } from "@/lib/queries/orders";
+import { getLiveQuote, getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
@@ -19,6 +19,7 @@ import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
+import { QuoteCard } from "@/components/app/quote-card";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -48,6 +49,8 @@ export default async function ClientRequestPage({ params }: Props) {
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
   const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
+  // ใบเสนอราคาที่ยังกดได้ — ดึงเฉพาะตอนอยู่ในสถานะที่กดได้จริง ไม่งั้นเสีย query เปล่า
+  const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
   const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
   const amountDue = depositSatisfied(order) ? remaining : order.depositCents - order.amountPaidCents;
 
@@ -145,7 +148,28 @@ export default async function ClientRequestPage({ params }: Props) {
         โอนไปก่อนแล้วครีเอเตอร์ปฏิเสธงาน = เงินอยู่บัญชีเขาแล้วและเราคืนให้ไม่ได้
         (แพลตฟอร์มไม่ได้ถือเงิน) — ด่านจริงอยู่ที่ `recordPayment` ตรงนี้แค่ไม่ล่อให้จ่าย
       */}
-      {!canPay(order.status as OrderStatus) ? (
+      {/*
+        มีใบเสนอราคาค้างอยู่ = แสดงใบนั้นแทนข้อความ "รอครีเอเตอร์ตอบรับ"
+        เพราะตอนนี้ลูกบอลอยู่ที่ลูกค้า ไม่ใช่ครีเอเตอร์ — บอกว่า "รอ" ทั้งที่
+        รอลูกค้าอยู่ คือส่งคนไปนั่งรอสิ่งที่ตัวเองเป็นคนต้องกด
+      */}
+      {liveQuote ? (
+        <div className="mt-4">
+          <QuoteCard
+            code={order.code}
+            currency={order.currency}
+            expired={liveQuote.expired}
+            quote={{
+              id: liveQuote.id,
+              lines: liveQuote.lines,
+              totalCents: liveQuote.totalCents,
+              depositCents: liveQuote.depositCents,
+              note: liveQuote.note,
+              expiresAt: liveQuote.expiresAt,
+            }}
+          />
+        </div>
+      ) : !canPay(order.status as OrderStatus) ? (
         <Card className="mt-4 gap-1.5 p-6">
           <p className="font-medium">{t.payment.awaitingApproval}</p>
           <p className="text-sm text-muted-foreground">{t.payment.awaitingApprovalBody}</p>

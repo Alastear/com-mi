@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { isOrderCode } from "@/lib/orders/code";
 
@@ -174,4 +174,34 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
       },
     })) ?? null
   );
+}
+
+/**
+ * ใบเสนอราคาที่ยังเปิดอยู่ของออเดอร์นี้ — มีได้ใบเดียว (partial unique index บังคับไว้)
+ *
+ * ใบที่ถูกปิดหรือยอมรับไปแล้วไม่คืนมา เพราะหน้าจอมีหน้าที่แสดง "ข้อเสนอที่ยังกดได้"
+ * ประวัติใบเก่าอ่านได้จาก timeline ซึ่งมี event ทุกครั้งที่ออกใบ
+ */
+export async function getLiveQuote(orderId: string) {
+  const row = await getDb().query.orderQuote.findFirst({
+    where: and(
+      eq(schema.orderQuote.orderId, orderId),
+      isNull(schema.orderQuote.supersededAt),
+      isNull(schema.orderQuote.acceptedAt),
+    ),
+    orderBy: [desc(schema.orderQuote.createdAt)],
+  });
+  if (!row) return null;
+
+  /**
+   * เทียบเวลาหมดอายุที่นี่ ไม่ใช่ตอน render
+   *
+   * `Date.now()` ระหว่าง render เป็นฟังก์ชันที่ให้ผลไม่คงที่ — React ห้ามไว้
+   * และคอมโพเนนต์ฝั่งลูกค้าก็เทียบเองไม่ได้ เพราะ HTML จากเซิร์ฟเวอร์กับจากเบราว์เซอร์
+   * จะไม่ตรงกัน ตรงนี้เป็นแค่การอ่านข้อมูล ไม่ใช่ render จึงเป็นที่ที่ถูกต้อง
+   *
+   * ยังคืนใบที่หมดอายุมาด้วย ไม่ได้กรองทิ้ง — ลูกค้าควรเห็นว่ามีใบอยู่แต่หมดอายุแล้ว
+   * ดีกว่าเปิดมาแล้วใบหายไปเฉย ๆ โดยไม่มีคำอธิบาย
+   */
+  return { ...row, expired: Boolean(row.expiresAt && row.expiresAt.getTime() <= Date.now()) };
 }

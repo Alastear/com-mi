@@ -62,6 +62,8 @@ export function eventText(
   data: Record<string, string | number> | null,
 ): string | null {
   if (eventType === "order_created") return t.orderEvent.order_created;
+  if (eventType === "quote_issued") return t.orderEvent.quote_issued;
+  if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;
   if (eventType === "status_changed") {
     const to = String(data?.to ?? "") as OrderStatus;
     const label = t.orderStatus[to] ?? to;
