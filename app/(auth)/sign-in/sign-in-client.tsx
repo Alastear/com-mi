@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/brand";
 import { useDict } from "@/lib/i18n/client";
-import { forgetPassword, signIn, signUp } from "@/lib/auth-client";
+import { emailOtp, signIn, signUp } from "@/lib/auth-client";
 
 function GoogleMark() {
   return (
@@ -63,19 +63,41 @@ export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) 
       toast.error(res.error.message ?? t.auth.signInFailed);
       return;
     }
-    // สมัครใหม่ยังเข้าไม่ได้จนกว่าจะกดยืนยันในอีเมล — บอกให้ชัดแทนที่จะปล่อยงง
-    if (signingUp) toast.success(t.auth.checkEmail);
+    /**
+     * สมัครเสร็จแล้วส่งรหัสให้ยืนยันต่อทันที ไม่ใช่บอกให้ "ไปเปิดอีเมล" เฉย ๆ
+     *
+     * ⚠️ `requireEmailVerification: true` เปิดอยู่ แต่ไม่ได้ตั้ง
+     * `emailVerification.sendVerificationEmail` ไว้ที่ไหนเลย Better Auth จึงสร้าง
+     * บัญชีที่ `emailVerified: false` แล้ว**ไม่ส่งอะไรออกไปเลย** (sign-up.mjs:242-251)
+     * บัญชีนั้นล็อกอินด้วยรหัสผ่านไม่ได้ (EMAIL_NOT_VERIFIED) และยัง**บล็อกการล็อกอิน
+     * ด้วย Google ของอีเมลเดียวกัน**ด้วย เพราะการผูกบัญชีต้องการอีเมลที่ยืนยันแล้ว
+     * (oauth2/link-account.mjs:23) — คนที่สมัครค้างไว้ครั้งเดียวจึงเข้าไม่ได้ทั้งสองทาง
+     *
+     * การกรอกรหัสที่ `signIn.emailOtp` ตั้ง `emailVerified: true` ให้ (routes.mjs:427)
+     * ทางนี้จึงปลดล็อกทั้งรหัสผ่านและ Google ในคราวเดียว
+     */
+    if (signingUp) await requestOtp();
     else window.location.assign(next);
   }
 
   /**
    * ลืมรหัสผ่าน = ขอรหัสหกหลักทางอีเมลแล้วเอามาเข้าสู่ระบบเลย
    * ไม่ใช่ลิงก์ตั้งรหัสใหม่ — คนที่ลืมรหัสส่วนใหญ่แค่อยากเข้าให้ได้ก่อน
+   *
+   * ⚠️ **ต้องเป็น `type: "sign-in"` เท่านั้น ห้ามใช้ `forgetPassword.emailOtp`**
+   *
+   * รหัสถูกเก็บโดยตั้งชื่อกุญแจตามชนิด (`${type}-otp-${email}`) และตอนตรวจก็หา
+   * ด้วยชื่อเป๊ะ ๆ — `forgetPassword.emailOtp` เก็บไว้ใต้ `forget-password-otp-…`
+   * (dist/plugins/email-otp/routes.mjs:527) ส่วน `signIn.emailOtp` ที่หน้านี้ใช้กรอกรหัส
+   * ไปเปิดหา `sign-in-otp-…` (routes.mjs:404) รหัสที่ส่งไปจึงไม่มีวันตรงกับที่ตรวจ
+   *
+   * ผลคือ "เข้าสู่ระบบด้วยรหัส" ใช้ไม่ได้เลยสักครั้งตั้งแต่วันที่เขียน:
+   * อีเมลส่งออกไปจริง ผู้ใช้กรอกรหัสที่ถูกต้อง แล้วได้ "รหัสไม่ถูกต้อง" กลับมาเสมอ
    */
   async function requestOtp() {
     if (!email) return;
     setLoading(true);
-    const res = await forgetPassword.emailOtp({ email });
+    const res = await emailOtp.sendVerificationOtp({ email, type: "sign-in" });
     setLoading(false);
     if (res.error) {
       toast.error(res.error.code === "OTP_RATE_LIMITED" ? t.auth.tooManyOtp : t.error.title);
