@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   allowedNext,
   assertTransition,
+  requiresAction,
   canTransition,
   isTerminal,
   TransitionError,
@@ -633,5 +634,25 @@ describe("depositFor", () => {
         assert.equal(Math.round((d / total) * 100), pct, `${total} @ ${pct}%`);
       }
     }
+  });
+});
+
+describe("เส้นทางที่ต้องเดินผ่าน action เฉพาะ", () => {
+  it("แถบปุ่มธรรมดาต้องไม่มีปุ่มส่งมอบงาน", () => {
+    /**
+     * ปุ่มธรรมดาเขียนแค่ `status` — กดแล้วออเดอร์เป็น `delivered` โดยไฟล์ยังล็อกอยู่
+     * และ `delivered` ไม่มีเส้นวนกลับหาตัวเอง ปุ่มปล่อยไฟล์จึงพังถาวรหลังจากนั้น
+     * ลูกค้าที่จ่ายครบแล้วเห็นไฟล์ล็อกตลอดกาลโดยไม่มีใครกดอะไรได้
+     */
+    for (const from of ["in_progress", "in_review", "revision_requested"] as const) {
+      assert.equal(allowedNext(from, "creator").includes("delivered"), false, from);
+    }
+  });
+
+  it("เส้นทางยังมีอยู่จริง — deliverAndRelease ต้องเดินผ่านได้", () => {
+    // ถ้าลบทิ้งจากตารางแทนที่จะทำเครื่องหมาย ตัว action จริงจะพังไปด้วย
+    assert.equal(canTransition("in_progress", "delivered", "creator"), true);
+    assert.equal(requiresAction("in_progress", "delivered"), "deliverAndRelease");
+    assert.equal(requiresAction("in_progress", "in_review"), null);
   });
 });

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -129,22 +129,36 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
   if (!dlv || dlv.mediaIds.length === 0) return { ok: false, error: "no_files" };
 
   const from = order.status as OrderStatus;
-  try {
-    assertTransition(from, "delivered", "creator");
-  } catch (err) {
-    if (err instanceof TransitionError) return { ok: false, error: "not_allowed" };
-    throw err;
+
+  /**
+   * ออเดอร์ที่เป็น `delivered` อยู่แล้วแต่ไฟล์ยังไม่ถูกปล่อย = ปล่อยอย่างเดียว ไม่เปลี่ยนสถานะ
+   *
+   * เกิดจากปุ่มเปลี่ยนสถานะธรรมดาที่เคยพาไป `delivered` ได้โดยไม่ปล่อยไฟล์
+   * (ปิดทางนั้นแล้วที่ `state-machine.ts` ด้วย `viaAction`) แต่ออเดอร์ที่ติดไปแล้ว
+   * ต้องมีทางออก — `delivered` ไม่มีเส้นวนกลับหาตัวเอง `assertTransition` จึงตกทุกครั้ง
+   * ผลคือลูกค้าที่จ่ายครบแล้วเห็นไฟล์ล็อกอยู่ตลอดกาล และปุ่มปล่อยของครีเอเตอร์พังถาวร
+   */
+  const alreadyDelivered = from === "delivered";
+  if (!alreadyDelivered) {
+    try {
+      assertTransition(from, "delivered", "creator");
+    } catch (err) {
+      if (err instanceof TransitionError) return { ok: false, error: "not_allowed" };
+      throw err;
+    }
   }
 
   const now = new Date();
 
   // compare-and-set เหมือน transitionOrder — สองแท็บกดพร้อมกันต้องมีอันเดียวที่ผ่าน
-  const updated = await db
-    .update(schema.order)
-    .set({ status: "delivered", updatedAt: now })
-    .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from)))
-    .returning({ id: schema.order.id });
-  if (updated.length === 0) return { ok: false, error: "stale" };
+  if (!alreadyDelivered) {
+    const updated = await db
+      .update(schema.order)
+      .set({ status: "delivered", updatedAt: now })
+      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from)))
+      .returning({ id: schema.order.id });
+    if (updated.length === 0) return { ok: false, error: "stale" };
+  }
 
   await db
     .update(schema.delivery)
@@ -205,8 +219,15 @@ export async function requestDeliveryDownload(
 
   const db = getDb();
 
+  /**
+   * ⚠️ ต้องเรียงเอาชุดล่าสุด — หน้าจอแสดง `deliveries.at(-1)` (ชุดใหม่สุด)
+   * ส่วนที่นี่เดิมเป็น `findFirst` เปล่า ๆ ซึ่งไม่รับประกันลำดับอะไรเลย
+   * ออเดอร์ที่มีรอบแก้จะมีหลายชุด (trigger บอกให้สร้างแถวใหม่ ไม่ใช่แก้ของเดิม)
+   * สองที่จึงชี้คนละชุดได้ ลูกค้ากดโหลดไฟล์ที่เห็นอยู่ตรงหน้าแล้วได้ not_found
+   */
   const dlv = await db.query.delivery.findFirst({
     where: eq(schema.delivery.orderId, order.id),
+    orderBy: [desc(schema.delivery.createdAt)],
     columns: { id: true, mediaIds: true, releasedAt: true, downloadedAt: true },
   });
   if (!dlv) return { ok: false, error: "not_found" };

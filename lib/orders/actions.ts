@@ -9,7 +9,7 @@ import { getSession } from "@/lib/auth-guard";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
-import { assertTransition, TransitionError, type Actor } from "./state-machine";
+import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
 import { canRelease, depositSatisfied } from "./release";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
@@ -41,7 +41,8 @@ export type TransitionResult =
         | "stale"
         | "deposit_unpaid"
         | "not_fully_paid"
-        | "no_files";
+        | "no_files"
+        | "use_dedicated_action";
     };
 
 export async function transitionOrder(input: {
@@ -105,6 +106,15 @@ export async function transitionOrder(input: {
     // ห้ามเขียน `paid >= total` ซ้ำที่ไหนอีก ไม่งั้นสองด่านจะเพี้ยนออกจากกัน
     return { ok: false, error: "not_fully_paid" };
   }
+  /**
+   * เส้นทางที่ต้องเดินผ่าน action เฉพาะ ห้ามเดินผ่านปุ่มเปลี่ยนสถานะธรรมดา
+   *
+   * ปุ่มพวกนี้ถูกซ่อนไปแล้วโดย `allowedNext()` แต่ Server Action ถูกเรียกตรงได้
+   * และ UI ไม่ใช่ด่าน — ที่นี่คือด่านจริง
+   */
+  const needsAction = requiresAction(from, to);
+  if (needsAction) return { ok: false, error: "use_dedicated_action" };
+
   /**
    * ส่งมอบต้องมีไฟล์จริง
    *

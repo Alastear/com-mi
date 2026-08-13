@@ -16,7 +16,22 @@ import type { OrderStatus } from "@/lib/types";
 
 export type Actor = "creator" | "client" | "system";
 
-type Transition = { to: OrderStatus; by: readonly Actor[] };
+type Transition = {
+  to: OrderStatus;
+  by: readonly Actor[];
+  /**
+   * เส้นทางนี้มีอยู่จริง แต่ **แถบปุ่มธรรมดาต้องไม่แสดง** — ต้องเดินผ่าน action ที่ระบุ
+   *
+   * มีไว้เพราะบางการเปลี่ยนสถานะต้องเขียนอย่างอื่นพร้อมกันในทรานแซกชันเดียว
+   * แล้วปุ่มธรรมดาเขียนแค่ `status` อย่างเดียว (ดู `transitionOrder`)
+   * กดปุ่มธรรมดาจึงได้สถานะที่โกหก: บอกว่าเกิดขึ้นแล้วทั้งที่ของจริงยังไม่เกิด
+   *
+   * เคยเสียเวลากับรูปแบบนี้มาสามครั้ง (ส่งใบเสนอราคาโดยไม่มีใบ, ยอมรับใบโดยไม่พกราคา,
+   * และส่งมอบงานโดยไม่ปล่อยไฟล์) จึงทำให้เป็นข้อมูลบนตารางแทนที่จะไปกรองที่หน้าจอ —
+   * กรองที่หน้าจอคือมีความจริงสองที่ แล้วมันจะเพี้ยนออกจากกันในที่สุด
+   */
+  viaAction?: string;
+};
 
 /**
  * ⚠️ **ไม่มีเส้นไหนเข้าสู่ `quoted` เลย และห้ามเพิ่ม**
@@ -69,12 +84,12 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   in_progress: [
     { to: "in_review", by: ["creator"] },
     // ส่งไฟล์จริงเลยโดยไม่ผ่านรอบ WIP ก็ได้ — งานเล็ก ๆ ไม่จำเป็นต้องมี
-    { to: "delivered", by: ["creator"] },
+    { to: "delivered", by: ["creator"], viaAction: "deliverAndRelease" },
     { to: "cancelled", by: ["creator", "client"] },
   ],
   in_review: [
     { to: "revision_requested", by: ["client"] },
-    { to: "delivered", by: ["creator"] },
+    { to: "delivered", by: ["creator"], viaAction: "deliverAndRelease" },
     { to: "cancelled", by: ["creator", "client"] },
   ],
   revision_requested: [
@@ -97,9 +112,20 @@ export function isTerminal(status: OrderStatus): boolean {
   return TRANSITIONS[status].length === 0;
 }
 
-/** สถานะที่ไปต่อได้จากตรงนี้ สำหรับ actor คนนี้ — ใช้ตัดสินว่าจะโชว์ปุ่มอะไรบ้าง */
+/**
+ * สถานะที่ไปต่อได้จากตรงนี้ สำหรับ actor คนนี้ — ใช้ตัดสินว่าจะโชว์ปุ่มอะไรบ้าง
+ *
+ * ตัดเส้นที่มี `viaAction` ออก เพราะปุ่มพวกนั้นต้องมาจากหน้าจอเฉพาะของมัน
+ */
 export function allowedNext(from: OrderStatus, actor: Actor): OrderStatus[] {
-  return TRANSITIONS[from].filter((t) => t.by.includes(actor)).map((t) => t.to);
+  return TRANSITIONS[from]
+    .filter((t) => t.by.includes(actor) && !t.viaAction)
+    .map((t) => t.to);
+}
+
+/** เส้นทางนี้ต้องเดินผ่าน action เฉพาะไหม — คืนชื่อ action ถ้าใช่ */
+export function requiresAction(from: OrderStatus, to: OrderStatus): string | null {
+  return TRANSITIONS[from].find((t) => t.to === to)?.viaAction ?? null;
 }
 
 export function canTransition(from: OrderStatus, to: OrderStatus, actor: Actor): boolean {
