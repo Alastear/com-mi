@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n/client";
 import { formatMoney } from "@/lib/format";
 import { depositFor } from "@/lib/orders/pricing";
-import { issueQuote } from "@/lib/orders/quote";
+import { issueQuote, withdrawQuote } from "@/lib/orders/quote";
 import { cn } from "@/lib/utils";
 
 /**
@@ -67,6 +68,7 @@ export function QuoteBuilder({
   const [expiresInDays, setExpiresInDays] = useState<number>(14);
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   /**
    * ยอดรวมสด ๆ ระหว่างพิมพ์ — เลขที่พิมพ์ไม่เสร็จ (เช่น "1e") นับเป็นศูนย์ ไม่ใช่ NaN
@@ -129,9 +131,34 @@ export function QuoteBuilder({
       </div>
 
       {outstandingCents !== null ? (
-        <p className="tabular rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2 text-sm">
-          {t.quote.outstanding.replace("{amount}", formatMoney(outstandingCents, currency, locale))}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/[0.05] px-3 py-2">
+          <p className="tabular flex-1 text-sm">
+            {t.quote.outstanding.replace(
+              "{amount}",
+              formatMoney(outstandingCents, currency, locale),
+            )}
+          </p>
+          {/* ถอนใบได้โดยไม่ต้องเสนอราคาใหม่ — บางทีคำตอบคือ "ขอคิดใหม่ก่อน" */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await withdrawQuote({ code });
+                if (res.ok) {
+                  toast.success(t.quote.withdrawn);
+                  router.refresh();
+                } else {
+                  toast.error(t.error.title);
+                }
+              })
+            }
+          >
+            {t.quote.withdraw}
+          </Button>
+        </div>
       ) : null}
 
       <div className="space-y-2">

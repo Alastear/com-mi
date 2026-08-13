@@ -76,6 +76,13 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
     { to: "declined", by: ["creator"] },
     { to: "cancelled", by: ["client"] },
     { to: "expired", by: ["system"] },
+    /**
+     * ถอนใบเสนอราคากลับมาคิดใหม่ — ต้องผ่าน `withdrawQuote()` เพราะการถอน
+     * ต้องปิดแถวใบพร้อมกับเปลี่ยนสถานะ ปุ่มธรรมดาจะเปลี่ยนแค่สถานะ
+     * แล้วเหลือใบที่ยังเปิดอยู่บนออเดอร์ที่ไม่ใช่ `quoted` — ลูกค้าจะกดยอมรับไม่ได้
+     * และครีเอเตอร์จะออกใบใหม่ไม่ได้เพราะ index บังคับว่ามีใบเปิดได้ใบเดียว
+     */
+    { to: "reviewing", by: ["creator"], viaAction: "withdrawQuote" },
   ],
   accepted: [
     { to: "in_progress", by: ["creator"] },

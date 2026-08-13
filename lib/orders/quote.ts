@@ -388,3 +388,78 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
   revalidateBothSides(code);
   return { ok: true };
 }
+
+
+/* ── ถอนใบ ────────────────────────────────────────────────────────── */
+
+const WithdrawSchema = z.object({ code: z.string().refine(isOrderCode, "bad_code") });
+
+export type WithdrawQuoteResult =
+  | { ok: true }
+  | { ok: false; error: "unauthenticated" | "not_found" | "invalid" | "wrong_status" };
+
+/**
+ * ครีเอเตอร์ถอนใบเสนอราคาที่ส่งไปแล้ว
+ *
+ * ก่อนหน้านี้แก้ได้ทางเดียวคือออกใบใหม่ทับ ซึ่งบังคับให้ต้องเสนอราคาอะไรสักอย่างเสมอ
+ * ทั้งที่บางทีคำตอบคือ "ขอคิดใหม่ก่อน" หรือ "ส่งผิดคน" — และใบที่ค้างอยู่ระหว่างนั้น
+ * ลูกค้ากดยอมรับได้ตลอดเวลา
+ *
+ * ปิดแถวใบกับเปลี่ยนสถานะต้องอยู่ใน `batch()` เดียวกัน ไม่งั้นจะเหลือใบที่เปิดอยู่
+ * บนออเดอร์ที่ไม่ใช่ `quoted` — สถานะที่ลูกค้ากดยอมรับไม่ได้ และครีเอเตอร์ก็ออกใบใหม่
+ * ไม่ได้ เพราะ index บังคับว่ามีใบเปิดได้ใบเดียวต่อออเดอร์
+ */
+export async function withdrawQuote(
+  input: z.input<typeof WithdrawSchema>,
+): Promise<WithdrawQuoteResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "unauthenticated" };
+
+  const parsed = WithdrawSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { code } = parsed.data;
+
+  const db = getDb();
+  const order = await db.query.order.findFirst({
+    where: eq(schema.order.code, code),
+    columns: { id: true, status: true, clientUserId: true },
+    with: { page: { columns: { userId: true } } },
+  });
+  if (!order) return { ok: false, error: "not_found" };
+  if (order.page.userId !== session.user.id) return { ok: false, error: "not_found" };
+  if (order.status !== "quoted") return { ok: false, error: "wrong_status" };
+
+  const now = new Date();
+  await db.batch([
+    db
+      .update(schema.orderQuote)
+      .set({ supersededAt: now })
+      .where(
+        and(
+          eq(schema.orderQuote.orderId, order.id),
+          isNull(schema.orderQuote.supersededAt),
+          isNull(schema.orderQuote.acceptedAt),
+        ),
+      ),
+    /**
+     * กลับไป `reviewing` ไม่ใช่ `requested` — ครีเอเตอร์อ่านงานนี้ไปแล้ว
+     * และเงื่อนไขท้ายบรรทัดกันกรณีลูกค้ากดยอมรับพอดีในเสี้ยววินาทีเดียวกัน
+     */
+    db
+      .update(schema.order)
+      .set({ status: "reviewing", updatedAt: now })
+      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, "quoted"))),
+    db.insert(schema.message).values({
+      id: newId("msg"),
+      orderId: order.id,
+      senderUserId: session.user.id,
+      isSystemEvent: true,
+      eventType: "quote_withdrawn",
+      eventData: { actor: "creator" },
+      createdAt: now,
+    }),
+  ]);
+
+  revalidateBothSides(code);
+  return { ok: true };
+}
