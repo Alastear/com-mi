@@ -3,13 +3,11 @@
 import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
-import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { ACTIVE_STATUSES } from "@/lib/types";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
-import { generateOrderCode } from "./code";
 import { quoteOrder } from "./pricing";
+import { assertCanAcceptNewOrder, insertNewOrder } from "./new-order";
 import { notify } from "@/lib/notifications/create";
 
 /**
@@ -55,9 +53,6 @@ export type CreateOrderResult =
       retryAfterSeconds?: number;
     };
 
-/** สถานะร้านที่ยังรับคำขอใหม่ได้ — waitlist รับได้ แต่ลูกค้ารู้ว่าต้องรอ */
-const ACCEPTING_STATUSES = new Set(["open", "waitlist"]);
-
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
   const session = await getSession();
   // ไม่ redirect เพราะฟอร์มกรอกไว้แล้ว — ให้ client เก็บร่างก่อนแล้วค่อยพาไปล็อกอิน
@@ -83,47 +78,31 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     where: eq(schema.user.handle, v.handle.toLowerCase()),
   });
   if (!owner) return { ok: false, error: "not_found" };
-  // สั่งงานร้านตัวเองไม่ได้ — ทำให้สถิติและโควตาเพี้ยนโดยไม่มีประโยชน์อะไร
-  if (owner.id === session.user.id) return { ok: false, error: "own_shop" };
 
   const page = await db.query.creatorPage.findFirst({
     where: eq(schema.creatorPage.userId, owner.id),
     with: {
       services: {
         where: and(eq(schema.service.isActive, true), isNull(schema.service.deletedAt)),
-        with: {
-          tiers: true,
-          options: true,
-        },
+        with: { tiers: true, options: true },
       },
     },
   });
-  if (!page || !page.isPublished) return { ok: false, error: "not_found" };
-  // ร้านถูกผู้ดูแลระงับ = รับงานใหม่ไม่ได้ แต่ออเดอร์เดิมเดินต่อได้ตามปกติ
-  // ตอบเหมือน "ร้านปิด" ไม่ใช่บอกว่าโดนระงับ — เรื่องระหว่างเรากับครีเอเตอร์
-  if (page.suspendedAt) return { ok: false, error: "shop_closed" };
-  if (!ACCEPTING_STATUSES.has(page.status)) return { ok: false, error: "shop_closed" };
+  if (!page) return { ok: false, error: "not_found" };
+
+  /**
+   * ด่านทั้งหมดอยู่ในโมดูลเดียว — ห้ามเขียนซ้ำที่นี่
+   * ทางสร้างออเดอร์ทางอื่นที่จะมีทีหลัง (ใบเชิญลูกค้า) ต้องเรียกตัวเดียวกันนี้
+   */
+  const gateResult = assertCanAcceptNewOrder({
+    page,
+    owner,
+    clientUserId: session.user.id,
+  });
+  if (!gateResult.ok) return { ok: false, error: gateResult.error };
 
   const service = page.services.find((s) => s.slug === v.slug);
   if (!service) return { ok: false, error: "not_found" };
-
-  // โควตาออเดอร์ที่กำลังดำเนินอยู่ของ **ครีเอเตอร์** ไม่ใช่ของลูกค้า
-  // — เป็นลิมิตของแพ็กเกจฝั่งคนรับงาน
-  // โควตาของ **ครีเอเตอร์เจ้าของร้าน** ไม่ใช่ของลูกค้า — ช่วงเบต้ายกให้เท่า Pro
-  const plan = effectivePlan((owner.plan ?? "free") as PlanId);
-  const maxActive = PLANS[plan]?.limits.active_orders ?? PLANS.free.limits.active_orders;
-  if (Number.isFinite(maxActive)) {
-    const [{ n }] = await db
-      .select({ n: count() })
-      .from(schema.order)
-      .where(
-        and(
-          eq(schema.order.creatorPageId, page.id),
-          inArray(schema.order.status, [...ACTIVE_STATUSES]),
-        ),
-      );
-    if (n >= maxActive) return { ok: false, error: "creator_full" };
-  }
 
   // ── ราคา: คำนวณใหม่ทั้งหมดจากข้อมูลใน DB ──
   const quote = quoteOrder(
@@ -136,110 +115,30 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     { tierId: v.tierId, options: v.options },
   );
 
-  const orderId = newId("ord");
-  const now = new Date();
-  const dueAt = new Date(now.getTime() + service.deliveryDays * 86_400_000);
-
-  const values = {
-    id: orderId,
-    code: generateOrderCode(),
-    creatorPageId: page.id,
+  const created = await insertNewOrder({
+    page,
+    owner,
+    service,
     clientUserId: session.user.id,
-    serviceId: service.id,
-    status: "requested" as const,
-    currency: "THB",
-    subtotalCents: quote.subtotalCents,
-    addonsCents: quote.addonsCents,
-    totalCents: quote.totalCents,
-    revisionsAllowed: service.revisionsIncluded,
-    // แช่ TOS ฉบับที่ลูกค้าเห็นตอนกดยอมรับ — ครีเอเตอร์แก้ทีหลังไม่ย้อนหลังมาที่ออเดอร์นี้
-    tosSnapshot: page.tos,
-    acceptedTosAt: now,
-    dueAt,
+    actorUserId: session.user.id,
+    quote,
+    answers: v.answers,
     isPublicInQueue: v.isPublicInQueue,
-    createdAt: now,
-    updatedAt: now,
-  };
+  });
+  if (!created.ok) return { ok: false, error: created.error };
 
-  /**
-   * neon-http ไม่มี interactive transaction — ใช้ `batch()` ซึ่งรันทุกคำสั่ง
-   * ในทรานแซกชันเดียวฝั่ง Neon ถ้าคำสั่งไหนพัง จะไม่มีออเดอร์ครึ่ง ๆ กลาง ๆ ค้างไว้
-   *
-   * โอกาส code ชนต่ำมาก (30^8) แต่ไม่ใช่ศูนย์ — ชนแล้วลองใหม่อีกครั้งหนึ่ง
-   */
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const code = attempt === 0 ? values.code : generateOrderCode();
+  // ออเดอร์ใหม่คือแจ้งเตือนที่สำคัญที่สุดสำหรับครีเอเตอร์ — คือรายได้ที่เพิ่งเข้ามา
+  await notify({
+    userId: owner.id,
+    actorUserId: session.user.id,
+    type: "order_created",
+    data: { code: created.code, service: service.title },
+    url: `/orders/${created.code}`,
+    entityType: "order",
+    entityId: created.orderId,
+  });
 
-    const insertOrder = db.insert(schema.order).values({ ...values, code });
-    const insertItems = db.insert(schema.orderItem).values(
-      quote.lines.map((line, i) => ({
-        id: newId("oitm"),
-        orderId,
-        /**
-         * บรรทัดตัวคูณต้องแช่อัตราไว้ในข้อความด้วย
-         *
-         * `label` คือ "ข้อความที่ลูกค้าเห็นตอนสั่ง" ซึ่งบนหน้าจอคือ "ใช้เชิงพาณิชย์ (×2)"
-         * ถ้าเก็บแค่ชื่อกับจำนวนเงิน ใบเสร็จจะอธิบายไม่ได้ว่าเงินก้อนนี้มาจากไหน
-         * และย้อนกลับไปดูจากเมนูปัจจุบันก็ไม่ได้ เพราะครีเอเตอร์แก้อัตราทีหลังได้
-         */
-        label: line.multiplierBp
-          ? `${line.label} (×${line.multiplierBp / 10_000})`
-          : line.label,
-        kind: line.kind,
-        unitPriceCents: line.unitPriceCents,
-        quantity: line.quantity,
-        sourceId: line.sourceId,
-        sortOrder: i,
-      })),
-    );
-    // event แรกของ timeline — เธรดกับ timeline เป็นสตรีมเดียวกัน
-    const insertEvent = db.insert(schema.message).values({
-      id: newId("msg"),
-      orderId,
-      senderUserId: session.user.id,
-      isSystemEvent: true,
-      eventType: "order_created",
-      createdAt: now,
-    });
-
-    try {
-      // แยกสองทางเพราะ batch() รับเป็น tuple — ใส่ array ที่ยาวไม่แน่นอนแล้ว type ไม่ผ่าน
-      // และ .values([]) กับ array ว่างจะ generate SQL ที่พัง
-      if (v.answers.length > 0) {
-        const insertAnswers = db.insert(schema.orderAnswer).values(
-          v.answers.map((a, i) => ({
-            id: newId("oans"),
-            orderId,
-            fieldKey: a.key,
-            fieldLabel: a.label,
-            value: a.value,
-            sortOrder: i,
-          })),
-        );
-        await db.batch([insertOrder, insertItems, insertAnswers, insertEvent]);
-      } else {
-        await db.batch([insertOrder, insertItems, insertEvent]);
-      }
-      // ออเดอร์ใหม่คือแจ้งเตือนที่สำคัญที่สุดสำหรับครีเอเตอร์ — คือรายได้ที่เพิ่งเข้ามา
-      await notify({
-        userId: owner.id,
-        actorUserId: session.user.id,
-        type: "order_created",
-        data: { code, service: service.title },
-        url: `/orders/${code}`,
-        entityType: "order",
-        entityId: orderId,
-      });
-
-      return { ok: true, code };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (attempt === 0 && msg.includes("order_code_unique")) continue;
-      throw err;
-    }
-  }
-
-  return { ok: false, error: "invalid" };
+  return { ok: true, code: created.code };
 }
 
 /** ผู้ใช้คนนี้กำลังรอครีเอเตอร์คนนี้อยู่กี่งาน — ใช้เตือนก่อนสั่งซ้ำ */

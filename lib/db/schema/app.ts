@@ -127,8 +127,6 @@ export const creatorPage = pgTable(
 
   /** ข้อตกลงรับงาน เก็บเป็นข้อ ๆ */
   tos: jsonb("tos").$type<string[]>().notNull().default([]),
-  /** เพิ่มทุกครั้งที่แก้ TOS — ผูกกับ order.tosVersionAccepted เพื่อเป็นหลักฐาน */
-  tosVersion: integer("tos_version").notNull().default(1),
 
   socials: jsonb("socials").$type<Array<{ platform: string; url: string }>>().notNull().default([]),
 

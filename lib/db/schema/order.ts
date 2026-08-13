@@ -76,7 +76,6 @@ export const order = pgTable(
     revisionsAllowed: integer("revisions_allowed").notNull().default(0),
 
     /** หลักฐานว่ายอมรับ TOS ฉบับไหน — พร้อมข้อความฉบับเต็มที่ลูกค้าเห็นตอนนั้น */
-    tosVersionAccepted: integer("tos_version_accepted").notNull().default(1),
     tosSnapshot: jsonb("tos_snapshot").$type<string[]>().notNull().default([]),
     acceptedTosAt: timestamp("accepted_tos_at", { withTimezone: true }),
 
