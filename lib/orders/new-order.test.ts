@@ -36,3 +36,15 @@ describe("ทางสร้างออเดอร์", () => {
     );
   });
 });
+
+describe("มัดจำบนออเดอร์ใหม่", () => {
+  it("ตัวเขียนต้องส่ง depositCents ลงแถว ไม่ใช่ปล่อยให้ default เป็น 0", () => {
+    /**
+     * ตรวจที่ตัวโค้ด เพราะพลาดข้อนี้แล้วไม่มีอะไรพัง — ออเดอร์เกิดปกติ
+     * แค่ด่านมัดจำเงียบไปเฉย ๆ (`depositSatisfied()` เป็นจริงเสมอเมื่อค่าเป็น 0)
+     * ซึ่งเป็นรูเดิมที่เคยอยู่ในระบบมาตลอดโดยไม่มีใครเห็น
+     */
+    const src = readFileSync(join(process.cwd(), "lib/orders/new-order.ts"), "utf8");
+    assert.match(src, /depositCents: quote\.depositCents \?\? 0/);
+  });
+});

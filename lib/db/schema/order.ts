@@ -425,3 +425,162 @@ export const orderQuote = pgTable(
 export const orderQuoteRelations = relations(orderQuote, ({ one }) => ({
   order: one(order, { fields: [orderQuote.orderId], references: [order.id] }),
 }));
+
+/* ── ใบเชิญลูกค้า ─────────────────────────────────────────────────── */
+
+/**
+ * ครีเอเตอร์ร่างงานแล้วส่งลิงก์ให้ลูกค้ามากดรับ
+ *
+ * ⚠️ **กดลิงก์แล้วยังไม่มีออเดอร์เกิด** — เขียนแค่แถว `order_invite_claim`
+ * แล้วครีเอเตอร์เป็นคนกดยืนยันอีกที
+ *
+ * เหตุผล: `order.clientUserId` เป็น `notNull` เขียนที่เดียว และทั้งระบบ**ไม่มี
+ * การลบออเดอร์เลย** การผูกออเดอร์กับคนจึงถาวรตั้งแต่วินาทีแรก ถ้าให้คลิกแล้วผูกทันที
+ * ลิงก์ที่ถูกส่งต่อไปมาจะผูกงานกับคนแปลกหน้าอย่างแก้ไม่ได้ และคนนั้นกดยกเลิกงาน
+ * ให้กลายเป็นสถานะปลายทางได้ทันทีด้วย
+ *
+ * `confirmedAt` คือด่าน "ยืนยันได้ครั้งเดียว" — เขียนแบบ compare-and-set
+ * ไม่ใช่เช็คแล้วค่อยเขียน
+ */
+export const orderInvite = pgTable(
+  "order_invite",
+  {
+    id: text("id").primaryKey(),
+    /** ตัวระบุใน URL — สุ่ม ไม่ใช่ id เพราะ id เรียงตามเวลาแล้วเดาใบข้างเคียงได้ */
+    token: text("token").notNull().unique(),
+    creatorPageId: text("creator_page_id")
+      .notNull()
+      .references(() => creatorPage.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").notNull(),
+    serviceId: text("service_id").references(() => service.id, { onDelete: "set null" }),
+
+    /**
+     * ต้องระบุอีเมลเสมอ — ไม่มีใบแบบ "ใครถือลิงก์ก็กดได้"
+     *
+     * อีเมลเป็นสิ่งเดียวที่ผู้ใช้เปลี่ยนเองไม่ได้ในระบบนี้ (`/update-user` ปฏิเสธ
+     * และเส้นทางเปลี่ยนอีเมลอยู่ใน `disabledPaths`) ส่วนชื่อกับรูปแก้เองได้ทั้งคู่
+     * ถ้าไม่มีอีเมลให้เทียบ การที่ "ครีเอเตอร์เห็นว่าใครมากด" ก็ไม่ได้บอกอะไรเลย
+     *
+     * และการกดรับบนใบที่ไม่ระบุอีเมลเท่ากับยื่นอีเมลจริงของคนกดให้คนออกใบ
+     * โดยที่หน้าจอบอกว่ากำลัง "รับงาน" ไม่ได้บอกว่ากำลังให้ข้อมูลติดต่อ
+     */
+    email: text("email").notNull(),
+
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    /** ยืนยันแล้วครั้งเดียวจบ — ออเดอร์ที่เกิดผูกไว้ที่ `orderId` */
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    orderId: text("order_id").references(() => order.id, { onDelete: "set null" }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_invite_page_idx").on(t.creatorPageId, t.createdAt),
+    index("order_invite_email_idx").on(t.email),
+  ],
+);
+
+/**
+ * ข้อเสนอหนึ่งฉบับของใบเชิญ — แก้ราคา = ออกฉบับใหม่ทับ ไม่ใช่เขียนทับ
+ *
+ * รูปแบบเดียวกับ `order_quote` เป๊ะ ๆ โดยตั้งใจ และด้วยเหตุผลเดียวกัน:
+ * ลูกค้าเปิดหน้าค้างไว้ ครีเอเตอร์ขึ้นราคา ลูกค้ากดปุ่มเดิมที่ยังค้างบนจอ
+ * ปุ่มกดรับจึงส่ง `revisionId` ไปด้วยเสมอ ฉบับที่ถูกแทนแล้วกดไม่ผ่าน
+ *
+ * ⚠️ ต้องแช่ `deliveryDays` / `revisionsIncluded` / `tosSnapshot` ไว้ที่นี่ด้วย
+ * ไม่ใช่อ่านสดจากเมนูตอนครีเอเตอร์กดยืนยัน — ระหว่างลูกค้ากดรับกับครีเอเตอร์ยืนยัน
+ * เวลาผ่านไปได้เป็นวัน และครีเอเตอร์แก้กำหนดส่งกับจำนวนรอบแก้ของบริการได้ตลอด
+ * ลูกค้าจะกลายเป็นตกลงกับเงื่อนไขที่ไม่เคยอ่าน
+ */
+export const orderInviteRevision = pgTable(
+  "order_invite_revision",
+  {
+    id: text("id").primaryKey(),
+    inviteId: text("invite_id")
+      .notNull()
+      .references(() => orderInvite.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").notNull(),
+
+    /** รูปเดียวกับ `order_quote.lines` — ตอนสร้างออเดอร์คือคัดลอก ไม่ใช่แปลง */
+    lines: jsonb("lines").$type<Array<{ label: string; amountCents: number }>>().notNull(),
+    subtotalCents: integer("subtotal_cents").notNull(),
+    addonsCents: integer("addons_cents").notNull().default(0),
+    totalCents: integer("total_cents").notNull(),
+    depositCents: integer("deposit_cents").notNull().default(0),
+    note: text("note").notNull().default(""),
+
+    /** แช่ไว้จากเมนูตอนออกฉบับนี้ — ครีเอเตอร์แก้เมนูทีหลังไม่ย้อนมาที่ใบนี้ */
+    deliveryDays: integer("delivery_days").notNull(),
+    revisionsIncluded: integer("revisions_included").notNull(),
+    tosSnapshot: jsonb("tos_snapshot").$type<string[]>().notNull().default([]),
+
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("order_invite_revision_invite_idx").on(t.inviteId, t.createdAt),
+    uniqueIndex("order_invite_revision_live_idx")
+      .on(t.inviteId)
+      .where(sql`${t.supersededAt} is null and ${t.acceptedAt} is null`),
+  ],
+);
+
+/**
+ * ลูกค้ากดรับ — จุดที่การยินยอมเกิดขึ้นจริง
+ *
+ * `revisionId` เป็น `notNull` เพราะแถวนี้ต้องบอกได้ว่า **ตกลงกับฉบับไหน**
+ * ไม่ใช่แค่ "ตกลงกับใบเชิญนี้" และ `claimedAt` คือเวลาที่ต้องกลายเป็น
+ * `order.acceptedTosAt` ตอนออเดอร์เกิด ไม่ใช่เวลาที่ครีเอเตอร์กดยืนยัน
+ */
+export const orderInviteClaim = pgTable(
+  "order_invite_claim",
+  {
+    id: text("id").primaryKey(),
+    inviteId: text("invite_id")
+      .notNull()
+      .references(() => orderInvite.id, { onDelete: "cascade" }),
+    revisionId: text("revision_id")
+      .notNull()
+      .references(() => orderInviteRevision.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+    /** ครีเอเตอร์ปฏิเสธ หรือถูกล้างทิ้งตอนเพิกถอนลิงก์ */
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    /** ลูกค้าถอนตัวเอง — ต้องมี ไม่งั้นคนที่กดผิดติดค้างอยู่ตลอดกาล */
+    withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("order_invite_claim_invite_idx").on(t.inviteId, t.claimedAt),
+    index("order_invite_claim_user_idx").on(t.userId, t.claimedAt),
+    /** เปิดค้างได้ใบละหนึ่งคำขอ — บังคับที่ฐานข้อมูล ไม่ใช่ที่โค้ด */
+    uniqueIndex("order_invite_claim_live_idx")
+      .on(t.inviteId)
+      .where(sql`${t.rejectedAt} is null and ${t.withdrawnAt} is null`),
+  ],
+);
+
+export const orderInviteRelations = relations(orderInvite, ({ one, many }) => ({
+  page: one(creatorPage, { fields: [orderInvite.creatorPageId], references: [creatorPage.id] }),
+  service: one(service, { fields: [orderInvite.serviceId], references: [service.id] }),
+  order: one(order, { fields: [orderInvite.orderId], references: [order.id] }),
+  revisions: many(orderInviteRevision),
+  claims: many(orderInviteClaim),
+}));
+
+export const orderInviteRevisionRelations = relations(orderInviteRevision, ({ one }) => ({
+  invite: one(orderInvite, { fields: [orderInviteRevision.inviteId], references: [orderInvite.id] }),
+}));
+
+export const orderInviteClaimRelations = relations(orderInviteClaim, ({ one }) => ({
+  invite: one(orderInvite, { fields: [orderInviteClaim.inviteId], references: [orderInvite.id] }),
+  revision: one(orderInviteRevision, {
+    fields: [orderInviteClaim.revisionId],
+    references: [orderInviteRevision.id],
+  }),
+  user: one(user, { fields: [orderInviteClaim.userId], references: [user.id] }),
+}));

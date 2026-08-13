@@ -66,12 +66,34 @@ export async function insertNewOrder(input: {
   owner: { plan: string | null };
   service: { id: string; deliveryDays: number; revisionsIncluded: number };
   clientUserId: string;
-  quote: { subtotalCents: number; addonsCents: number; totalCents: number; lines: PriceLine[] };
+  quote: {
+    subtotalCents: number;
+    addonsCents: number;
+    totalCents: number;
+    /**
+     * มัดจำที่ต้องจ่ายก่อนเริ่มงาน — 0 = ไม่บังคับ
+     *
+     * ⚠️ ต้องรับมาที่นี่ ไม่ใช่ปล่อยให้คอลัมน์ default เป็น 0
+     * `depositSatisfied()` เป็นจริงเสมอเมื่อค่านี้เป็น 0 ด่านมัดจำใน `transitionOrder`
+     * จึงไม่เคยทำงาน — เป็นรูที่เพิ่งอุดไปตอนทำใบเสนอราคา ทางสร้างออเดอร์ทางใหม่
+     * ที่ลืมส่งค่านี้จะเปิดรูเดิมขึ้นมาอีกครั้งแบบเงียบ ๆ
+     */
+    depositCents?: number;
+    lines: PriceLine[];
+  };
   answers?: NewOrderAnswer[];
   isPublicInQueue: boolean;
   /** ใครเป็นคนทำให้ออเดอร์นี้เกิด — ขึ้นบน timeline เป็น event แรก */
   actorUserId: string;
   eventType?: string;
+  /**
+   * เวลาที่ลูกค้ายอมรับข้อตกลงจริง ๆ — ไม่ใส่ = ตอนนี้
+   *
+   * มีไว้เพราะทางสร้างออเดอร์ที่ลูกค้ากดยอมรับคนละจังหวะกับที่ออเดอร์เกิด
+   * (ใบเชิญ: ลูกค้ากดรับวันนี้ ครีเอเตอร์ยืนยันอีกสามวัน) ถ้าประทับเวลาตอนเขียนแถว
+   * หลักฐานการยินยอมชิ้นเดียวที่แพลตฟอร์มมีจะชี้ไปที่การกดของครีเอเตอร์ ไม่ใช่ของลูกค้า
+   */
+  acceptedTosAt?: Date;
 }): Promise<
   { ok: true; orderId: string; code: string } | { ok: false; error: "creator_full" | "invalid" }
 > {
@@ -118,10 +140,11 @@ export async function insertNewOrder(input: {
     subtotalCents: quote.subtotalCents,
     addonsCents: quote.addonsCents,
     totalCents: quote.totalCents,
+    depositCents: quote.depositCents ?? 0,
     revisionsAllowed: service.revisionsIncluded,
     // แช่ TOS ฉบับที่ลูกค้าเห็นตอนกดยอมรับ — ครีเอเตอร์แก้ทีหลังไม่ย้อนหลังมาที่ออเดอร์นี้
     tosSnapshot: page.tos,
-    acceptedTosAt: now,
+    acceptedTosAt: input.acceptedTosAt ?? now,
     dueAt,
     isPublicInQueue: input.isPublicInQueue,
     createdAt: now,
