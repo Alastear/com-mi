@@ -1,14 +1,14 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
 import { notify } from "@/lib/notifications/create";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { isOrderCode } from "./code";
-import { assertTransition, TransitionError } from "./state-machine";
 import { depositFor, quoteFromLines } from "./pricing";
 import type { OrderStatus } from "@/lib/types";
 
@@ -68,7 +68,9 @@ export type IssueQuoteResult =
         | "wrong_status"
         | "empty"
         | "too_large"
-        | "conflict";
+        | "conflict"
+        | "rate_limited"
+        | "shop_suspended";
     };
 
 /** สถานะที่ยังออกใบเสนอราคาได้ — หลังลูกค้าตอบรับแล้วราคาถือว่าตกลงกันแล้ว */
@@ -89,12 +91,28 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
   const order = await db.query.order.findFirst({
     where: eq(schema.order.code, code),
     columns: { id: true, status: true, clientUserId: true },
-    with: { page: { columns: { userId: true } } },
+    with: { page: { columns: { userId: true, suspendedAt: true } } },
   });
   if (!order) return { ok: false, error: "not_found" };
 
   // ครีเอเตอร์เจ้าของออเดอร์เท่านั้น — คนอื่นตอบเหมือนไม่มีออเดอร์นี้อยู่
   if (order.page.userId !== session.user.id) return { ok: false, error: "not_found" };
+
+  /**
+   * ร้านที่ถูกผู้ดูแลระงับต้องตั้งราคาใหม่ไม่ได้
+   *
+   * `createOrder` กันไว้แล้วที่ `lib/orders/create.ts:104` แต่ทางนี้เป็นอีกทางที่
+   * พาไปถึงสถานะจ่ายเงินได้เหมือนกัน — ลูกค้ากดยอมรับแล้ว `canPay()` เปิดทันที
+   * การระงับที่กันแค่ทางเดียวไม่ใช่การระงับ
+   */
+  if (order.page.suspendedAt) return { ok: false, error: "shop_suspended" };
+
+  const gate = await rateLimit(
+    `quote:${session.user.id}`,
+    LIMITS.issueQuote.limit,
+    LIMITS.issueQuote.windowSeconds,
+  );
+  if (!gate.ok) return { ok: false, error: "rate_limited" };
 
   const from = order.status as OrderStatus;
   if (!QUOTABLE.includes(from)) return { ok: false, error: "wrong_status" };
@@ -164,18 +182,11 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
   });
 
   /**
-   * ออกใบซ้ำตอนที่เป็น `quoted` อยู่แล้วไม่ต้องเปลี่ยนสถานะ — และห้ามเรียก
-   * `assertTransition` ด้วย เพราะ `quoted → quoted` ไม่ใช่เส้นทางที่มีอยู่จริง
-   * ในเครื่องสถานะ การแก้ราคาไม่ใช่การเปลี่ยนสถานะ มันคือการเปลี่ยนข้อเสนอ
+   * ไม่เรียก `assertTransition` — เครื่องสถานะไม่มีเส้นไหนเข้าสู่ `quoted` เลย
+   * โดยตั้งใจ (เหตุผลอยู่ที่ `lib/orders/state-machine.ts`) ที่นี่จึงเป็นทางเดียว
+   * ที่เขียนสถานะนี้ได้ และเขียนพร้อมแถวใบเสมอ ด่านคือ `QUOTABLE` ข้างบน
+   * กับเงื่อนไข `where status = from` ที่ผูกไว้กับคำสั่ง update ข้างล่าง
    */
-  if (from !== "quoted") {
-    try {
-      assertTransition(from, "quoted", "creator");
-    } catch (err) {
-      if (err instanceof TransitionError) return { ok: false, error: "wrong_status" };
-      throw err;
-    }
-  }
 
   /**
    * ยิงพร้อมกันสองครั้งแล้วชน index `order_quote_live_idx` — ตอบว่าชนกัน
@@ -193,7 +204,22 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
             db
               .update(schema.order)
               .set({ status: "quoted", updatedAt: now })
-              .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from))),
+              /**
+       * เงื่อนไขนี้คือด่านกันกดซ้ำ **และ** กันการยอมรับใบที่เพิ่งถูกแทนที่ไป
+       *
+       * ระหว่างที่เราอ่านใบมาแล้วกำลังจะเขียน ครีเอเตอร์อาจออกใบใหม่ทับพอดี
+       * การอ่านแล้วค่อยเขียนโดยไม่ผูกเงื่อนไขกลับไปที่แถวใบ จะเขียนราคาของใบที่ตายแล้ว
+       */
+      .where(
+        and(
+          eq(schema.order.id, order.id),
+          eq(schema.order.status, from),
+          sql`exists (
+            select 1 from ${schema.orderQuote} q
+            where q.id = ${quoteId} and q.accepted_at is null and q.superseded_at is null
+          )`,
+        ),
+      ),
             event,
           ]
         : [supersede, insert, event],
@@ -209,7 +235,9 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
       actorUserId: session.user.id,
       type: "quote_issued",
       data: { code },
-      url: `/orders/${code}`,
+      // ⚠️ หน้าของ **ลูกค้า** — `/orders/…` เป็นเส้นทางฝั่งครีเอเตอร์ในกลุ่ม (app)
+      // ผู้ซื้อที่ไม่มีร้านกดแล้วจะถูกส่งไป onboarding "สร้างร้าน" แทนที่จะเห็นใบเสนอราคา
+      url: `/my/requests/${code}`,
       entityType: "order",
       entityId: order.id,
     });
@@ -260,13 +288,14 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
     return { ok: false, error: "not_found" };
   }
 
+  /**
+   * เช็คสถานะตรง ๆ ไม่เรียก `assertTransition` — เส้น `quoted → accepted`
+   * ถูกถอดออกจากเครื่องสถานะแล้วโดยตั้งใจ เพื่อไม่ให้มีปุ่มธรรมดาที่ยอมรับ
+   * โดยไม่พกราคาไปด้วย (เหตุผลเต็มอยู่ที่ `lib/orders/state-machine.ts`)
+   * ที่นี่จึงเป็น **ทางเดียว** ที่ออเดอร์เดินจาก `quoted` ไป `accepted` ได้
+   */
   const from = order.status as OrderStatus;
-  try {
-    assertTransition(from, "accepted", "client");
-  } catch (err) {
-    if (err instanceof TransitionError) return { ok: false, error: "wrong_status" };
-    throw err;
-  }
+  if (from !== "quoted") return { ok: false, error: "wrong_status" };
 
   const quote = await db.query.orderQuote.findFirst({
     where: eq(schema.orderQuote.id, quoteId),
@@ -311,7 +340,13 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
     db
       .update(schema.orderQuote)
       .set({ acceptedAt: now })
-      .where(and(eq(schema.orderQuote.id, quoteId), isNull(schema.orderQuote.acceptedAt))),
+      .where(
+        and(
+          eq(schema.orderQuote.id, quoteId),
+          isNull(schema.orderQuote.acceptedAt),
+          isNull(schema.orderQuote.supersededAt),
+        ),
+      ),
 
     // บรรทัดเดิมมาจากเมนูตอนสั่ง ตอนนี้ราคาไม่ได้มาจากเมนูแล้ว — ต้องหายไปทั้งชุด
     db.delete(schema.orderItem).where(eq(schema.orderItem.orderId, order.id)),

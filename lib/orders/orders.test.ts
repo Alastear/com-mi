@@ -27,28 +27,40 @@ describe("state machine", () => {
     assert.throws(() => assertTransition("requested", "delivered", "client"), TransitionError);
   });
 
-  it("ครีเอเตอร์เสนอราคาจากคำขอใหม่ได้เลย ไม่ต้องกด reviewing ก่อน", () => {
+  it("แถบปุ่มต้องไม่มีทางพาไป quoted ได้เอง — ไม่งั้นได้สถานะที่ไม่มีใบ", () => {
     /**
-     * เจอตอนทดสอบในเบราว์เซอร์: กดส่งใบเสนอราคาแล้วได้ wrong_status กลับมา
-     * เพราะเส้น requested → quoted ไม่มีอยู่ ทั้งที่ requested คือสถานะที่
-     * ควรเสนอราคาได้มากที่สุด — ครีเอเตอร์ต้องกดปุ่มที่ไม่มีความหมายก่อนหนึ่งครั้ง
+     * เจอตอนทดสอบในเบราว์เซอร์: มีปุ่ม "ส่งใบเสนอราคา" โผล่มาสองปุ่ม
+     * ปุ่มหนึ่งคือฟอร์มจริง อีกปุ่มมาจากแถบสถานะซึ่งเปลี่ยนสถานะเฉย ๆ
+     * กดปุ่มหลังแล้วออเดอร์เป็น `quoted` โดยไม่มีใบ — ลูกค้าเปิดมาเจอ
+     * "รอครีเอเตอร์ตอบรับ" ทั้งที่สถานะบอกว่าเสนอราคาไปแล้ว
      */
-    assert.equal(canTransition("requested", "quoted", "creator"), true);
-    assert.equal(canTransition("reviewing", "quoted", "creator"), true);
-    // ลูกค้าตั้งราคาให้ตัวเองไม่ได้
-    assert.equal(canTransition("requested", "quoted", "client"), false);
+    // ไม่มีเส้นไหนเข้าสู่ quoted เลย — issueQuote() เขียนสถานะนี้เองพร้อมแถวใบ
+    for (const from of ["requested", "reviewing"] as const) {
+      for (const who of ["creator", "client"] as const) {
+        assert.equal(canTransition(from, "quoted", who), false, `${from} → quoted โดย ${who}`);
+      }
+    }
   });
 
-  it("ลูกค้ากดยอมรับใบเสนอราคาได้ แต่ครีเอเตอร์กดแทนไม่ได้", () => {
-    assert.equal(canTransition("quoted", "accepted", "client"), true);
+  it("ไม่มีใครเดินจาก quoted ไป accepted ผ่านเครื่องสถานะได้ — ต้องผ่าน acceptQuote เท่านั้น", () => {
+    /**
+     * ปุ่มบนหน้าจอมาจาก `allowedNext()` ทั้งหมด ถ้าเส้นนี้กลับมา ลูกค้าจะเห็น
+     * ปุ่มยอมรับสองปุ่ม และปุ่มธรรมดาจะตอบรับที่ **ราคาก่อนเสนอ** แล้วย้อนไม่ได้
+     * เพราะ `issueQuote()` ออกใบได้เฉพาะก่อนตอบรับเท่านั้น
+     */
+    assert.equal(canTransition("quoted", "accepted", "client"), false);
     assert.equal(canTransition("quoted", "accepted", "creator"), false);
+    // ทางออกอื่นของ quoted ยังต้องอยู่ครบ ไม่งั้นออเดอร์ค้างถาวร
+    assert.equal(canTransition("quoted", "cancelled", "client"), true);
+    assert.equal(canTransition("quoted", "declined", "creator"), true);
   });
 
   it("แยก wrong_actor ออกจาก not_allowed", () => {
     // เส้นทางมีอยู่ แต่ผิดคน
     const wrongActor = (() => {
       try {
-        assertTransition("quoted", "accepted", "creator");
+        // เส้น requested → quoted มีอยู่จริง แต่เป็นของครีเอเตอร์ ลูกค้าตั้งราคาเองไม่ได้
+        assertTransition("requested", "reviewing", "client");
       } catch (e) {
         return e as TransitionError;
       }

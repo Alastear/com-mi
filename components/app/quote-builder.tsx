@@ -68,8 +68,15 @@ export function QuoteBuilder({
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
 
-  /** ยอดรวมสด ๆ ระหว่างพิมพ์ — เลขที่พิมพ์ไม่เสร็จ (เช่น "1e") นับเป็นศูนย์ ไม่ใช่ NaN */
+  /**
+   * ยอดรวมสด ๆ ระหว่างพิมพ์ — เลขที่พิมพ์ไม่เสร็จ (เช่น "1e") นับเป็นศูนย์ ไม่ใช่ NaN
+   *
+   * ⚠️ **ต้องข้ามบรรทัดที่ไม่มีชื่อเหมือนที่ server ทำ** (`quoteFromLines` ทิ้งทั้งบรรทัด)
+   * ไม่งั้นครีเอเตอร์ที่ใส่ยอดแล้วยังไม่ได้พิมพ์ชื่อจะเห็นยอดรวมที่มากกว่าใบที่ออกจริง
+   * แล้วกดส่งด้วยความเข้าใจว่าได้เงินเท่าที่เห็น — พรีวิวที่ไม่ตรงกับของจริงแย่กว่าไม่มีพรีวิว
+   */
   const totalBaht = rows.reduce((n, r) => {
+    if (r.label.trim() === "") return n;
     const v = Number(r.baht);
     return n + (Number.isFinite(v) ? Math.trunc(v) : 0);
   }, 0);
@@ -105,7 +112,11 @@ export function QuoteBuilder({
               ? t.quote.errorWrongStatus
               : res.error === "conflict"
                 ? t.quote.errorConflict
-                : t.error.title,
+                : res.error === "rate_limited"
+                  ? t.quote.errorRateLimited
+                  : res.error === "shop_suspended"
+                    ? t.quote.errorSuspended
+                    : t.error.title,
       );
     });
   }
