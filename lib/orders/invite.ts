@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
-import { requireCreator } from "@/lib/auth-guard";
+import { getSession, requireCreator } from "@/lib/auth-guard";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { quoteFromLines, depositFor } from "./pricing";
-import { assertCanAcceptNewOrder } from "./new-order";
-import { generateInviteToken } from "./invite-token";
+import { assertCanAcceptNewOrder, insertNewOrder } from "./new-order";
+import { generateInviteToken, isInviteToken } from "./invite-token";
+import { notify } from "@/lib/notifications/create";
+import { sql } from "drizzle-orm";
 
 /**
  * ใบเชิญลูกค้า — ฝั่งครีเอเตอร์
@@ -312,4 +314,278 @@ export async function revokeInvite(inviteId: string): Promise<RevokeResult> {
 
   revalidatePath("/invites");
   return { ok: true };
+}
+
+
+/* ── ลูกค้ากดรับ ───────────────────────────────────────────────────── */
+
+export type ClaimResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "unauthenticated"
+        | "invalid"
+        | "not_found"
+        | "wrong_account"
+        | "closed"
+        | "superseded"
+        | "conflict";
+    };
+
+/**
+ * ลูกค้ากดรับงาน — **จุดที่การยินยอมเกิดขึ้นจริง**
+ *
+ * เขียนแค่แถวคำขอ ไม่สร้างออเดอร์ ครีเอเตอร์ต้องกดยืนยันอีกที
+ *
+ * ⚠️ ต้องส่ง `revisionId` มาด้วยเสมอ ไม่ใช่แค่โทเคน — ระหว่างที่ลูกค้าเปิดหน้าค้างไว้
+ * ครีเอเตอร์แก้ราคาได้ ถ้ารับด้วยโทเคนเปล่า ลูกค้าจะผูกกับตัวเลขที่ไม่เคยอ่าน
+ *
+ * ⚠️ เขียนด้วยคำสั่งเดียวที่มีเงื่อนไขอยู่ในตัว ไม่ใช่ "อ่านก่อนแล้วค่อยเขียน" —
+ * neon-http ไม่มี interactive transaction ระหว่างอ่านกับเขียนมีช่องให้ครีเอเตอร์
+ * กดเพิกถอนแทรกเข้ามาได้เสมอ แล้วคำขอจะเกิดบนลิงก์ที่ตายไปแล้ว
+ */
+export async function claimInvite(token: string, revisionId: string): Promise<ClaimResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "unauthenticated" };
+  if (!isInviteToken(token) || !revisionId || revisionId.length > 64) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const db = getDb();
+  const invite = await db.query.orderInvite.findFirst({
+    where: eq(schema.orderInvite.token, token),
+    columns: { id: true, email: true, revokedAt: true, confirmedAt: true, expiresAt: true },
+    with: { page: { columns: { userId: true } } },
+  });
+  if (!invite) return { ok: false, error: "not_found" };
+
+  /**
+   * อีเมลไม่ตรง = ปฏิเสธ **และไม่เผาใบทิ้ง**
+   *
+   * ลูกค้าตัวจริงอาจกดจากบัญชีผิดโดยไม่ตั้งใจ ถ้าเผาใบตรงนี้เขาจะเข้าไม่ได้อีกเลย
+   * และครีเอเตอร์ต้องออกใบใหม่โดยไม่รู้ว่าเกิดอะไรขึ้น — บอกให้สลับบัญชีพอ
+   */
+  if ((session.user.email ?? "").toLowerCase() !== invite.email.toLowerCase()) {
+    return { ok: false, error: "wrong_account" };
+  }
+  if (invite.revokedAt || invite.confirmedAt) return { ok: false, error: "closed" };
+  if (invite.expiresAt && invite.expiresAt.getTime() <= Date.now()) {
+    return { ok: false, error: "closed" };
+  }
+
+  const claimId = newId("iclm");
+  try {
+    /**
+     * เงื่อนไขทั้งหมดอยู่ใน `where` ของคำสั่งเขียนเอง — ศูนย์แถวคือคำตอบว่า "ไม่ผ่าน"
+     * ฉบับต้องยังเปิดอยู่ และใบต้องยังไม่ถูกเพิกถอน/ยืนยัน/หมดอายุ ณ วินาทีที่เขียน
+     */
+    const rows = await db.execute(sql`
+      insert into order_invite_claim (id, invite_id, revision_id, user_id)
+      select ${claimId}, ${invite.id}, ${revisionId}, ${session.user.id}
+      where exists (
+        select 1 from order_invite_revision r
+        where r.id = ${revisionId} and r.invite_id = ${invite.id}
+          and r.superseded_at is null and r.accepted_at is null
+      )
+      and exists (
+        select 1 from order_invite i
+        where i.id = ${invite.id} and i.revoked_at is null and i.confirmed_at is null
+          and (i.expires_at is null or i.expires_at > now())
+      )
+      returning id
+    `);
+    const inserted = Array.isArray(rows) ? rows.length : (rows.rows?.length ?? 0);
+    if (inserted === 0) return { ok: false, error: "superseded" };
+  } catch (err) {
+    // มีคนกดรับใบนี้ค้างอยู่แล้ว — index บังคับว่าเปิดค้างได้คำขอเดียวต่อใบ
+    if (String(err).includes("order_invite_claim_live_idx")) {
+      return { ok: false, error: "conflict" };
+    }
+    throw err;
+  }
+
+  await notify({
+    userId: invite.page.userId,
+    actorUserId: session.user.id,
+    type: "invite_claimed",
+    data: {},
+    url: "/invites",
+    entityType: "invite",
+    entityId: invite.id,
+  });
+
+  revalidatePath("/invites");
+  return { ok: true };
+}
+
+
+/* ── ครีเอเตอร์ยืนยัน — ออเดอร์เกิดตรงนี้ ─────────────────────────── */
+
+export type ConfirmResult =
+  | { ok: true; code: string }
+  | {
+      ok: false;
+      error:
+        | "unauthenticated"
+        | "invalid"
+        | "not_found"
+        | "closed"
+        | "shop_closed"
+        | "own_shop"
+        | "creator_full";
+    };
+
+/**
+ * ครีเอเตอร์กดยืนยันคำขอ — **ที่เดียวที่ใบเชิญกลายเป็นออเดอร์**
+ *
+ * ⚠️ ด่านทุกข้อถูกตรวจ **ที่นี่** ไม่ใช่ตอนออกใบ ระหว่างสองจังหวะนั้นเวลาผ่านไปเป็นวันได้
+ * ร้านอาจถูกระงับ ปิดรับงาน โควตาเต็ม หรือบริการถูกลบไปแล้ว
+ *
+ * ⚠️ เขียน `confirmedAt` แบบ compare-and-set ก่อนทำอย่างอื่น — ศูนย์แถวคือ
+ * "มีคนยืนยันไปแล้ว" หรือ "ใบตายไปแล้ว" ถ้าเช็คด้วยการอ่านเฉย ๆ สองแท็บกดพร้อมกัน
+ * จะได้ออเดอร์สองใบจากใบเชิญเดียว
+ */
+export async function confirmInviteClaim(claimId: string): Promise<ConfirmResult> {
+  const { user } = await requireCreator();
+  if (!claimId || claimId.length > 64) return { ok: false, error: "invalid" };
+
+  const db = getDb();
+  const claim = await db.query.orderInviteClaim.findFirst({
+    where: eq(schema.orderInviteClaim.id, claimId),
+    with: {
+      revision: true,
+      user: { columns: { id: true, email: true } },
+      invite: { with: { page: { columns: { id: true, userId: true, isPublished: true, suspendedAt: true, status: true } } } },
+    },
+  });
+  if (!claim || claim.invite.page.userId !== user.id) return { ok: false, error: "not_found" };
+  if (claim.rejectedAt || claim.withdrawnAt) return { ok: false, error: "closed" };
+  if (claim.revision.supersededAt || claim.revision.acceptedAt) {
+    return { ok: false, error: "closed" };
+  }
+
+  /**
+   * บริการต้องยังเปิดอยู่ ณ ตอนนี้ — อ่านซ้ำด้วยตัวกรองเดียวกับ `createOrder`
+   * ใบเชิญเก็บแค่ `serviceId` ไว้ ระหว่างทางครีเอเตอร์ปิดหรือลบบริการได้
+   */
+  const service = claim.invite.serviceId
+    ? await db.query.service.findFirst({
+        where: and(
+          eq(schema.service.id, claim.invite.serviceId),
+          eq(schema.service.isActive, true),
+          isNull(schema.service.deletedAt),
+        ),
+        columns: { id: true, title: true },
+      })
+    : null;
+  if (!service) return { ok: false, error: "not_found" };
+
+  const owner = await db.query.user.findFirst({
+    columns: { id: true, plan: true },
+    where: eq(schema.user.id, user.id),
+  });
+  if (!owner) return { ok: false, error: "not_found" };
+
+  const shopGate = assertCanAcceptNewOrder({
+    page: claim.invite.page,
+    owner,
+    clientUserId: claim.userId,
+  });
+  if (!shopGate.ok) return { ok: false, error: shopGate.error === "not_found" ? "shop_closed" : shopGate.error };
+
+  const now = new Date();
+
+  // ด่านยืนยันได้ครั้งเดียว — เขียนก่อน ค่อยสร้างออเดอร์
+  const claimed = await db
+    .update(schema.orderInvite)
+    .set({ confirmedAt: now })
+    .where(
+      and(
+        eq(schema.orderInvite.id, claim.inviteId),
+        isNull(schema.orderInvite.confirmedAt),
+        isNull(schema.orderInvite.revokedAt),
+        sql`(${schema.orderInvite.expiresAt} is null or ${schema.orderInvite.expiresAt} > now())`,
+      ),
+    )
+    .returning({ id: schema.orderInvite.id });
+  if (claimed.length === 0) return { ok: false, error: "closed" };
+
+  const rev = claim.revision;
+  const created = await insertNewOrder({
+    page: { id: claim.invite.page.id, tos: rev.tosSnapshot },
+    owner,
+    service: {
+      id: service.id,
+      deliveryDays: rev.deliveryDays,
+      revisionsIncluded: rev.revisionsIncluded,
+    },
+    clientUserId: claim.userId,
+    actorUserId: user.id,
+    quote: {
+      subtotalCents: rev.subtotalCents,
+      addonsCents: rev.addonsCents,
+      totalCents: rev.totalCents,
+      depositCents: rev.depositCents,
+      lines: rev.lines.map((l) => ({
+        label: l.label,
+        kind: "custom" as const,
+        unitPriceCents: l.amountCents,
+        quantity: 1,
+        sourceId: null,
+      })),
+    },
+    isPublicInQueue: false,
+    eventType: "invite_confirmed",
+    /**
+     * เวลาที่ **ลูกค้า** กดรับ ไม่ใช่ตอนนี้ — หลักฐานการยินยอมชิ้นเดียวที่มี
+     * ต้องชี้ไปที่การกดของลูกค้า ไม่ใช่การกดของครีเอเตอร์ที่เกิดทีหลังเป็นวัน
+     */
+    acceptedTosAt: claim.claimedAt,
+  });
+
+  if (!created.ok) {
+    // ปลดล็อกคืนให้ลองใหม่ได้ — ยืนยันไม่สำเร็จต้องไม่ทำให้ใบตายไปเฉย ๆ
+    await db
+      .update(schema.orderInvite)
+      .set({ confirmedAt: null })
+      .where(eq(schema.orderInvite.id, claim.inviteId));
+    return { ok: false, error: created.error === "creator_full" ? "creator_full" : "not_found" };
+  }
+
+  await db.batch([
+    /**
+     * ครีเอเตอร์เป็นคนร่างราคาและเป็นคนกดยืนยัน — การกดนั้นคือการตอบรับ
+     * ปล่อยไว้ที่ `requested` จะบอกลูกค้าว่า "รอครีเอเตอร์ตอบรับ" ทั้งที่เพิ่งตอบรับไปแล้ว
+     * และบอร์ดจะเอาไปวางในคอลัมน์คำขอใหม่ให้กดรับสิ่งที่รับไปแล้ว
+     *
+     * เขียนแบบมีเงื่อนไข — ถ้าพลาด ออเดอร์ค้างที่ `requested` แล้วกดปุ่มปกติต่อได้
+     */
+    db
+      .update(schema.order)
+      .set({ status: "accepted", updatedAt: now })
+      .where(and(eq(schema.order.id, created.orderId), eq(schema.order.status, "requested"))),
+    db
+      .update(schema.orderInviteRevision)
+      .set({ acceptedAt: now })
+      .where(eq(schema.orderInviteRevision.id, rev.id)),
+    db
+      .update(schema.orderInvite)
+      .set({ orderId: created.orderId })
+      .where(eq(schema.orderInvite.id, claim.inviteId)),
+  ]);
+
+  await notify({
+    userId: claim.userId,
+    actorUserId: user.id,
+    type: "order_created",
+    data: { code: created.code, service: service.title },
+    url: `/my/requests/${created.code}`,
+    entityType: "order",
+    entityId: created.orderId,
+  });
+
+  revalidatePath("/invites");
+  revalidatePath("/orders");
+  return { ok: true, code: created.code };
 }

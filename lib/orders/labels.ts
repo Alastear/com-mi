@@ -65,6 +65,7 @@ export function eventText(
   if (eventType === "quote_issued") return t.orderEvent.quote_issued;
   if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;
   if (eventType === "quote_withdrawn") return t.orderEvent.quote_withdrawn;
+  if (eventType === "invite_confirmed") return t.orderEvent.invite_confirmed;
   if (eventType === "status_changed") {
     const to = String(data?.to ?? "") as OrderStatus;
     const label = t.orderStatus[to] ?? to;

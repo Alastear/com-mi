@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { isOrderCode } from "@/lib/orders/code";
+import { isInviteToken } from "@/lib/orders/invite-token";
 
 /**
  * Read model ของออเดอร์
@@ -244,4 +245,56 @@ export async function listInvitesForCreator(creatorUserId: string) {
       },
     },
   });
+}
+
+/**
+ * ใบเชิญตามโทเคนในลิงก์ — สำหรับหน้าพรีวิวสาธารณะ
+ *
+ * ⚠️ คืน `email` ของใบมาด้วย **เพื่อให้ server component เทียบเท่านั้น**
+ * ห้ามส่งต่อลงไปที่คอมโพเนนต์ฝั่ง client และห้ามแสดงบนหน้าจอไม่ว่ารูปแบบใด
+ * แม้แต่แบบปิดบางส่วน — เจ้าตัวไม่จำเป็นต้องถูกบอกอีเมลของตัวเอง และการแสดงมัน
+ * เปลี่ยนลิงก์ที่ถูกส่งต่อกันมาให้กลายเป็นเครื่องมือตรวจอีเมลของคนอื่น
+ */
+export async function getInviteByToken(token: string) {
+  if (!isInviteToken(token)) return null;
+
+  const row = await getDb().query.orderInvite.findFirst({
+    where: eq(schema.orderInvite.token, token),
+    columns: {
+      id: true,
+      email: true,
+      expiresAt: true,
+      revokedAt: true,
+      confirmedAt: true,
+      orderId: true,
+    },
+    with: {
+      page: {
+        columns: { displayName: true, avatarMediaId: true },
+        with: { user: { columns: { handle: true, name: true, image: true } } },
+      },
+      service: { columns: { title: true } },
+      revisions: {
+        where: and(
+          isNull(schema.orderInviteRevision.supersededAt),
+          isNull(schema.orderInviteRevision.acceptedAt),
+        ),
+        limit: 1,
+      },
+      claims: {
+        where: and(
+          isNull(schema.orderInviteClaim.rejectedAt),
+          isNull(schema.orderInviteClaim.withdrawnAt),
+        ),
+        limit: 1,
+        columns: { id: true, userId: true, claimedAt: true },
+      },
+    },
+  });
+  if (!row) return null;
+
+  return {
+    ...row,
+    expired: Boolean(row.expiresAt && row.expiresAt.getTime() <= Date.now()),
+  };
 }

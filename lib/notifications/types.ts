@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = [
   "payment_reported",
   "payment_recorded_by_creator",
   "payment_confirmed",
+  "invite_claimed",
   "quote_issued",
   "quote_accepted",
   "delivery_released",

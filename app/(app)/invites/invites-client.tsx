@@ -15,7 +15,7 @@ import { CopyLinkButton } from "@/components/copy-link-button";
 import { useLocale } from "@/lib/i18n/client";
 import { formatMoney } from "@/lib/format";
 import { depositFor } from "@/lib/orders/pricing";
-import { createInvite, revokeInvite } from "@/lib/orders/invite";
+import { confirmInviteClaim, createInvite, revokeInvite } from "@/lib/orders/invite";
 import { siteUrl } from "@/lib/site";
 
 /**
@@ -37,7 +37,7 @@ type Invite = {
   expiresAt: Date | null;
   orderCode: string | null;
   live: { totalCents: number; depositCents: number } | null;
-  claim: { name: string; email: string; claimedAt: Date } | null;
+  claim: { id: string; name: string; email: string; claimedAt: Date } | null;
 };
 
 const DEPOSITS = [0, 25, 50, 100] as const;
@@ -316,6 +316,34 @@ export function InvitesClient({
                   {inv.claim.email.toLowerCase() !== inv.email.toLowerCase() ? (
                     <p className="mt-1 text-xs text-destructive">{t.invite.emailMismatch}</p>
                   ) : null}
+                  {/* ปุ่มนี้คือจุดที่ออเดอร์เกิด และการผูกลูกค้ากับงานกลายเป็นเรื่องถาวร */}
+                  <Button
+                    size="sm"
+                    className="mt-3 w-full"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const res = await confirmInviteClaim(inv.claim!.id);
+                        if (res.ok) {
+                          toast.success(t.invite.confirmed.replace("{code}", res.code));
+                          router.refresh();
+                          return;
+                        }
+                        toast.error(
+                          res.error === "creator_full"
+                            ? t.invite.errorFull
+                            : res.error === "shop_closed"
+                              ? t.invite.errorShopClosed
+                              : res.error === "closed"
+                                ? t.invite.deadTitle
+                                : t.error.title,
+                        );
+                        router.refresh();
+                      })
+                    }
+                  >
+                    {t.invite.confirmCta}
+                  </Button>
                 </div>
               ) : null}
 

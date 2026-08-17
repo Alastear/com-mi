@@ -40,6 +40,7 @@ export default async function InvitesPage() {
             : null,
           claim: i.claims[0]
             ? {
+                id: i.claims[0].id,
                 // อีเมลคือข้อมูลชิ้นเดียวที่บอกได้จริงว่าใครมากด — ชื่อกับรูปแก้เองได้
                 name: i.claims[0].user?.name ?? "",
                 email: i.claims[0].user?.email ?? "",
