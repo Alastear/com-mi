@@ -205,3 +205,43 @@ export async function getLiveQuote(orderId: string) {
    */
   return { ...row, expired: Boolean(row.expiresAt && row.expiresAt.getTime() <= Date.now()) };
 }
+
+/**
+ * ใบเชิญทั้งหมดของครีเอเตอร์คนนี้ พร้อมฉบับที่เปิดอยู่และคำขอที่ค้าง
+ *
+ * ดึงอีเมลของคนที่กดรับมาด้วย — เป็นข้อมูลชิ้นเดียวที่บอกได้จริงว่าใครมากด
+ * (ชื่อกับรูปผู้ใช้แก้เองได้ทั้งคู่) และเป็นเหตุผลทั้งหมดที่ขั้นยืนยันมีอยู่
+ */
+export async function listInvitesForCreator(creatorUserId: string) {
+  const db = getDb();
+  const page = await db.query.creatorPage.findFirst({
+    columns: { id: true },
+    where: eq(schema.creatorPage.userId, creatorUserId),
+  });
+  if (!page) return [];
+
+  return db.query.orderInvite.findMany({
+    where: eq(schema.orderInvite.creatorPageId, page.id),
+    orderBy: [desc(schema.orderInvite.createdAt)],
+    limit: 50,
+    with: {
+      service: { columns: { title: true, slug: true } },
+      order: { columns: { code: true, status: true } },
+      revisions: {
+        where: and(
+          isNull(schema.orderInviteRevision.supersededAt),
+          isNull(schema.orderInviteRevision.acceptedAt),
+        ),
+        limit: 1,
+      },
+      claims: {
+        where: and(
+          isNull(schema.orderInviteClaim.rejectedAt),
+          isNull(schema.orderInviteClaim.withdrawnAt),
+        ),
+        limit: 1,
+        with: { user: { columns: { name: true, email: true, image: true } } },
+      },
+    },
+  });
+}

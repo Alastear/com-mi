@@ -36,12 +36,17 @@ export type NewOrderRefusal = "not_found" | "shop_closed" | "own_shop";
 export function assertCanAcceptNewOrder(input: {
   page: { isPublished: boolean; suspendedAt: Date | null; status: string };
   owner: { id: string };
-  clientUserId: string;
+  /**
+   * ยังไม่รู้ว่าใครจะเป็นลูกค้าก็ปล่อยว่างได้ — ใช้ตอนครีเอเตอร์ออกใบเชิญ
+   * ซึ่งยังไม่มีคนกดรับ การเช็ค "ร้านตัวเอง" จะถูกข้ามไปในกรณีนั้น
+   * และต้องถูกเช็คอีกครั้งตอนรู้ตัวคนจริง ๆ (ตอนครีเอเตอร์กดยืนยันคำขอ)
+   */
+  clientUserId?: string;
 }): { ok: true } | { ok: false; error: NewOrderRefusal } {
   const { page, owner, clientUserId } = input;
 
   // สั่งงานร้านตัวเองไม่ได้ — ทำให้สถิติและโควตาเพี้ยนโดยไม่มีประโยชน์อะไร
-  if (owner.id === clientUserId) return { ok: false, error: "own_shop" };
+  if (clientUserId && owner.id === clientUserId) return { ok: false, error: "own_shop" };
 
   if (!page.isPublished) return { ok: false, error: "not_found" };
 

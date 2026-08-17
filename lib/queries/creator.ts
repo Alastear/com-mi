@@ -329,3 +329,21 @@ export async function listAllShopsForAdmin(limit = 100) {
     },
   });
 }
+
+/** บริการที่ยังเปิดอยู่ของครีเอเตอร์ — ใช้ให้เลือกตอนออกใบเชิญ */
+export async function getServicesForPicker(userId: string) {
+  const page = await getDb().query.creatorPage.findFirst({
+    columns: { id: true },
+    where: eq(schema.creatorPage.userId, userId),
+  });
+  if (!page) return [];
+  return getDb().query.service.findMany({
+    columns: { slug: true, title: true, deliveryDays: true, revisionsIncluded: true },
+    where: and(
+      eq(schema.service.creatorPageId, page.id),
+      eq(schema.service.isActive, true),
+      isNull(schema.service.deletedAt),
+    ),
+    orderBy: [asc(schema.service.sortOrder)],
+  });
+}
