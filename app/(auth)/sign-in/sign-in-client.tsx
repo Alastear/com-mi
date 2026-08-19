@@ -48,6 +48,22 @@ export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) 
 
   /** password = ฟอร์มปกติ · otp = กรอกรหัสที่ส่งไปทางอีเมล */
   const [mode, setMode] = useState<"password" | "otp">("password");
+
+  /**
+   * Better Auth ส่งกลับมาพร้อม `?error=` เมื่อผูกบัญชี Google ไม่ผ่าน
+   *
+   * เคสที่เกิดจริงคือ `account_not_linked` — อีเมลนี้มีบัญชีที่ยังไม่ยืนยันค้างอยู่
+   * ต้องบอกทางออกให้ชัด ไม่ใช่เด้งกลับมาหน้าเดิมเฉย ๆ แล้วปล่อยให้กด Google ซ้ำวนไป
+   */
+  const oauthError = params.get("error");
+
+  /**
+   * แจ้งครั้งเดียวตอนเข้าหน้ามาพร้อม `?error=` — ไม่ใช่ทุกครั้งที่ re-render
+   * รูปแบบเดียวกับที่ `shop-editor.tsx` ใช้แจ้งผลบันทึกสำเร็จ
+   */
+  if (oauthError) {
+    queueMicrotask(() => toast.error(t.auth.linkBlocked));
+  }
   const [signingUp, setSigningUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -121,7 +137,19 @@ export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) 
 
   async function handleGoogle() {
     setLoading(true);
-    const { error } = await signIn.social({ provider: "google", callbackURL: next });
+    /**
+     * ⚠️ ต้องส่ง `errorCallbackURL` ด้วย ไม่งั้นความผิดพลาดจะพาไปหน้า error
+     * ของ Better Auth เอง ซึ่งเป็นภาษาอังกฤษล้วนและไม่มีทางออกให้ผู้ใช้เลย
+     *
+     * เคสที่เกิดจริงคือ `account_not_linked` — มีคนสมัครด้วยอีเมลนี้ค้างไว้
+     * โดยยังไม่ยืนยัน (ใครก็ยิงสมัครแทนคนอื่นได้) การผูกบัญชี Google จึงถูกปฏิเสธ
+     * ทางออกคือขอรหัสทางอีเมลแล้วเข้าด้วยรหัสนั้น ซึ่งหน้าเข้าสู่ระบบของเราทำได้
+     */
+    const { error } = await signIn.social({
+      provider: "google",
+      callbackURL: next,
+      errorCallbackURL: `/sign-in?next=${encodeURIComponent(next)}`,
+    });
     if (error) {
       setLoading(false);
       toast.error(error.message ?? t.error.title);
