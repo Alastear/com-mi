@@ -42,6 +42,7 @@ export type TransitionResult =
         | "deposit_unpaid"
         | "not_fully_paid"
         | "no_files"
+        | "price_missing"
         | "use_dedicated_action";
     };
 
@@ -98,6 +99,19 @@ export async function transitionOrder(input: {
    * ทั้งสองข้อเป็นด่านฝั่ง server — UI ซ่อนปุ่มให้ก็จริง แต่ Server Action
    * ถูกเรียกตรงได้ ห้ามให้ UI เป็นชั้นป้องกันเดียว
    */
+  /**
+   * ออเดอร์ราคา ฿0 ตอบรับแล้วติดตาย
+   *
+   * `issueQuote()` ตั้งราคาได้เฉพาะก่อนตอบรับ และ `canRelease()` ต้องการ
+   * `totalCents > 0` (ข้อนั้นจำเป็น — ไม่งั้นออเดอร์ ฿0 จะ "จ่ายครบ" ตั้งแต่วินาทีแรก
+   * แล้วไฟล์หลุดทันทีที่แนบ) ผลคือหน้าจอขึ้น "จ่ายครบแล้ว" กับปุ่มส่งมอบที่กดไม่ได้
+   * เขียนว่า "ลูกค้ายังจ่ายไม่ครบ" พร้อมกัน และไม่มีปุ่มไหนพาออกจากสภาพนั้นได้เลย
+   *
+   * กันที่ทางเข้าแทน — ตั้งราคาก่อนค่อยตอบรับ
+   */
+  if (to === "accepted" && order.totalCents <= 0) {
+    return { ok: false, error: "price_missing" };
+  }
   if (to === "in_progress" && !depositSatisfied(order)) {
     return { ok: false, error: "deposit_unpaid" };
   }

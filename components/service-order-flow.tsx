@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ImagePlus, Loader2, Minus, Plus, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Minus, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
@@ -391,21 +391,18 @@ export function ServiceOrderFlow({
                 </div>
               ))}
 
-              {/* จุดอัปโหลด reference — ของจริงอัปตรงไป Blob ไม่ผ่าน function */}
-              <div>
-                <Label>{t.brief.referenceFiles}</Label>
-                <div className="mt-1.5 grid place-items-center rounded-xl border border-dashed py-10 text-center">
-                  <ImagePlus className="size-6 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t.brief.dropzone}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t.brief.dropzoneHint}
-                  </p>
-                </div>
-              </div>
+              {/*
+                ⚠️ เคยมีกล่อง "ลากไฟล์อ้างอิงมาวาง" กับข้อความ "บันทึกร่างอัตโนมัติแล้ว"
+                อยู่ตรงนี้ ทั้งคู่ถูกถอดออกเพราะ **ไม่มีของจริงอยู่หลังทั้งสองอัน**
 
-              <p className="text-xs text-muted-foreground">{t.service.draftSaved}</p>
+                กล่องนั้นไม่มี input ไม่มี onDrop และทั้งระบบไม่มีทางอัปไฟล์อ้างอิงเลย
+                (`CreateOrderSchema` ไม่มีช่องไฟล์ และ route อัปโหลดปฏิเสธ kind ที่ไม่ใช่
+                ของครีเอเตอร์) ส่วนร่างถูกบันทึกเฉพาะตอนถูกเด้งไปล็อกอินเท่านั้น
+                กด refresh หรือปุ่มย้อนกลับแล้วบรีฟหายทั้งหมด ทั้งที่เพิ่งบอกว่าเซฟให้แล้ว
+
+                บอกว่าเซฟแล้วทั้งที่ไม่ได้เซฟ แย่กว่าไม่บอกอะไรเลย — คนจะไม่ระวัง
+                เอากลับมาได้เมื่อมีของจริงรองรับ
+              */}
             </div>
           )}
 

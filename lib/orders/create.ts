@@ -115,6 +115,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     { tierId: v.tierId, options: v.options },
   );
 
+  /**
+   * เมนูราคา ฿0 สั่งไม่ได้ — ทางที่ครีเอเตอร์ตั้งราคาเองกันข้อนี้ไว้แล้วทั้งสองทาง
+   * (`quoteFromLines` → "empty") ทางเมนูเป็นทางเดียวที่ยังหลุด
+   * ออเดอร์ ฿0 ที่ถูกตอบรับแล้วจะติดตายถาวร — ส่งมอบไม่ได้ ตั้งราคาใหม่ก็ไม่ได้
+   */
+  if (quote.totalCents <= 0) return { ok: false, error: "not_found" };
+
   const created = await insertNewOrder({
     page,
     owner,

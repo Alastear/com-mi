@@ -128,7 +128,14 @@ async function paidButUndelivered(userId: string): Promise<number> {
       and(
         eq(schema.creatorPage.userId, userId),
         gt(schema.order.totalCents, 0),
-        sql`${schema.order.amountPaidCents} >= ${schema.order.totalCents}`,
+        /**
+         * ⚠️ **จ่ายมาบ้างแล้วก็นับ** ไม่ใช่เฉพาะจ่ายครบ
+         *
+         * เดิมเทียบ `amountPaidCents >= totalCents` ออเดอร์ที่ลูกค้าโอนมัดจำไปแล้ว
+         * จึงผ่านด่านนี้ไปได้ พอแบนเสร็จลูกค้าเสียมัดจำฟรี — แพลตฟอร์มไม่ได้ถือเงิน
+         * และไม่มีปุ่มไหนคืนให้ได้ เงินก้อนแรกคือจุดที่ความเสียหายเริ่ม ไม่ใช่ก้อนสุดท้าย
+         */
+        gt(schema.order.amountPaidCents, 0),
         sql`not exists (
           select 1 from ${schema.delivery} d
           where d.order_id = ${schema.order.id} and d.released_at is not null
