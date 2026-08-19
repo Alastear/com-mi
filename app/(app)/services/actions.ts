@@ -206,8 +206,27 @@ async function syncRows(
     }),
   ]);
 
-  const keptTiers = new Set(tiers.map((t) => t.id).filter(Boolean));
-  const keptOptions = new Set(options.map((o) => o.id).filter(Boolean));
+  /**
+   * ⚠️ id ที่ส่งมาต้องเป็นของบริการนี้เท่านั้น
+   *
+   * ฟอร์มส่ง id ของ tier/option มาในช่อง JSON ที่ซ่อนไว้ ถ้าเชื่อ id ดิบ ๆ
+   * ครีเอเตอร์คนหนึ่งจะยัด id ของร้านคนอื่นเข้ามาแล้ว **แก้ราคาเมนูของคนอื่นได้**
+   * และ id พวกนั้นหาไม่ยากเลย — มันอยู่ใน payload ของหน้าร้านสาธารณะอยู่แล้ว
+   *
+   * ผลที่ตามมาไม่ใช่แค่หน้าตาเพี้ยน: `createOrder` คิดราคาใหม่จากแถวเหล่านี้เสมอ
+   * ลูกค้ารายถัดไปของเหยื่อจึงถูกคิดเงินตามตัวเลขของคนที่ยัดเข้ามา
+   *
+   * กฎเดียวกันนี้เขียนไว้แล้วที่ `lib/media/actions.ts` — ทำที่นั่นแต่ลืมที่นี่
+   */
+  const ownTierIds = new Set(oldTiers.map((r) => r.id));
+  const ownOptionIds = new Set(oldOptions.map((r) => r.id));
+  const safeTiers = tiers.map((t) => (t.id && ownTierIds.has(t.id) ? t : { ...t, id: undefined }));
+  const safeOptions = options.map((o) =>
+    o.id && ownOptionIds.has(o.id) ? o : { ...o, id: undefined },
+  );
+
+  const keptTiers = new Set(safeTiers.map((t) => t.id).filter(Boolean));
+  const keptOptions = new Set(safeOptions.map((o) => o.id).filter(Boolean));
 
   const work: Promise<unknown>[] = [];
 
@@ -222,16 +241,20 @@ async function syncRows(
     }
   }
 
-  tiers.forEach((t, i) => {
+  safeTiers.forEach((t, i) => {
     const values = { label: t.label, priceDeltaCents: t.priceDeltaCents, sortOrder: i };
     work.push(
       t.id
-        ? db.update(schema.serviceTier).set(values).where(eq(schema.serviceTier.id, t.id))
+        ? db
+            .update(schema.serviceTier)
+            .set(values)
+            // จำกัดด้วย serviceId ซ้ำอีกชั้น — กรองข้างบนพลาดเมื่อไรตรงนี้ยังกันไว้
+            .where(and(eq(schema.serviceTier.id, t.id), eq(schema.serviceTier.serviceId, serviceId)))
         : db.insert(schema.serviceTier).values({ id: newId("tier"), serviceId, ...values }),
     );
   });
 
-  options.forEach((o, i) => {
+  safeOptions.forEach((o, i) => {
     const values = {
       groupLabel: o.groupLabel,
       label: o.label,
@@ -244,7 +267,12 @@ async function syncRows(
     };
     work.push(
       o.id
-        ? db.update(schema.serviceOption).set(values).where(eq(schema.serviceOption.id, o.id))
+        ? db
+            .update(schema.serviceOption)
+            .set(values)
+            .where(
+              and(eq(schema.serviceOption.id, o.id), eq(schema.serviceOption.serviceId, serviceId)),
+            )
         : db.insert(schema.serviceOption).values({ id: newId("opt"), serviceId, ...values }),
     );
   });

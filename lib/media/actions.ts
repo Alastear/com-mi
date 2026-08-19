@@ -41,6 +41,20 @@ export async function registerMedia(input: RegisterMediaInput): Promise<{ id: st
 
   const meta = await head(v.url);
 
+  /**
+   * ⚠️ ไฟล์ที่มีเจ้าของอยู่แล้ว ห้ามใครมาลงทะเบียนซ้ำ
+   *
+   * `url` กับ `pathname` มาจาก client ตรง ๆ และ URL รูปของร้านอื่นอยู่ใน `<img src>`
+   * บนหน้าร้านสาธารณะ ใครก็หยิบมาอ้างเป็นของตัวเองได้ ถ้าปล่อยไว้ แถวปลอมนั้น
+   * จะกลายเป็นเครื่องมือสั่งลบไฟล์ของคนอื่นผ่านงานเก็บกวาด
+   * (ด่านที่สองอยู่ใน `lib/media/cleanup.ts` — ไฟล์ที่ยังมีคนใช้ห้ามลบ)
+   */
+  const taken = await getDb().query.media.findFirst({
+    columns: { ownerUserId: true },
+    where: eq(schema.media.pathname, v.pathname),
+  });
+  if (taken && taken.ownerUserId !== user.id) throw new Error("not_found");
+
   const id = newId("med");
   await getDb().insert(schema.media).values({
     id,

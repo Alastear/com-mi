@@ -46,7 +46,15 @@ export async function getShopByHandle(handle: string) {
   const db = getDb();
 
   const owner = await db.query.user.findFirst({
-    columns: { id: true, name: true, image: true, handle: true },
+    /**
+     * ⚠️ ไม่เอา `name` — เป็นชื่อบัญชี Google ซึ่งมักเป็นชื่อจริง
+     *
+     * ไม่มีหน้าไหนใช้มันเลย (หน้าสาธารณะใช้ `displayName` ของร้าน) แต่ object นี้
+     * ถูกส่งทั้งก้อนเข้าคอมโพเนนต์ฝั่ง client มันจึงถูกฝังอยู่ใน HTML ให้ใครก็อ่านได้
+     * ครีเอเตอร์ที่ตั้งชื่อร้านเป็นนามแฝงคือคนที่เดือดร้อนที่สุด — และแก้ `user.name`
+     * ในเว็บนี้ไม่ได้ด้วย เป็นรูปแบบเดียวกับที่เลขพร้อมเพย์เคยหลุดมาแล้ว
+     */
+    columns: { id: true, image: true, handle: true },
     where: eq(schema.user.handle, normalizeHandle(handle)),
   });
   if (!owner) return null;

@@ -87,10 +87,34 @@ export async function cleanupMedia(
 
   const db = getDb();
 
+  /**
+   * ⚠️ อ่านชุดไฟล์ที่ยังมีคนใช้ **ก่อน** ทุกอย่าง แล้วใช้ชุดเดียวกันนี้ทั้งสองรอบ
+   *
+   * เดิมสร้างชุดนี้หลังรอบแรกไปแล้ว รอบแรกจึงลบไฟล์โดยดูแค่ "แถวนี้เป็น orphan"
+   * ซึ่งเปิดช่องให้ทำลายของคนอื่นได้จริง: `registerMedia()` เชื่อ `url` ที่ client
+   * ส่งมาตรง ๆ ใครก็เอา URL รูปแบนเนอร์ของร้านอื่น (ซึ่งอยู่ใน `<img src>` บนหน้าร้าน
+   * สาธารณะ) มาลงทะเบียนเป็นของตัวเองได้ แล้วปล่อยค้างไว้ ๒๔ ชั่วโมง
+   * cron จะลบ **ไฟล์จริงของเหยื่อ** ทิ้ง เหลือแถวของเหยื่อชี้ไปยัง URL ที่ตายแล้ว
+   *
+   * กฎที่ปิดช่องนี้: ไฟล์ที่มีแถวอื่นชี้ถึงอยู่ ห้ามลบ ไม่ว่าแถวที่กำลังเก็บกวาด
+   * จะบอกว่าอะไร — ลบแค่แถวทิ้งพอ
+   */
+  const allRows = await db.query.media.findMany({
+    columns: { id: true, pathname: true, posterPathname: true, status: true },
+  });
+  const referenced = referencedPaths(allRows.filter((r) => r.status !== "orphan"));
+
   /* ── 1. แถวที่ค้างเป็น orphan เกินเวลาผ่อนผัน ─────────────────────── */
 
   const stale = await db.query.media.findMany({
-    columns: { id: true, url: true, posterUrl: true, access: true },
+    columns: {
+      id: true,
+      url: true,
+      posterUrl: true,
+      pathname: true,
+      posterPathname: true,
+      access: true,
+    },
     where: and(eq(schema.media.status, "orphan"), lt(schema.media.createdAt, cutoff)),
     limit: 500,
   });
@@ -98,7 +122,21 @@ export async function cleanupMedia(
   for (const row of stale) {
     // ถังส่วนตัวไม่แตะ — เหตุผลอยู่ในคอมเมนต์หัวไฟล์
     if (row.access !== "public") continue;
+
+    /**
+     * ไฟล์นี้มีแถวที่ใช้งานอยู่จริงชี้ถึงไหม — ถ้ามี ลบแค่แถวขยะ ห้ามแตะไฟล์
+     * นี่คือด่านที่กันไม่ให้ใครใช้ cron ตัวนี้เป็นเครื่องมือลบของคนอื่น
+     */
+    const stillUsed =
+      (row.pathname && referenced.has(row.pathname)) ||
+      (row.posterPathname && referenced.has(row.posterPathname));
+
     try {
+      if (!dryRun && stillUsed) {
+        await db.delete(schema.media).where(eq(schema.media.id, row.id));
+        report.orphanRowsDeleted += 1;
+        continue;
+      }
       if (!dryRun) {
         // ลบไฟล์ก่อน แล้วค่อยลบแถว — พังกลางทางแล้วยังเหลือแถวไว้ให้รอบหน้าตามเก็บ
         // ถ้าลบแถวก่อน ไฟล์จะกลายเป็นของที่ไม่มีใครรู้จักทันที
@@ -114,13 +152,13 @@ export async function cleanupMedia(
   /* ── 2. ไฟล์ในถังที่ไม่มีแถวไหนชี้ถึงเลย ──────────────────────────── */
 
   /**
-   * อ่านรายการแถว **หลัง** ลบรอบแรกเสร็จ
-   * ไฟล์ของแถวที่เพิ่งลบไปจึงไม่ถูกนับว่ายังมีคนใช้ และถูกเก็บในรอบนี้เลยถ้ายังค้างอยู่
+   * อ่านซ้ำ **หลัง** ลบรอบแรกเสร็จ — ไฟล์ของแถวที่เพิ่งลบไปจะได้ไม่ถูกนับว่ายังมีคนใช้
+   * และถูกเก็บในรอบนี้เลยถ้ายังค้างอยู่ในถัง
    */
   const rows = await db.query.media.findMany({
     columns: { pathname: true, posterPathname: true },
   });
-  const referenced = referencedPaths(rows);
+  const stillReferenced = referencedPaths(rows);
 
   let cursor: string | undefined;
   do {
@@ -129,11 +167,11 @@ export async function cleanupMedia(
 
     for (const blob of page.blobs) {
       report.scanned += 1;
-      if (referenced.has(blob.pathname)) {
+      if (stillReferenced.has(blob.pathname)) {
         report.keptReferenced += 1;
         continue;
       }
-      if (!isStray(blob, referenced, now)) {
+      if (!isStray(blob, stillReferenced, now)) {
         report.keptTooRecent += 1;
         continue;
       }

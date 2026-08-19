@@ -51,3 +51,21 @@ describe("เก็บกวาดไฟล์กำพร้า", () => {
     assert.equal(ref.has(""), false);
   });
 });
+
+describe("cron ต้องไม่กลายเป็นเครื่องมือลบของคนอื่น", () => {
+  it("ไฟล์ที่มีแถวใช้งานอยู่ชี้ถึง ต้องไม่ถูกลบแม้มีแถวขยะชี้ไปที่เดียวกัน", () => {
+    /**
+     * `registerMedia()` เคยเชื่อ `url` ที่ client ส่งมา ใครก็เอา URL แบนเนอร์ของร้านอื่น
+     * (ซึ่งอยู่ใน `<img src>` บนหน้าร้านสาธารณะ) มาลงทะเบียนเป็นของตัวเองแล้วปล่อยค้าง
+     * พอครบ 24 ชม. cron จะลบไฟล์จริงของเหยื่อทิ้ง เหลือแถวที่ชี้ไปยัง URL ที่ตายแล้ว
+     */
+    const victim = { pathname: "banner/victim.webp", posterPathname: null };
+    const referenced = referencedPaths([victim]);
+    assert.equal(referenced.has("banner/victim.webp"), true);
+    // แถวขยะที่อ้างไฟล์เดียวกันต้องไม่ทำให้ไฟล์ถูกลบ
+    assert.equal(
+      isStray({ pathname: "banner/victim.webp", uploadedAt: new Date(0) }, referenced, Date.now()),
+      false,
+    );
+  });
+});
