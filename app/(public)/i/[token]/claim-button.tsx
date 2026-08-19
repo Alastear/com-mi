@@ -6,7 +6,7 @@ import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useDict } from "@/lib/i18n/client";
-import { claimInvite } from "@/lib/orders/invite";
+import { claimInvite, withdrawClaim } from "@/lib/orders/invite";
 
 /**
  * ⚠️ ส่ง `revisionId` ไปด้วยเสมอ ไม่ใช่แค่โทเคน
@@ -56,5 +56,32 @@ export function ClaimButton({ token, revisionId }: { token: string; revisionId: 
       </Button>
       <p className="text-center text-xs text-muted-foreground">{t.invite.acceptHint}</p>
     </div>
+  );
+}
+
+
+/** ถอนคำขอของตัวเอง — ทางออกเดียวของลูกค้า ปุ่มยืนยันอยู่ฝั่งครีเอเตอร์ทั้งหมด */
+export function WithdrawClaimButton({ claimId }: { claimId: string }) {
+  const t = useDict();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="mt-2 w-full"
+      disabled={pending}
+      onClick={() =>
+        start(async () => {
+          const res = await withdrawClaim(claimId);
+          if (res.ok) toast.success(t.invite.withdrawn);
+          else toast.error(t.error.title);
+          router.refresh();
+        })
+      }
+    >
+      {t.invite.withdrawCta}
+    </Button>
   );
 }

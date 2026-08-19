@@ -11,7 +11,7 @@ import { getInviteByToken } from "@/lib/queries/orders";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
-import { ClaimButton } from "./claim-button";
+import { ClaimButton, WithdrawClaimButton } from "./claim-button";
 
 export const metadata: Metadata = {
   // ลิงก์ส่วนตัวที่ส่งกันในแชต — ห้ามเข้าดัชนีเด็ดขาด
@@ -153,6 +153,8 @@ export default async function InvitePage({ params }: Props) {
           <Card className="gap-1.5 p-5">
             <p className="font-medium">{t.invite.claimedTitle}</p>
             <p className="text-sm text-muted-foreground">{t.invite.claimedBody}</p>
+            {/* กดรับผิดใบหรือเปลี่ยนใจต้องถอนได้ — ไม่งั้นติดค้างโดยไม่มีปุ่มไหนช่วย */}
+            <WithdrawClaimButton claimId={invite.claims[0]!.id} />
           </Card>
         ) : !emailMatches ? (
           /* ไม่บอกว่าใบนี้ออกให้อีเมลไหน — บอกแค่ว่าไม่ใช่บัญชีนี้ */

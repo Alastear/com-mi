@@ -589,3 +589,53 @@ export async function confirmInviteClaim(claimId: string): Promise<ConfirmResult
   revalidatePath("/orders");
   return { ok: true, code: created.code };
 }
+
+/* ── ลูกค้าถอนตัว ─────────────────────────────────────────────────── */
+
+export type WithdrawClaimResult =
+  | { ok: true }
+  | { ok: false; error: "unauthenticated" | "invalid" | "not_found" | "closed" };
+
+/**
+ * ลูกค้าถอนคำขอของตัวเอง
+ *
+ * ⚠️ ต้องมี ไม่งั้นคนที่กดรับผิดใบหรือเปลี่ยนใจติดค้างตลอดกาล — ปุ่มยืนยันอยู่ฝั่ง
+ * ครีเอเตอร์ทั้งหมด ลูกค้าจึงไม่มีทางออกเลยถ้าไม่มีตัวนี้ และคำขอที่ค้างอยู่ยัง
+ * กันไม่ให้ใครกดรับใบนั้นได้อีกด้วย (index บังคับว่าเปิดค้างได้คำขอเดียวต่อใบ)
+ *
+ * ถอนแล้วใบยังใช้ได้ต่อ — ไม่ได้เผาลิงก์ทิ้ง กดรับใหม่ได้ถ้าเปลี่ยนใจอีกที
+ */
+export async function withdrawClaim(claimId: string): Promise<WithdrawClaimResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "unauthenticated" };
+  if (!claimId || claimId.length > 64) return { ok: false, error: "invalid" };
+
+  const db = getDb();
+  const claim = await db.query.orderInviteClaim.findFirst({
+    where: eq(schema.orderInviteClaim.id, claimId),
+    columns: { id: true, userId: true, rejectedAt: true, withdrawnAt: true },
+    with: { invite: { columns: { token: true, confirmedAt: true } } },
+  });
+  // คำขอของคนอื่นถอนไม่ได้ และตอบเหมือนไม่มีอยู่จริง
+  if (!claim || claim.userId !== session.user.id) return { ok: false, error: "not_found" };
+  if (claim.rejectedAt || claim.withdrawnAt) return { ok: false, error: "closed" };
+  // กลายเป็นออเดอร์ไปแล้วถอนที่นี่ไม่ได้ — ต้องไปยกเลิกที่ออเดอร์ซึ่งมีกติกาของมันเอง
+  if (claim.invite.confirmedAt) return { ok: false, error: "closed" };
+
+  const updated = await db
+    .update(schema.orderInviteClaim)
+    .set({ withdrawnAt: new Date() })
+    .where(
+      and(
+        eq(schema.orderInviteClaim.id, claimId),
+        isNull(schema.orderInviteClaim.withdrawnAt),
+        isNull(schema.orderInviteClaim.rejectedAt),
+      ),
+    )
+    .returning({ id: schema.orderInviteClaim.id });
+  if (updated.length === 0) return { ok: false, error: "closed" };
+
+  revalidatePath(`/i/${claim.invite.token}`);
+  revalidatePath("/invites");
+  return { ok: true };
+}
