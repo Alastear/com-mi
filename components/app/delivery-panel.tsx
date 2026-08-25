@@ -29,15 +29,21 @@ import { cn } from "@/lib/utils";
 export function DeliveryPanel({
   code,
   viewer,
-  delivery,
+  openRound,
+  releasedRound,
+  releasedFiles,
   pendingFiles,
   canDeliver,
   orderStatus,
 }: {
   code: string;
   viewer: "creator" | "client";
-  /** การส่งมอบที่มีอยู่ (ถ้ามี) */
-  delivery: DeliveryRow | null;
+  /** รอบที่เตรียมไว้แล้วแต่ยังไม่ปล่อย — ครีเอเตอร์กดปล่อยได้ ลูกค้ายังโหลดไม่ได้ */
+  openRound: DeliveryRow | null;
+  /** รอบล่าสุดที่ปล่อยไปแล้ว — ลูกค้าโหลดได้ และต้องเห็นต่อไปแม้จะมีรอบใหม่กำลังทำอยู่ */
+  releasedRound: DeliveryRow | null;
+  /** ไฟล์จากทุกรอบที่ปล่อยแล้ว — ของที่ลูกค้าได้ไปแล้วห้ามหายเมื่อมีรอบใหม่ */
+  releasedFiles: DeliveryFileRow[];
   /** ไฟล์ที่ครีเอเตอร์อัปไว้แต่ยังไม่ได้ผูกกับการส่งมอบ */
   pendingFiles: DeliveryFileRow[];
   /** จ่ายครบแล้วหรือยัง — ตัดสินฝั่ง server มาแล้ว */
@@ -53,6 +59,14 @@ export function DeliveryPanel({
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const uploadable = ["in_progress", "in_review", "revision_requested"].includes(orderStatus);
+
+  /**
+   * สถานะที่ `deliverAndRelease()` เดินไป `delivered` ได้จริง ตามเครื่องสถานะ
+   *
+   * `revision_requested` อัปไฟล์กับเตรียมรอบได้ แต่ปล่อยไม่ได้ — ต้องกด "เริ่มงาน"
+   * ก่อนหนึ่งครั้ง ถ้าไม่เช็คตรงนี้ ปุ่มปล่อยจะโผล่มาในสถานะที่กดแล้วขึ้น error เสมอ
+   */
+  const releasable = ["in_progress", "in_review"].includes(orderStatus);
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length || busy) return;
@@ -110,9 +124,9 @@ export function DeliveryPanel({
   }
 
   function release() {
-    if (!delivery) return;
+    if (!openRound) return;
     start(async () => {
-      const res = await deliverAndRelease(code, delivery.id);
+      const res = await deliverAndRelease(code, openRound.id);
       if (res.ok) {
         toast.success(t.delivery.released);
         router.refresh();
@@ -143,7 +157,42 @@ export function DeliveryPanel({
     }
   }
 
-  const files = delivery?.files ?? pendingFiles;
+  /**
+   * ไฟล์ที่ยังไม่ถูกปล่อย = รอบที่เตรียมไว้ ถ้ายังไม่เตรียมก็คือกองที่เพิ่งอัป
+   * ลูกค้าเห็นทั้งสองกองแต่โหลดได้เฉพาะกองที่ปล่อยแล้ว
+   */
+  const lockedFiles = openRound?.files ?? (viewer === "creator" ? pendingFiles : []);
+
+  function fileRow(f: DeliveryFileRow, canDownload: boolean) {
+    return (
+      <li key={f.mediaId} className="flex items-center gap-3 rounded-lg border p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{f.filename || f.mediaId}</p>
+          <p className="tabular text-xs text-muted-foreground">{formatBytes(f.bytes)}</p>
+        </div>
+        {canDownload ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={downloading === f.mediaId}
+            onClick={() => void download(f.mediaId)}
+          >
+            {downloading === f.mediaId ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {downloading === f.mediaId ? t.delivery.downloading : t.delivery.download}
+          </Button>
+        ) : viewer === "client" ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Lock className="size-3.5" />
+            {t.delivery.lockedUntilPaid}
+          </span>
+        ) : null}
+      </li>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -152,54 +201,41 @@ export function DeliveryPanel({
           <Package className="size-4" />
           {t.delivery.title}
         </p>
-        {delivery?.released ? <Badge variant="secondary">{t.delivery.released}</Badge> : null}
+        {releasedRound ? <Badge variant="secondary">{t.delivery.released}</Badge> : null}
       </div>
 
-      {files.length === 0 ? (
+      {releasedFiles.length === 0 && lockedFiles.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t.delivery.noFiles}</p>
-      ) : (
-        <ul className="space-y-2">
-          {files.map((f) => {
-            const locked = viewer === "client" && !delivery?.released;
-            return (
-              <li key={f.mediaId} className="flex items-center gap-3 rounded-lg border p-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{f.filename || f.mediaId}</p>
-                  <p className="tabular text-xs text-muted-foreground">{formatBytes(f.bytes)}</p>
-                </div>
-                {locked ? (
-                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Lock className="size-3.5" />
-                    {t.delivery.lockedUntilPaid}
-                  </span>
-                ) : delivery?.released ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={downloading === f.mediaId}
-                    onClick={() => void download(f.mediaId)}
-                  >
-                    {downloading === f.mediaId ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Download className="size-4" />
-                    )}
-                    {downloading === f.mediaId ? t.delivery.downloading : t.delivery.download}
-                  </Button>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      ) : null}
 
-      {delivery?.released ? (
+      {/* ปล่อยแล้ว — ต้องเห็นต่อไปแม้กำลังทำรอบแก้อยู่ ลูกค้าซื้อไปแล้ว */}
+      {releasedFiles.length > 0 ? (
+        <ul className="space-y-2">{releasedFiles.map((f) => fileRow(f, true))}</ul>
+      ) : null}
+
+      {/* รอบที่กำลังทำอยู่ */}
+      {lockedFiles.length > 0 ? (
+        <>
+          {releasedFiles.length > 0 ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
+          ) : null}
+          <ul className="space-y-2">{lockedFiles.map((f) => fileRow(f, false))}</ul>
+        </>
+      ) : null}
+
+      {releasedRound ? (
         <p className="rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
           {t.delivery.linkWarning}
         </p>
       ) : null}
 
-      {viewer === "creator" && !delivery?.released ? (
+      {/*
+        ⚠️ ไม่ปิดทั้งแผงเมื่อปล่อยรอบก่อนไปแล้ว
+        เดิมเงื่อนไขคือ `!delivery?.released` ครีเอเตอร์จึงไม่มีทั้งช่องอัปโหลด
+        ปุ่มเตรียม และปุ่มปล่อย ทันทีที่ปล่อยรอบแรก — พอลูกค้าขอแก้งาน
+        ออเดอร์ก็เดินต่อไม่ได้อีกเลย และไฟล์ที่อัปหลังจากนั้นหายเงียบ
+      */}
+      {viewer === "creator" ? (
         <>
           <Separator />
           {uploadable ? (
@@ -234,7 +270,8 @@ export function DeliveryPanel({
             <p className="text-sm text-muted-foreground">{t.delivery.wrongState}</p>
           )}
 
-          {pendingFiles.length > 0 && !delivery ? (
+          {/* เตรียมรอบใหม่ได้เมื่อมีไฟล์ค้างและยังไม่มีรอบไหนเปิดอยู่ */}
+          {pendingFiles.length > 0 && !openRound ? (
             <>
               <Textarea
                 value={note}
@@ -251,13 +288,17 @@ export function DeliveryPanel({
             </>
           ) : null}
 
-          {delivery && !delivery.released ? (
+          {openRound ? (
             <>
-              <p className="text-xs text-muted-foreground">{t.delivery.releaseHint}</p>
-              <Button onClick={release} disabled={pending || !canDeliver} className="w-full">
-                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {canDeliver ? t.delivery.release : t.delivery.notPaid}
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                {releasable ? t.delivery.releaseHint : t.delivery.startWorkFirst}
+              </p>
+              {releasable ? (
+                <Button onClick={release} disabled={pending || !canDeliver} className="w-full">
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {canDeliver ? t.delivery.release : t.delivery.notPaid}
+                </Button>
+              ) : null}
             </>
           ) : null}
         </>

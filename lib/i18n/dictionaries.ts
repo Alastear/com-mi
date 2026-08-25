@@ -392,6 +392,8 @@ const th = {
     wrongState: "สถานะงานตอนนี้อัปโหลดไฟล์ส่งมอบไม่ได้",
     notPaid: "ยังส่งมอบไม่ได้ — ลูกค้ายังจ่ายไม่ครบ",
     noFilesYet: "ต้องมีไฟล์อย่างน้อยหนึ่งไฟล์ก่อนส่งมอบ",
+    nextRound: "รอบถัดไป (ยังไม่ปล่อย)",
+    startWorkFirst: "กด \"เริ่มงาน\" ที่แถบสถานะก่อน แล้วจึงส่งมอบรอบนี้ได้",
   },
 
   portfolioVideo: {
@@ -1365,6 +1367,8 @@ const en: Dictionary = {
     wrongState: "Files cannot be uploaded at this stage",
     notPaid: "Cannot deliver yet — the order is not fully paid",
     noFilesYet: "Attach at least one file before delivering",
+    nextRound: "Next round (not released yet)",
+    startWorkFirst: "Press \"Start work\" in the status bar first, then this round can be delivered",
   },
 
   portfolioVideo: {

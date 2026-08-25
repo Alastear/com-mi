@@ -45,7 +45,12 @@ export default async function OrderPage({ params }: Props) {
   const locale = await getLocale();
   const t = getDictionary(locale);
   const days = order.dueAt ? daysUntil(order.dueAt) : null;
-  const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
+  const {
+    open: openRound,
+    released: releasedRound,
+    releasedFiles,
+    pendingFiles,
+  } = await readDelivery(order.id, order.deliveries);
   const remaining = order.totalCents - order.amountPaidCents;
 
   /**
@@ -229,7 +234,9 @@ export default async function OrderPage({ params }: Props) {
             <DeliveryPanel
               code={order.code}
               viewer="creator"
-              delivery={delivery}
+              openRound={openRound}
+              releasedRound={releasedRound}
+            releasedFiles={releasedFiles}
               pendingFiles={pendingFiles}
               canDeliver={canRelease(order)}
               orderStatus={order.status}

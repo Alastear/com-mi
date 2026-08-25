@@ -48,7 +48,7 @@ export default async function ClientRequestPage({ params }: Props) {
   const handle = order.page.user?.handle ?? "";
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
-  const { delivery, pendingFiles } = await readDelivery(order.id, order.deliveries);
+  const { open: openRound, released: releasedRound, releasedFiles, pendingFiles } = await readDelivery(order.id, order.deliveries);
   // ใบเสนอราคาที่ยังกดได้ — ดึงเฉพาะตอนอยู่ในสถานะที่กดได้จริง ไม่งั้นเสีย query เปล่า
   const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
   const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
@@ -206,12 +206,14 @@ export default async function ClientRequestPage({ params }: Props) {
       </Card>
       )}
 
-      {delivery ? (
+      {releasedRound || openRound ? (
         <Card className="mt-4 gap-3 p-6">
           <DeliveryPanel
             code={order.code}
             viewer="client"
-            delivery={delivery}
+            openRound={openRound}
+            releasedRound={releasedRound}
+            releasedFiles={releasedFiles}
             pendingFiles={pendingFiles}
             canDeliver={canRelease(order)}
             orderStatus={order.status}
