@@ -81,4 +81,26 @@ export async function readDelivery(
   };
 }
 
+/**
+ * เลือกแถวส่งมอบที่ไฟล์นี้อยู่ — สำหรับตอนออก URL ดาวน์โหลด
+ *
+ * ⚠️ ต้องดู **ทุกรอบ** ไม่ใช่รอบล่าสุด
+ *
+ * ออเดอร์มีการส่งมอบได้หลายรอบ พอเตรียมรอบสอง แถวล่าสุดคือรอบสอง (ยังไม่ปล่อย)
+ * ไฟล์รอบแรกที่ลูกค้าจ่ายแล้วและเห็นปุ่มโหลดอยู่ตรงหน้า ไม่อยู่ในแถวนั้น —
+ * เดิม `requestDeliveryDownload` เลือกแถวล่าสุดแถวเดียวแล้วตอบ `not_found`
+ * ปุ่มจึงขึ้นครบทั้งสองรอบแต่กดรอบแรกแล้วพัง (de158c5 แก้หน้าจอแต่ไม่ได้แก้ตรงนี้)
+ *
+ * ลำดับที่เลือก: แถวที่ปล่อยแล้วและมีไฟล์นี้มาก่อน ถ้าไม่มีค่อยเอาแถวไหนก็ได้ที่มีไฟล์นี้
+ * (เพื่อให้ไฟล์ในรอบที่ยังไม่ปล่อยตอบ `not_released` ไม่ใช่ `not_found`)
+ * ไม่มีเลย = ไฟล์นี้ไม่เคยถูกผูกกับการส่งมอบของออเดอร์นี้
+ */
+export function pickDeliveryFor<T extends { mediaIds: string[]; releasedAt: Date | null }>(
+  rows: readonly T[],
+  mediaId: string,
+): T | null {
+  const holding = rows.filter((d) => d.mediaIds.includes(mediaId));
+  return holding.find((d) => d.releasedAt !== null) ?? holding[0] ?? null;
+}
+
 export { inArray };

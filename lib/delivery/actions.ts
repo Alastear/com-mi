@@ -1,6 +1,7 @@
 "use server";
 
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { pickDeliveryFor } from "./read";
 import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -220,20 +221,22 @@ export async function requestDeliveryDownload(
   const db = getDb();
 
   /**
-   * ⚠️ ต้องเรียงเอาชุดล่าสุด — หน้าจอแสดง `deliveries.at(-1)` (ชุดใหม่สุด)
-   * ส่วนที่นี่เดิมเป็น `findFirst` เปล่า ๆ ซึ่งไม่รับประกันลำดับอะไรเลย
-   * ออเดอร์ที่มีรอบแก้จะมีหลายชุด (trigger บอกให้สร้างแถวใหม่ ไม่ใช่แก้ของเดิม)
-   * สองที่จึงชี้คนละชุดได้ ลูกค้ากดโหลดไฟล์ที่เห็นอยู่ตรงหน้าแล้วได้ not_found
+   * ⚠️ หาแถวที่ **มีไฟล์นี้** จากทุกรอบ ไม่ใช่เอาแถวล่าสุดแล้วดูว่ามีไฟล์ไหม
+   *
+   * เดิมเลือกแถวล่าสุดแถวเดียว ซึ่งถูกต้องเฉพาะตอนมีรอบเดียว พอครีเอเตอร์เตรียม
+   * รอบสอง แถวล่าสุดคือรอบสอง ไฟล์รอบแรกที่ลูกค้าจ่ายแล้วจึงตอบ `not_found`
+   * ทั้งที่หน้าจอ (read.ts รวม `releasedFiles` จากทุกรอบ) เพิ่งวาดปุ่มโหลดให้
+   * — commit ที่ทำให้หลายรอบใช้ได้แก้หน้าจอแต่ลืมตรงนี้ กฎการเลือกแถวอยู่ที่
+   * `pickDeliveryFor` ที่เดียวและมีเทสต์คุม
    */
-  const dlv = await db.query.delivery.findFirst({
+  const rows = await db.query.delivery.findMany({
     where: eq(schema.delivery.orderId, order.id),
     orderBy: [desc(schema.delivery.createdAt)],
     columns: { id: true, mediaIds: true, releasedAt: true, downloadedAt: true },
   });
+  const dlv = pickDeliveryFor(rows, mediaId);
+  // ไฟล์นี้ไม่เคยถูกผูกกับการส่งมอบรอบไหนของออเดอร์นี้เลย
   if (!dlv) return { ok: false, error: "not_found" };
-
-  // ไฟล์ต้องอยู่ในการส่งมอบชุดนี้จริง
-  if (!dlv.mediaIds.includes(mediaId)) return { ok: false, error: "not_found" };
 
   /**
    * ตรวจสองชั้นโดยตั้งใจ — `releasedAt` คือรูปที่ถูกแคชไว้ของข้อเท็จจริงเรื่องเงิน
