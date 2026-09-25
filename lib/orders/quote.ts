@@ -4,6 +4,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db/pg-error";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
 import { notify } from "@/lib/notifications/create";
@@ -225,7 +226,7 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
         : [supersede, insert, event],
     );
   } catch (err) {
-    if (String(err).includes("order_quote_live_idx")) return { ok: false, error: "conflict" };
+    if (isUniqueViolation(err, "order_quote_live_idx")) return { ok: false, error: "conflict" };
     throw err;
   }
 

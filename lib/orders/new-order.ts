@@ -1,5 +1,6 @@
 import { and, count, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db/pg-error";
 import { newId } from "@/lib/db/id";
 import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { ACTIVE_STATUSES } from "@/lib/types";
@@ -209,8 +210,7 @@ export async function insertNewOrder(input: {
       }
       return { ok: true, orderId, code };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      if (attempt === 0 && msg.includes("order_code_unique")) continue;
+      if (attempt === 0 && isUniqueViolation(err, "order_code_unique")) continue;
       throw err;
     }
   }

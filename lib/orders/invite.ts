@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
+import { isUniqueViolation } from "@/lib/db/pg-error";
 import { newId } from "@/lib/db/id";
 import { getSession, requireCreator } from "@/lib/auth-guard";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -256,7 +257,7 @@ export async function reviseInvite(input: z.input<typeof ReviseSchema>): Promise
     ]);
   } catch (err) {
     // ยิงพร้อมกันสองครั้งแล้วชน index — ตอบว่าชนกัน ไม่ใช่ปล่อยเป็น 500
-    if (String(err).includes("order_invite_revision_live_idx")) {
+    if (isUniqueViolation(err, "order_invite_revision_live_idx")) {
       return { ok: false, error: "conflict" };
     }
     throw err;
@@ -399,7 +400,7 @@ export async function claimInvite(token: string, revisionId: string): Promise<Cl
     if (inserted === 0) return { ok: false, error: "superseded" };
   } catch (err) {
     // มีคนกดรับใบนี้ค้างอยู่แล้ว — index บังคับว่าเปิดค้างได้คำขอเดียวต่อใบ
-    if (String(err).includes("order_invite_claim_live_idx")) {
+    if (isUniqueViolation(err, "order_invite_claim_live_idx")) {
       return { ok: false, error: "conflict" };
     }
     throw err;
