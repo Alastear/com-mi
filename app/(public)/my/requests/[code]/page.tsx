@@ -10,7 +10,8 @@ import { getLiveQuote, getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
-import { canPay, depositSatisfied } from "@/lib/orders/release";
+import { canPay } from "@/lib/orders/release";
+import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { readDelivery } from "@/lib/delivery/read";
@@ -51,8 +52,8 @@ export default async function ClientRequestPage({ params }: Props) {
   const { open: openRound, released: releasedRound, releasedFiles, pendingFiles } = await readDelivery(order.id, order.deliveries);
   // ใบเสนอราคาที่ยังกดได้ — ดึงเฉพาะตอนอยู่ในสถานะที่กดได้จริง ไม่งั้นเสีย query เปล่า
   const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
-  const remaining = Math.max(0, order.totalCents - order.amountPaidCents);
-  const amountDue = depositSatisfied(order) ? remaining : order.depositCents - order.amountPaidCents;
+  // ยอดใน QR ต้องเป็นตัวเดียวกับที่แผงชำระเงินโชว์ — ใช้ฟังก์ชันเดียวกัน ไม่คำนวณซ้ำสองที่
+  const amountDue = dueNowCents(order);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">

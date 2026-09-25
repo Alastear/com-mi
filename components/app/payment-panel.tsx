@@ -1,35 +1,110 @@
 "use client";
 
-import { useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Clock, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Undo2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n/client";
+import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import { formatMoney, formatRelative } from "@/lib/format";
-import { confirmPayment, recordPayment } from "@/lib/payments/actions";
+import { newId } from "@/lib/db/id";
+import {
+  confirmPayment,
+  recordPayment,
+  rejectPayment,
+  voidPayment,
+  type PaymentResult,
+} from "@/lib/payments/actions";
+import {
+  dueNowCents,
+  fitsUnderTotal,
+  outstandingCents,
+  parseBaht,
+  toBahtInput,
+  type PaymentState,
+} from "@/lib/payments/money";
+import { cn } from "@/lib/utils";
 
 export type PaymentRow = {
   id: string;
   amountCents: number;
   method: string;
   paidAt: string;
-  verified: boolean;
+  state: PaymentState;
+  /** เหตุผลที่ครีเอเตอร์ให้ตอนตอบว่ายังไม่ได้รับ / ยกเลิกการยืนยัน — ว่างได้ */
+  reason: string;
   note: string;
 };
+
+type Failure = Extract<PaymentResult, { ok: false }>["error"];
+
+function errorText(t: Dictionary, error: Failure): string {
+  switch (error) {
+    case "pending_exists":
+      return t.payment.errPending;
+    case "over_outstanding":
+      return t.payment.errOverOutstanding;
+    case "over_total":
+      return t.payment.errOverTotal;
+    case "stale":
+      return t.payment.errStale;
+    case "rate_limited":
+      return t.payment.errRateLimited;
+    case "order_closed":
+      return t.payment.errClosed;
+    default:
+      return t.error.title;
+  }
+}
+
+/**
+ * เรียก action แล้วจัดการผลแบบเดียวกันทุกปุ่ม — toast + รีเฟรชหน้า
+ *
+ * error ที่แปลว่า "หน้าจอเก่าแล้ว" รีเฟรชให้เลย ไม่งั้นคนจะกดปุ่มเดิมซ้ำ
+ * แล้วเจอ error เดิมไปเรื่อย ๆ ทั้งที่ของจริงเปลี่ยนไปแล้ว
+ */
+function usePaymentAction() {
+  const { t } = useLocale();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  function run(action: () => Promise<PaymentResult>, success: string, onOk?: () => void) {
+    start(async () => {
+      const res = await action();
+      if (res.ok) {
+        toast.success(success);
+        onOk?.();
+        router.refresh();
+      } else {
+        toast.error(errorText(t, res.error));
+        if (res.error === "stale" || res.error === "pending_exists") router.refresh();
+      }
+    });
+  }
+
+  return [pending, run] as const;
+}
 
 /**
  * แผงชำระเงินบนหน้าออเดอร์ — ฝั่งลูกค้ากับฝั่งครีเอเตอร์ใช้ตัวเดียวกัน
  *
- * ลูกค้าเห็น: ยอดที่ต้องจ่าย + ปุ่ม "แจ้งว่าโอนแล้ว"
- * ครีเอเตอร์เห็น: รายการที่ลูกค้าแจ้ง + ปุ่มยืนยันทีละรายการ
+ * ลูกค้าเห็น: ยอดที่ต้องจ่าย + QR + ช่องยอดที่โอนจริง + ปุ่ม "แจ้งว่าโอนแล้ว"
+ *   ระหว่างมีรายการรอยืนยัน QR กับปุ่มหายไป เหลือแค่ "แจ้งโอน ฿X แล้ว รอยืนยัน"
+ * ครีเอเตอร์เห็น: รายการที่ลูกค้าแจ้ง + ยืนยัน / ยังไม่ได้รับ / ยกเลิกการยืนยัน
+ *   และบันทึกเงินที่ได้รับเองได้
  *
  * ⚠️ ปุ่มของครีเอเตอร์ถามว่า **"เงินเข้าบัญชีจริงหรือยัง"** ไม่ใช่ "สลิปถูกไหม"
  * ต่างกันที่คำเดียวแต่เปลี่ยนสิ่งที่คนไปตรวจ — สลิปปลอมดูด้วยตาไม่ออกแล้ว
  * ส่วนยอดในแอปธนาคารของตัวเองปลอมไม่ได้ (docs/00 §5.2.1)
+ *
+ * ⚠️ ทุกอย่างที่ซ่อน/ปิดปุ่มที่นี่เป็นแค่ความสะดวก ด่านจริงอยู่ใน lib/payments/actions.ts
  */
 export function PaymentPanel({
   code,
@@ -55,43 +130,15 @@ export function PaymentPanel({
   hasPayout: boolean;
 }) {
   const { t, locale } = useLocale();
-  const router = useRouter();
-  const [pending, start] = useTransition();
+  const money = (cents: number) => formatMoney(cents, currency, locale);
 
-  const remaining = Math.max(0, totalCents - paidCents);
+  const order = { totalCents, amountPaidCents: paidCents, depositCents };
+  const outstanding = outstandingCents(order);
   // ยังไม่ถึงมัดจำ = ยอดที่ควรโอนรอบนี้คือมัดจำ ไม่ใช่ยอดเต็ม
-  const dueNow = depositCents > 0 && paidCents < depositCents ? depositCents - paidCents : remaining;
+  const dueNow = dueNowCents(order);
   const dueIsDeposit = depositCents > 0 && paidCents < depositCents;
-
-  function report() {
-    start(async () => {
-      const res = await recordPayment({
-        code,
-        amountCents: dueNow,
-        method: "promptpay",
-        proofMediaId: null,
-        note: "",
-      });
-      if (res.ok) {
-        toast.success(t.payment.awaitingConfirm);
-        router.refresh();
-      } else {
-        toast.error(t.error.title);
-      }
-    });
-  }
-
-  function confirm(paymentId: string) {
-    start(async () => {
-      const res = await confirmPayment(code, paymentId);
-      if (res.ok) {
-        toast.success(t.payment.confirmed);
-        router.refresh();
-      } else {
-        toast.error(t.error.title);
-      }
-    });
-  }
+  // มีได้แถวเดียว — server ไม่รับแจ้งเพิ่มระหว่างที่ยังมีรายการรอตอบ
+  const pendingReport = payments.find((p) => p.state === "pending");
 
   return (
     <div className="space-y-4">
@@ -99,25 +146,37 @@ export function PaymentPanel({
         <span className="text-sm text-muted-foreground">
           {dueIsDeposit ? t.payment.depositDue : t.payment.amountDue}
         </span>
-        <span className="tabular text-lg font-semibold">
-          {formatMoney(dueNow, currency, locale)}
-        </span>
+        <span className="tabular text-lg font-semibold">{money(dueNow)}</span>
       </div>
 
-      {remaining === 0 ? (
+      {outstanding === 0 ? (
         <Badge variant="secondary" className="gap-1.5">
           <CheckCircle2 className="size-3.5" />
           {t.order.fullyPaid}
         </Badge>
       ) : viewer === "client" ? (
-        hasPayout ? (
-          <>
-            {qr}
-            <Button onClick={report} disabled={pending} className="w-full">
-              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {t.payment.iPaid}
-            </Button>
-          </>
+        pendingReport ? (
+          /*
+            ระหว่างรอ ไม่มี QR และไม่มีปุ่มให้กดอีก — เดิมกดซ้ำได้เรื่อย ๆ แล้วครีเอเตอร์
+            ที่ยืนยันทุกแถวจะปลดไฟล์ทั้งที่เงินเข้าจริงก้อนเดียว
+          */
+          <div className="rounded-lg border border-dashed p-3">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <Clock className="size-4 shrink-0 text-warning" />
+              {fill(t.payment.reportedPending, { amount: money(pendingReport.amountCents) })}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t.payment.reportedPendingHint}
+            </p>
+          </div>
+        ) : hasPayout ? (
+          <ReportForm
+            code={code}
+            qr={qr}
+            dueNow={dueNow}
+            outstanding={outstanding}
+            money={money}
+          />
         ) : (
           // ครีเอเตอร์ยังไม่ตั้งค่ารับเงิน — บอกลูกค้าตรง ๆ ดีกว่าโชว์ปุ่มที่กดแล้วงง
           <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
@@ -132,48 +191,24 @@ export function PaymentPanel({
           <p className="text-sm font-medium">{t.payment.history}</p>
           <ul className="space-y-2">
             {payments.map((p) => (
-              <li key={p.id} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="tabular text-sm font-medium">
-                    {formatMoney(p.amountCents, currency, locale)}
-                  </span>
-                  {p.verified ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <CheckCircle2 className="size-3" />
-                      {t.payment.confirmed}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="gap-1 text-warning">
-                      <Clock className="size-3" />
-                      {t.payment.awaitingConfirm}
-                    </Badge>
-                  )}
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {t.payment.recordedAt} {formatRelative(p.paidAt, locale)}
-                </p>
-
-                {viewer === "creator" && !p.verified ? (
-                  <div className="mt-2.5">
-                    {/*
-                      คำอธิบายอยู่เหนือปุ่มเสมอ ไม่ใช่ tooltip — คนกดต้องอ่านก่อนกด
-                      ไม่ใช่หลังจากสงสัยแล้วไปหาเอง
-                    */}
-                    <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
-                      {t.payment.confirmReceivedHint}
-                    </p>
-                    <Button size="sm" disabled={pending} onClick={() => confirm(p.id)}>
-                      {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-                      {t.payment.confirmReceived}
-                    </Button>
-                  </div>
-                ) : null}
-              </li>
+              <PaymentItem
+                key={p.id}
+                code={code}
+                row={p}
+                viewer={viewer}
+                // ยืนยันแถวนี้แล้วเกินราคางานไหม — server ปฏิเสธอยู่แล้ว แต่บอกก่อนกดดีกว่า
+                fits={fitsUnderTotal(p.amountCents, paidCents, totalCents)}
+                money={money}
+              />
             ))}
           </ul>
         </>
       ) : viewer === "creator" ? (
         <p className="text-sm text-muted-foreground">{t.payment.empty}</p>
+      ) : null}
+
+      {viewer === "creator" && outstanding > 0 ? (
+        <RecordForm code={code} outstanding={outstanding} money={money} />
       ) : null}
 
       {viewer === "creator" && !hasPayout ? (
@@ -184,6 +219,402 @@ export function PaymentPanel({
           </Button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * ช่องยอดเงินเป็นบาทเต็ม — ใช้ทั้งฟอร์มแจ้งโอนของลูกค้าและฟอร์มบันทึกรับเงินของครีเอเตอร์
+ * คืนยอดเป็นสตางค์ หรือข้อความ error ที่พร้อมโชว์
+ */
+function useBahtField(initialCents: number, maxCents: number, money: (c: number) => string) {
+  const { t } = useLocale();
+  const [value, setValue] = useState(() => toBahtInput(initialCents));
+  const cents = parseBaht(value);
+  const error =
+    cents === null
+      ? t.payment.amountInvalid
+      : cents > maxCents
+        ? fill(t.payment.amountOver, { amount: money(maxCents) })
+        : null;
+  return { value, setValue, cents, error };
+}
+
+/**
+ * id ของแถวที่กำลังจะสร้าง — ใช้เป็น idempotency key ของ `recordPayment`
+ *
+ * สร้างตอนกดครั้งแรกแล้วเก็บไว้จนกว่าจะสำเร็จ: กดซ้ำหรือส่งใหม่หลังเน็ตหลุด
+ * ได้แถวเดียวเสมอ สำเร็จแล้วค่อยล้าง รายการถัดไปจะได้ id ใหม่
+ */
+function useRequestId() {
+  const ref = useRef<string | null>(null);
+  return {
+    take: () => (ref.current ??= newId("pay")),
+    reset: () => {
+      ref.current = null;
+    },
+  };
+}
+
+function ReportForm({
+  code,
+  qr,
+  dueNow,
+  outstanding,
+  money,
+}: {
+  code: string;
+  qr: React.ReactNode;
+  dueNow: number;
+  outstanding: number;
+  money: (c: number) => string;
+}) {
+  const { t } = useLocale();
+  const [pending, run] = usePaymentAction();
+  const amount = useBahtField(dueNow, outstanding, money);
+  const requestId = useRequestId();
+
+  function report() {
+    if (amount.cents === null || amount.error) return;
+    const amountCents = amount.cents;
+    run(
+      () =>
+        recordPayment({
+          code,
+          amountCents,
+          method: "promptpay",
+          proofMediaId: null,
+          note: "",
+          paymentId: requestId.take(),
+        }),
+      t.payment.awaitingConfirm,
+      requestId.reset,
+    );
+  }
+
+  return (
+    <>
+      {qr}
+      <div>
+        <Label htmlFor="pay-amount" className="text-sm">
+          {t.payment.amountSent}
+        </Label>
+        <Input
+          id="pay-amount"
+          value={amount.value}
+          onChange={(e) => amount.setValue(e.target.value.replace(/[^\d]/g, ""))}
+          inputMode="numeric"
+          autoComplete="off"
+          aria-invalid={amount.error ? true : undefined}
+          aria-describedby="pay-amount-hint"
+          className="tabular mt-1.5 text-right"
+        />
+        <p
+          id="pay-amount-hint"
+          className={cn(
+            "mt-1 text-xs leading-relaxed",
+            amount.error ? "text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {amount.error ?? t.payment.amountSentHint}
+        </p>
+      </div>
+      <Button onClick={report} disabled={pending || amount.error !== null} className="w-full">
+        {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+        {t.payment.iPaid}
+      </Button>
+    </>
+  );
+}
+
+function StateBadge({ state }: { state: PaymentState }) {
+  const { t } = useLocale();
+  switch (state) {
+    case "verified":
+      return (
+        <Badge variant="secondary" className="gap-1">
+          <CheckCircle2 className="size-3" />
+          {t.payment.confirmed}
+        </Badge>
+      );
+    case "rejected":
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <XCircle className="size-3" />
+          {t.payment.stateRejected}
+        </Badge>
+      );
+    case "voided":
+      return (
+        <Badge variant="outline" className="gap-1 text-muted-foreground">
+          <Undo2 className="size-3" />
+          {t.payment.stateVoided}
+        </Badge>
+      );
+    default:
+      return (
+        <Badge variant="outline" className="gap-1 text-warning">
+          <Clock className="size-3" />
+          {t.payment.awaitingConfirm}
+        </Badge>
+      );
+  }
+}
+
+function PaymentItem({
+  code,
+  row,
+  viewer,
+  fits,
+  money,
+}: {
+  code: string;
+  row: PaymentRow;
+  viewer: "creator" | "client";
+  fits: boolean;
+  money: (c: number) => string;
+}) {
+  const { t, locale } = useLocale();
+  const [pending, run] = usePaymentAction();
+  // ฟอร์มย่อยที่เปิดอยู่ — ปฏิเสธกับยกเลิกการยืนยันต้องกดสองจังหวะเสมอ ไม่มีปุ่มเดียวจบ
+  const [open, setOpen] = useState<"reject" | "undo" | null>(null);
+  const [reason, setReason] = useState("");
+  const counted = row.state === "verified";
+  const struck = row.state === "rejected" || row.state === "voided";
+
+  function close() {
+    setOpen(null);
+    setReason("");
+  }
+
+  return (
+    <li className="rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={cn(
+            "tabular text-sm font-medium",
+            // แถวที่ไม่นับเป็นเงินต้องดูออกทันทีว่าไม่นับ ไม่ใช่ต้องอ่าน badge ก่อน
+            struck && "text-muted-foreground line-through",
+          )}
+        >
+          {money(row.amountCents)}
+        </span>
+        <StateBadge state={row.state} />
+      </div>
+      {/* เวลาสัมพัทธ์เดินระหว่างเรนเดอร์กับ hydrate — ต่างกันได้โดยไม่ผิด */}
+      <p className="mt-0.5 text-xs text-muted-foreground" suppressHydrationWarning>
+        {t.payment.recordedAt} {formatRelative(row.paidAt, locale)}
+      </p>
+      {row.note ? <p className="mt-1 text-xs whitespace-pre-wrap">{row.note}</p> : null}
+
+      {struck ? (
+        <div className="mt-1.5 space-y-0.5 text-xs leading-relaxed">
+          {viewer === "client" ? (
+            <p className="text-muted-foreground">
+              {row.state === "rejected" ? t.payment.rejectedClientHint : t.payment.voidedClientHint}
+            </p>
+          ) : null}
+          {row.reason ? <p>{fill(t.payment.reasonLabel, { reason: row.reason })}</p> : null}
+        </div>
+      ) : null}
+
+      {viewer === "creator" && row.state === "pending" && open === null ? (
+        <div className="mt-2.5">
+          {/*
+            คำอธิบายอยู่เหนือปุ่มเสมอ ไม่ใช่ tooltip — คนกดต้องอ่านก่อนกด
+            ไม่ใช่หลังจากสงสัยแล้วไปหาเอง
+          */}
+          <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
+            {fits ? t.payment.confirmReceivedHint : t.payment.overTotalWarning}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={pending || !fits}
+              onClick={() =>
+                run(() => confirmPayment(code, row.id), t.payment.confirmed)
+              }
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {t.payment.confirmReceived}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setOpen("reject")}
+            >
+              {t.payment.reject}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {viewer === "creator" && counted && open === null ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mt-1.5 -ml-2 h-7 text-xs text-muted-foreground"
+          onClick={() => setOpen("undo")}
+        >
+          <Undo2 className="size-3.5" />
+          {t.payment.undo}
+        </Button>
+      ) : null}
+
+      {open ? (
+        <div className="mt-2.5 space-y-2 rounded-md bg-muted/50 p-2.5">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {open === "reject" ? t.payment.rejectHint : t.payment.undoHint}
+          </p>
+          <Label htmlFor={`reason-${row.id}`} className="text-xs">
+            {open === "reject" ? t.payment.rejectReason : t.payment.undoReason}
+          </Label>
+          <Textarea
+            id={`reason-${row.id}`}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            maxLength={300}
+            placeholder={
+              open === "reject" ? t.payment.rejectReasonPlaceholder : t.payment.undoReasonPlaceholder
+            }
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              // ยกเลิกการยืนยันต้องมีเหตุผล — ลูกค้าจะเห็นยอดที่ตัวเองจ่ายถูกหักออก
+              disabled={pending || (open === "undo" && reason.trim().length === 0)}
+              onClick={() =>
+                open === "reject"
+                  ? run(
+                      () => rejectPayment({ code, paymentId: row.id, reason }),
+                      t.payment.rejectedToast,
+                      close,
+                    )
+                  : run(
+                      () => voidPayment({ code, paymentId: row.id, reason }),
+                      t.payment.undoneToast,
+                      close,
+                    )
+              }
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+              {open === "reject" ? t.payment.rejectSubmit : t.payment.undoSubmit}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={close}>
+              {t.common.cancel}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * ครีเอเตอร์บันทึกเงินที่ได้รับเอง — นับทันทีเพราะคนกดคือเจ้าของบัญชี
+ *
+ * พับไว้ก่อนเสมอ: ทางปกติคือให้ลูกค้าแจ้งแล้วครีเอเตอร์ยืนยัน ฟอร์มนี้มีไว้
+ * สำหรับเงินที่มาทางอื่น (ไลน์ เงินสด) ไม่ใช่ทางลัดที่ควรเด่นกว่าปุ่มยืนยัน
+ */
+function RecordForm({
+  code,
+  outstanding,
+  money,
+}: {
+  code: string;
+  outstanding: number;
+  money: (c: number) => string;
+}) {
+  const { t } = useLocale();
+  const [pending, run] = usePaymentAction();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const amount = useBahtField(outstanding, outstanding, money);
+  const requestId = useRequestId();
+
+  if (!open) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="w-full"
+        onClick={() => {
+          // ยอดคงค้างเปลี่ยนได้ระหว่างที่ฟอร์มพับอยู่ — เปิดใหม่ต้องเริ่มจากยอดล่าสุด
+          amount.setValue(toBahtInput(outstanding));
+          setOpen(true);
+        }}
+      >
+        {t.payment.recordReceived}
+      </Button>
+    );
+  }
+
+  function submit() {
+    if (amount.cents === null || amount.error) return;
+    const amountCents = amount.cents;
+    run(
+      () =>
+        recordPayment({
+          code,
+          amountCents,
+          method: "other",
+          proofMediaId: null,
+          note,
+          paymentId: requestId.take(),
+        }),
+      t.payment.recordedToast,
+      () => {
+        requestId.reset();
+        setOpen(false);
+        setNote("");
+      },
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <p className="text-sm font-medium">{t.payment.recordReceived}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{t.payment.recordReceivedHint}</p>
+      <div>
+        <Label htmlFor="record-amount" className="text-xs">
+          {t.payment.recordAmount}
+        </Label>
+        <Input
+          id="record-amount"
+          value={amount.value}
+          onChange={(e) => amount.setValue(e.target.value.replace(/[^\d]/g, ""))}
+          inputMode="numeric"
+          autoComplete="off"
+          aria-invalid={amount.error ? true : undefined}
+          className="tabular mt-1 text-right"
+        />
+        {amount.error ? <p className="mt-1 text-xs text-destructive">{amount.error}</p> : null}
+      </div>
+      <div>
+        <Label htmlFor="record-note" className="text-xs">
+          {t.payment.recordNote}
+        </Label>
+        <Input
+          id="record-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={500}
+          placeholder={t.payment.recordNotePlaceholder}
+          className="mt-1"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={pending || amount.error !== null} onClick={submit}>
+          {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+          {t.payment.recordSubmit}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => setOpen(false)}>
+          {t.common.cancel}
+        </Button>
+      </div>
     </div>
   );
 }

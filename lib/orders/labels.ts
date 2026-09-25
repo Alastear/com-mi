@@ -1,4 +1,6 @@
 import type { Dictionary } from "@/lib/i18n/dictionaries";
+import type { Locale } from "@/lib/i18n/config";
+import { formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import type { Actor } from "./state-machine";
 
@@ -55,12 +57,32 @@ export function isPrimaryAction(to: OrderStatus): boolean {
   return !["declined", "cancelled", "expired"].includes(to);
 }
 
+/**
+ * event ของเงิน — ข้อความมี `{amount}` ที่ต้องจัดรูปตามภาษาคนอ่าน
+ * DB เก็บเป็นสตางค์ (ตัวเลข) ไม่ใช่ "฿1,500" สำเร็จรูป ด้วยเหตุผลเดียวกับที่เก็บ key แทนประโยค
+ */
+const PAYMENT_EVENTS = [
+  "payment_reported",
+  "payment_recorded",
+  "payment_confirmed",
+  "payment_rejected",
+  "payment_voided",
+] as const;
+
 /** ข้อความของ event บน timeline — แปลตอนแสดง ไม่ได้เก็บเป็นข้อความใน DB */
 export function eventText(
   t: Dictionary,
   eventType: string | null,
   data: Record<string, string | number> | null,
+  locale: Locale = "th",
 ): string | null {
+  const paymentEvent = PAYMENT_EVENTS.find((e) => e === eventType);
+  if (paymentEvent) {
+    const amount = Number(data?.amount);
+    // ยอดหาย/เพี้ยน = ไม่ใส่ตัวเลขดีกว่าขึ้น "฿NaN" ในเธรดที่เป็นหลักฐานเรื่องเงิน
+    const shown = Number.isFinite(amount) ? formatMoney(amount, "THB", locale) : "";
+    return t.orderEvent[paymentEvent].replace("{amount}", shown).trim();
+  }
   if (eventType === "order_created") return t.orderEvent.order_created;
   if (eventType === "quote_issued") return t.orderEvent.quote_issued;
   if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;

@@ -134,6 +134,13 @@
       "when": 1786627311662,
       "tag": "0018_rich_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790325242114,
+      "tag": "0019_sturdy_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

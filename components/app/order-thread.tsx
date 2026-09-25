@@ -92,17 +92,24 @@ export function OrderThread({
       <ol className="max-h-[28rem] space-y-4 overflow-y-auto px-5 py-4">
         {shown.map((m) => {
           if (m.isSystemEvent) {
-            const text = eventText(t, m.eventType, m.eventData);
+            const text = eventText(t, m.eventType, m.eventData, locale);
             // event ที่ยังไม่มีข้อความรองรับ ไม่แสดงดีกว่าโชว์ key ดิบ
             if (!text) return null;
             return (
               <li key={m.id} className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                <span aria-hidden className="h-px flex-1 bg-border" />
-                <span className="shrink-0">
+                <span aria-hidden className="h-px min-w-3 flex-1 bg-border" />
+                {/*
+                  เวลาแบบ "55 วินาทีที่แล้ว" เดินระหว่าง server เรนเดอร์กับตอน hydrate
+                  ตัวเลขจึงต่างกันได้เสมอ — ไม่ใช่บั๊ก แค่ปิดคำเตือนของบรรทัดนี้
+
+                  ตัดบรรทัดได้ (ไม่ใช่ shrink-0) เพราะ event เรื่องเงินยาวกว่าบรรทัดเปลี่ยนสถานะ
+                  "ยกเลิกการยืนยันรับเงิน ฿1,500 · โดยครีเอเตอร์ · …" ล้นจอ 360px จนถูกตัดหาย
+                */}
+                <span className="min-w-0 text-center" suppressHydrationWarning>
                   {text} · {actorText(t, m.eventData?.actor as string | undefined)} ·{" "}
                   {formatRelative(m.createdAt, locale)}
                 </span>
-                <span aria-hidden className="h-px flex-1 bg-border" />
+                <span aria-hidden className="h-px min-w-3 flex-1 bg-border" />
               </li>
             );
           }
@@ -125,7 +132,7 @@ export function OrderThread({
                 >
                   {m.body}
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-[11px] text-muted-foreground" suppressHydrationWarning>
                   {formatRelative(m.createdAt, locale)}
                 </p>
               </div>

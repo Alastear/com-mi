@@ -204,6 +204,31 @@ export const paymentRecord = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     note: text("note").notNull().default(""),
 
+    /**
+     * ครีเอเตอร์ตอบว่า "ยังไม่ได้รับเงิน" — แถวนี้ไม่นับตลอดไป แล้วลูกค้าแจ้งใหม่ได้
+     *
+     * ไม่ลบแถวทิ้ง เพราะทั้งสองฝ่ายต้องเห็นว่าเคยมีการแจ้งยอดนี้และถูกตอบว่าอะไร
+     * ถ้าลบ ลูกค้าจะเห็นรายการที่ตัวเองแจ้งหายไปเฉย ๆ ซึ่งดูเหมือนระบบกินเงิน
+     */
+    rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+    rejectedByUserId: text("rejected_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    rejectReason: text("reject_reason").notNull().default(""),
+
+    /**
+     * ยกเลิกการยืนยันที่กดไปแล้ว (กดยืนยันผิดแถว ยอดเด้งกลับ ฯลฯ)
+     *
+     * ⚠️ แถวที่ void แล้วยังมี `verifiedAt` อยู่ — เก็บไว้เป็นหลักฐานว่าเคยยืนยัน
+     * ทุกที่ที่รวมยอดจึงต้องกรอง `voided_at is null` ด้วยเสมอ ไม่ใช่ดูแค่ verified
+     * (ดู `paymentState()` ใน lib/payments/money.ts และ `recomputePaidSql`)
+     */
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedByUserId: text("voided_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    voidReason: text("void_reason").notNull().default(""),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("payment_order_idx").on(t.orderId, t.createdAt)],

@@ -12,6 +12,10 @@ export const NOTIFICATION_TYPES = [
   "payment_reported",
   "payment_recorded_by_creator",
   "payment_confirmed",
+  /** ครีเอเตอร์ตอบว่ายังไม่ได้รับเงินตามที่ลูกค้าแจ้ง — ลูกค้าต้องรู้เพื่อแจ้งใหม่หรือตามเรื่อง */
+  "payment_rejected",
+  /** ครีเอเตอร์ยกเลิกการยืนยันรับเงิน — ยอดที่ลูกค้าเชื่อว่าจ่ายแล้วถูกหักออก */
+  "payment_voided",
   "invite_claimed",
   "quote_issued",
   "quote_accepted",
