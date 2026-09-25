@@ -269,6 +269,7 @@ export default async function ClientRequestPage({ params }: Props) {
           actor="client"
           money={moneyMoved(order.amountPaidCents, payments)}
           currency={order.currency}
+          revisions={{ used: order.revisionsUsed, allowed: order.revisionsAllowed }}
         />
       </Card>
 

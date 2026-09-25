@@ -799,6 +799,7 @@ const th = {
     depositUnpaid: "ยังเริ่มงานไม่ได้ — ลูกค้ายังจ่ายมัดจำไม่ครบ",
     notFullyPaid: "ยังส่งไฟล์จริงไม่ได้ — ลูกค้ายังจ่ายไม่ครบยอด",
     moveNoFiles: "ยังไม่มีไฟล์ให้ส่ง — อัปโหลดไฟล์งานในช่องส่งมอบก่อน แล้วค่อยกดส่ง",
+    revisionsExhausted: "ใช้สิทธิ์ขอแก้ไขครบแล้ว — ทักครีเอเตอร์ในแชทแทน",
     deposit: "มัดจำ",
     depositHint: "ต้องได้รับก่อนเริ่มลงมือ · ใส่ 0 ถ้าไม่บังคับ",
   },
@@ -866,6 +867,11 @@ const th = {
     cancelHistoryKept: "ประวัติการชำระเงินยังดูได้ที่หน้านี้หลังยกเลิก",
     cancelConfirm: "ยืนยันยกเลิกงาน",
     cancelKeep: "ไม่ยกเลิก",
+    /* ── โควตารอบแก้ (ฝั่งลูกค้า ข้างปุ่มขอแก้ไข) ── */
+    revisionsLeft: "ขอแก้ไขได้อีก {n} จาก {total} ครั้ง · กดขอแก้ไขนับ 1 ครั้ง",
+    revisionsExhausted:
+      "ใช้สิทธิ์ขอแก้ไขครบแล้ว ({used}/{total} ครั้ง) ถ้ายังมีจุดที่อยากแก้ ทักครีเอเตอร์ในแชทได้",
+    revisionsNone: "งานนี้ไม่รวมการขอแก้ไข ถ้ามีจุดที่อยากแก้ ทักครีเอเตอร์ในแชทได้",
   },
 
   /** หัวข้อของออเดอร์ที่จบแล้ว — แทนแผงชำระเงินบนหน้าออเดอร์ทั้งสองฝั่ง */
@@ -966,6 +972,7 @@ const th = {
   orderEvent: {
     order_created: "ลูกค้าส่งคำขอเข้ามา",
     status_changed: "เปลี่ยนสถานะเป็น {status}",
+    revisionRound: "ครั้งที่ {n} จาก {total}",
     quote_issued: "ส่งใบเสนอราคา",
     quote_accepted: "ยอมรับใบเสนอราคา",
     quote_withdrawn: "ถอนใบเสนอราคา",
@@ -1869,6 +1876,7 @@ const en: Dictionary = {
     depositUnpaid: "Cannot start yet — the deposit has not been paid in full",
     notFullyPaid: "Cannot deliver yet — the order is not fully paid",
     moveNoFiles: "Nothing to deliver yet — upload the files in the delivery box first, then send.",
+    revisionsExhausted: "No revisions left — message the creator in the chat instead",
     deposit: "Deposit",
     depositHint: "Required before work starts · set 0 to skip",
   },
@@ -1933,6 +1941,11 @@ const en: Dictionary = {
     cancelHistoryKept: "The payment history stays on this page after cancelling.",
     cancelConfirm: "Cancel order",
     cancelKeep: "Keep order",
+    revisionsLeft: "Revisions left: {n} of {total} · each request uses one",
+    revisionsExhausted:
+      "No revisions left ({used} of {total} used). If something still needs changing, message the creator in the chat.",
+    revisionsNone:
+      "This order includes no revisions. If something needs changing, message the creator in the chat.",
   },
 
   orderClosed: {
@@ -2031,6 +2044,7 @@ const en: Dictionary = {
   orderEvent: {
     order_created: "Client sent the request",
     status_changed: "Status changed to {status}",
+    revisionRound: "revision {n} of {total}",
     quote_issued: "Quote sent",
     quote_accepted: "Quote accepted",
     quote_withdrawn: "Quote withdrawn",

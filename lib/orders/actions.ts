@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
@@ -11,6 +11,7 @@ import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
 import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
 import { canRelease, depositSatisfied } from "./release";
+import { consumesRevision, revisionQuota } from "./revisions";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
 /**
@@ -43,6 +44,7 @@ export type TransitionResult =
         | "not_fully_paid"
         | "no_files"
         | "price_missing"
+        | "revisions_exhausted"
         | "use_dedicated_action";
     };
 
@@ -69,6 +71,8 @@ export async function transitionOrder(input: {
       depositCents: true,
       amountPaidCents: true,
       totalCents: true,
+      revisionsUsed: true,
+      revisionsAllowed: true,
     },
     with: { page: { columns: { userId: true } } },
   });
@@ -121,6 +125,17 @@ export async function transitionOrder(input: {
     return { ok: false, error: "not_fully_paid" };
   }
   /**
+   * ขอแก้ไขเกินโควตาไม่ได้ — ตอบเป็น error ของมันเอง ไม่ใช่ `not_allowed`
+   * เพราะเส้นทางนี้มีอยู่จริง แค่สิทธิ์หมด หน้าจอต้องบอกให้ไปคุยในแชท ไม่ใช่บอกว่า "ย้ายไม่ได้"
+   *
+   * นี่แค่ตอบให้ตรงเหตุผล ด่านจริงคือ `where` ของ update ข้างล่าง — อ่านตรงนี้แล้ว
+   * กดสองแท็บพร้อมกันยังผ่านที่นี่ได้ทั้งคู่
+   */
+  const consuming = consumesRevision(to);
+  if (consuming && revisionQuota(order.revisionsUsed, order.revisionsAllowed).exhausted) {
+    return { ok: false, error: "revisions_exhausted" };
+  }
+  /**
    * เส้นทางที่ต้องเดินผ่าน action เฉพาะ ห้ามเดินผ่านปุ่มเปลี่ยนสถานะธรรมดา
    *
    * ปุ่มพวกนี้ถูกซ่อนไปแล้วโดย `allowedNext()` แต่ Server Action ถูกเรียกตรงได้
@@ -157,6 +172,11 @@ export async function transitionOrder(input: {
    * ถ้าครีเอเตอร์เปิดบอร์ดไว้สองแท็บแล้วกดจากทั้งคู่ อันที่สองต้องไม่ทับ
    * เพราะสถานะที่มันเห็นตอนกดไม่ใช่สถานะจริงแล้ว — ตรวจตอนอ่านอย่างเดียวไม่พอ
    * ระหว่างอ่านกับเขียนมีช่องให้แทรกเสมอ
+   *
+   * ขอแก้ไข = บวก `revisions_used` ใน UPDATE เดียวกับสถานะ พร้อม `where` ว่ายังไม่เต็มโควตา
+   * ⚠️ ห้ามแยกเป็นสอง query (เปลี่ยนสถานะก่อนแล้วค่อยบวก) — ถ้าตัวหลังล้ม
+   * จะได้รอบแก้ฟรีที่ไม่ถูกนับ และห้ามบวกจากค่าที่อ่านมาใน JS (`used + 1`)
+   * เพราะสองคำขอที่อ่านค่าเดียวกันจะเขียนเลขเดียวกันทับกัน — ให้ DB บวกเอง
    */
   const updated = await db
     .update(schema.order)
@@ -164,10 +184,22 @@ export async function transitionOrder(input: {
       status: to,
       updatedAt: now,
       ...(to === "completed" ? { completedAt: now } : null),
+      ...(consuming ? { revisionsUsed: sql`${schema.order.revisionsUsed} + 1` } : null),
     })
-    .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from)))
-    .returning({ id: schema.order.id });
+    .where(
+      and(
+        eq(schema.order.id, order.id),
+        eq(schema.order.status, from),
+        consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
+      ),
+    )
+    .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed });
 
+  /**
+   * ไม่มีแถวไหนถูกเขียน = มีคนเปลี่ยนออเดอร์ไปก่อนแล้ว ตอบ `stale` ให้รีเฟรช
+   * ด่านโควตาใน `where` จะตกเองได้ก็ต่อเมื่อระหว่างอ่านกับเขียนมีคนวนรอบแก้จนครบ
+   * แล้วกลับมาสถานะเดิม ซึ่งรีเฟรชแล้วหน้าจอจะบอกว่าสิทธิ์หมดเอง
+   */
   if (updated.length === 0) return { ok: false, error: "stale" };
 
   /**
@@ -181,7 +213,20 @@ export async function transitionOrder(input: {
     senderUserId: session.user.id,
     isSystemEvent: true,
     eventType: "status_changed",
-    eventData: { from, to, actor },
+    /**
+     * ขอแก้ไขพก "ครั้งที่เท่าไหร่ จากกี่ครั้ง" ไว้ใน event ด้วย — เธรดเป็นหลักฐานของทั้งสองฝั่ง
+     * เวลาเถียงกันว่า "ขอแก้ไปกี่รอบแล้ว" ต้องชี้ได้ว่ารอบไหนนับตอนไหน
+     * ใช้ค่าจาก `returning` ไม่ใช่ค่าที่อ่านไว้ก่อน เพราะนั่นคือเลขที่ DB บวกให้จริง
+     */
+    eventData: consuming
+      ? {
+          from,
+          to,
+          actor,
+          revision: updated[0].revisionsUsed,
+          revisionsAllowed: order.revisionsAllowed,
+        }
+      : { from, to, actor },
     createdAt: now,
   });
 

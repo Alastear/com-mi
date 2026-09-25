@@ -1,4 +1,4 @@
-import type { Dictionary } from "@/lib/i18n/dictionaries";
+import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
 import { formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
@@ -118,7 +118,17 @@ export function eventText(
   if (eventType === "status_changed") {
     const to = String(data?.to ?? "") as OrderStatus;
     const label = t.orderStatus[to] ?? to;
-    return t.orderEvent.status_changed.replace("{status}", label);
+    const text = t.orderEvent.status_changed.replace("{status}", label);
+    /**
+     * ขอแก้ไขที่นับโควตาแล้วต่อท้ายด้วย "ครั้งที่ n จาก N" — event เก่าก่อนมีโควตาไม่มีเลขนี้
+     * ก็แสดงแค่สถานะเหมือนเดิม ไม่เดาเลขให้ (เดาผิดในหลักฐานแย่กว่าไม่มี)
+     */
+    const n = Number(data?.revision);
+    const total = Number(data?.revisionsAllowed);
+    if (to === "revision_requested" && Number.isInteger(n) && n > 0 && Number.isInteger(total)) {
+      return `${text} · ${fill(t.orderEvent.revisionRound, { n, total })}`;
+    }
+    return text;
   }
   // event ที่ยังไม่มีข้อความรองรับ — ไม่แสดงดีกว่าโชว์ key ดิบให้ผู้ใช้เห็น
   return null;

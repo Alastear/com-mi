@@ -19,6 +19,7 @@ import { formatMoney } from "@/lib/format";
 import { allowedNext, type Actor } from "@/lib/orders/state-machine";
 import { actionLabel, isPrimaryAction } from "@/lib/orders/labels";
 import { needsMoneyConfirm, type MoneyMoved } from "@/lib/orders/cancel";
+import { consumesRevision, revisionHint, revisionQuota } from "@/lib/orders/revisions";
 import { transitionOrder } from "@/lib/orders/actions";
 import type { OrderStatus } from "@/lib/types";
 
@@ -36,6 +37,9 @@ import type { OrderStatus } from "@/lib/types";
  * บอกยอดที่จ่ายแล้ว และบอกตรง ๆ ว่าแพลตฟอร์มไม่ได้ถือเงิน คืนเงินให้ไม่ได้
  * — เดิมกดครั้งเดียวยกเลิกทันที ทั้งที่เงินอยู่ในบัญชีครีเอเตอร์ไปแล้ว
  * ⚠️ dialog เป็นแค่การเตือน ไม่ใช่ด่าน — server ไม่ได้บังคับให้ต้องผ่าน dialog
+ *
+ * ปุ่มขอแก้ไขมีสิทธิ์ที่เหลือเขียนไว้ข้าง ๆ เสมอ (ลูกค้าต้องรู้ก่อนกดว่ากดแล้วนับ)
+ * ใช้ครบแล้วเอาปุ่มออกแล้วบอกให้ไปคุยในแชทแทน — ด่านจริงอยู่ที่ `transitionOrder`
  */
 export function OrderActions({
   code,
@@ -43,6 +47,7 @@ export function OrderActions({
   actor,
   money = null,
   currency = "THB",
+  revisions = null,
 }: {
   code: string;
   status: OrderStatus;
@@ -50,6 +55,8 @@ export function OrderActions({
   /** เงินที่ขยับไปแล้ว — มาจาก `moneyMoved()` ฝั่ง server */
   money?: MoneyMoved | null;
   currency?: string;
+  /** โควตารอบแก้ของออเดอร์ — ส่งมาเฉพาะฝั่งลูกค้า ซึ่งเป็นฝั่งเดียวที่กดขอแก้ได้ */
+  revisions?: { used: number; allowed: number } | null;
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -57,10 +64,18 @@ export function OrderActions({
   // ปลายทางที่รอให้กดยืนยันใน dialog — null = dialog ปิด
   const [confirming, setConfirming] = useState<OrderStatus | null>(null);
 
-  const targets = allowedNext(status, actor);
-  if (targets.length === 0) {
+  const next = allowedNext(status, actor);
+  if (next.length === 0) {
     return <p className="text-sm text-muted-foreground">{t.orderAction.noActions}</p>;
   }
+
+  // ข้อความโควตาขึ้นเฉพาะตอนที่ปุ่มขอแก้ไขมีอยู่จริงในสถานะนี้ — สถานะอื่นไม่ต้องรก
+  const revision =
+    revisions && next.some(consumesRevision)
+      ? revisionHint(t, revisionQuota(revisions.used, revisions.allowed))
+      : null;
+  // สิทธิ์หมด = ไม่มีปุ่มให้กดแล้วโดนปฏิเสธ — ข้อความข้างล่างอธิบายแทน
+  const targets = revision?.blocked ? next.filter((to) => !consumesRevision(to)) : next;
 
   function move(to: OrderStatus) {
     start(async () => {
@@ -81,10 +96,14 @@ export function OrderActions({
                 ? t.order.notFullyPaid
                 : res.error === "no_files"
                   ? t.order.moveNoFiles
+                : res.error === "revisions_exhausted"
+                  ? t.order.revisionsExhausted
                 : res.error === "wrong_actor" || res.error === "not_allowed"
                   ? t.order.moveNotAllowed
                   : t.error.title,
         );
+        // สิทธิ์หมดแปลว่าหน้าจอถือเลขเก่าอยู่ — รีเฟรชให้ปุ่มหายและข้อความอธิบายขึ้นแทน
+        if (res.error === "revisions_exhausted") router.refresh();
       }
     });
   }
@@ -129,6 +148,18 @@ export function OrderActions({
           </Button>
         ))}
       </div>
+
+      {revision ? (
+        <p
+          className={
+            revision.blocked
+              ? "w-full text-sm text-muted-foreground"
+              : "w-full text-xs text-muted-foreground sm:text-right"
+          }
+        >
+          {revision.text}
+        </p>
+      ) : null}
 
       {money ? (
         <Dialog

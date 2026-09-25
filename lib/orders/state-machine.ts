@@ -95,6 +95,8 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
     { to: "cancelled", by: ["creator", "client"] },
   ],
   in_review: [
+    // ขอแก้ตอนดูงานระหว่างทำ **นับโควตารอบแก้** เหมือนหลังส่งไฟล์จริง — เหตุผลอยู่ที่ `consumesRevision()`
+    // (โควตาไม่ได้อยู่ในตารางนี้ เพราะขึ้นกับตัวเลขของออเดอร์ใบนั้น ด่านอยู่ใน `transitionOrder`)
     { to: "revision_requested", by: ["client"] },
     { to: "delivered", by: ["creator"], viaAction: "deliverAndRelease" },
     { to: "cancelled", by: ["creator", "client"] },
@@ -105,7 +107,9 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   ],
   delivered: [
     { to: "completed", by: ["client", "system"] },
-    // ลูกค้าทักว่าไฟล์ผิด/ไม่ครบ ยังขอแก้ได้ถ้าโควตารอบแก้ยังเหลือ
+    // ลูกค้าทักว่าไฟล์ผิด/ไม่ครบ ยังขอแก้ได้ถ้าโควตารอบแก้ยังเหลือ (ด่านอยู่ใน `transitionOrder`)
+    // ⚠️ สิทธิ์หมดแล้วครีเอเตอร์ถอยออเดอร์จาก delivered เองไม่ได้ — ต้องคุยกันในแชท
+    // จนกว่าจะมีรอบแก้แบบจ่ายเพิ่ม
     { to: "revision_requested", by: ["client"] },
   ],
   completed: [],
