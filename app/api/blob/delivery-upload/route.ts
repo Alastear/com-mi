@@ -1,8 +1,9 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { handleUpload } from "@vercel/blob/client";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
+import { isClientTokenRequest, parseClientPayload } from "@/lib/blob/upload-body";
 import { isOrderCode } from "@/lib/orders/code";
 import { isDeliveryPath } from "@/lib/delivery/path";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -21,10 +22,43 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
  */
 
 /** ข้อความผิดพลาดที่ยอมให้ออกไปถึงเบราว์เซอร์ — ห้ามส่งข้อความดิบจาก SDK */
-type UploadError = "forbidden" | "invalid_state" | "upload_failed";
+type UploadError = "bad_request" | "forbidden" | "invalid_state" | "upload_failed";
+
+/**
+ * ⚠️ 500 สงวนไว้ให้ความล้มเหลวของฝั่งเราจริง ๆ เท่านั้น (Blob, DB, env หาย)
+ * body เพี้ยนเป็นความผิดของผู้เรียก ต้องได้ 4xx — ไม่งั้นบอตที่ยิงขยะเข้ามา
+ * จะทำให้ log/alert ของ 500 ดูเหมือน Blob ล่ม ทั้งที่ไม่มีอะไรพัง
+ */
+const STATUS: Record<UploadError, number> = {
+  bad_request: 400,
+  forbidden: 403,
+  invalid_state: 403,
+  upload_failed: 500,
+};
+
+function fail(error: UploadError): Response {
+  return Response.json({ error }, { status: STATUS[error] });
+}
 
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json()) as HandleUploadBody;
+  /**
+   * ⚠️ แกะและตรวจ body เองก่อนส่งให้ `handleUpload`
+   * เดิม `await request.json()` อยู่นอก try — body ว่างหรือไม่ใช่ JSON โยนหลุดออกไป
+   * เป็น 500 ของ Next เอง ส่วน `{}` เข้าไปถึง SDK แล้วได้ "Invalid event type"
+   * ซึ่งตกไปเป็น `upload_failed` 500 — ทั้งคู่คือ request เสีย ไม่ใช่ระบบเสีย
+   */
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return fail("bad_request");
+  }
+  if (!isClientTokenRequest(body)) {
+    // log แค่ชนิดเหตุการณ์ ไม่ log ทั้ง body — ถ้าอัปเกรด SDK แล้วรูปร่างเปลี่ยน จะเห็นตรงนี้
+    const type = (body as { type?: unknown } | null)?.type;
+    console.warn("[delivery-upload] bad_request", typeof type === "string" ? type.slice(0, 64) : typeof type);
+    return fail("bad_request");
+  }
 
   try {
     const result = await handleUpload({
@@ -35,8 +69,12 @@ export async function POST(request: Request): Promise<Response> {
         const session = await getSession();
         if (!session) throw new Error("forbidden");
 
-        const code = (JSON.parse(clientPayload ?? "{}") as { code?: string }).code;
-        if (!code || !isOrderCode(code)) throw new Error("forbidden");
+        // clientPayload เป็นสตริง JSON อีกชั้นข้างใน body — เพี้ยนได้แยกจาก body เอง
+        // เดิม JSON.parse ตรง ๆ: "" หรือ "null" โยน error ดิบออกไปเป็น 500
+        const payload = parseClientPayload(clientPayload);
+        if (!payload) throw new Error("bad_request");
+        const code = payload.code;
+        if (typeof code !== "string" || !isOrderCode(code)) throw new Error("forbidden");
 
         const order = await getDb().query.order.findFirst({
           where: eq(schema.order.code, code),
@@ -99,7 +137,7 @@ export async function POST(request: Request): Promise<Response> {
     // ข้อความจาก SDK เคยมี pathname ของ blob อื่นติดมาด้วย
     console.error("[delivery-upload]", raw);
     const code: UploadError =
-      raw === "forbidden" ? "forbidden" : raw === "invalid_state" ? "invalid_state" : "upload_failed";
-    return Response.json({ error: code }, { status: code === "upload_failed" ? 500 : 403 });
+      raw === "forbidden" || raw === "invalid_state" || raw === "bad_request" ? raw : "upload_failed";
+    return fail(code);
   }
 }
