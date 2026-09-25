@@ -1,5 +1,12 @@
 import { cookies, headers } from "next/headers";
-import { DEFAULT_LOCALE, LOCALE_COOKIE, LOCALES, isLocale, type Locale } from "./config";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  LOCALES,
+  isLocale,
+  localeFromAcceptLanguage,
+  type Locale,
+} from "./config";
 import { getDictionary } from "./dictionaries";
 
 /**
@@ -14,14 +21,7 @@ export async function getLocale(): Promise<Locale> {
   const fromCookie = cookieStore.get(LOCALE_COOKIE)?.value;
   if (isLocale(fromCookie)) return fromCookie;
 
-  const accept = (await headers()).get("accept-language") ?? "";
-  for (const part of accept.split(",")) {
-    const tag = part.split(";")[0]?.trim().toLowerCase() ?? "";
-    const base = tag.split("-")[0];
-    if (isLocale(base)) return base;
-  }
-
-  return DEFAULT_LOCALE;
+  return localeFromAcceptLanguage((await headers()).get("accept-language")) ?? DEFAULT_LOCALE;
 }
 
 export async function getDict() {

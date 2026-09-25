@@ -439,7 +439,8 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
     userId: order.clientUserId,
     actorUserId: session.user.id,
     type: "payment_confirmed",
-    data: { code },
+    // ยอดของแถวที่เพิ่งยืนยัน — อีเมลบอกลูกค้าว่า "ได้รับเท่าไร" ไม่ใช่แค่ "ได้รับแล้ว"
+    data: { code, amount: row.amountCents },
     url: `/my/requests/${code}`,
     entityType: "order",
     entityId: order.id,

@@ -23,6 +23,16 @@ describe("ข้อความแจ้งเตือน", () => {
     assert.match(notificationText(en, "order_created", { code: "ABCD2345" })!, /ABCD2345/);
   });
 
+  it("สถานะใหม่มาจาก `to` — รูปเดียวกับที่ transitionOrder เก็บจริง", () => {
+    // ⚠️ เทสต์เดิมส่ง `status` มาเอง ซึ่งไม่มีผู้เรียกคนไหนส่ง จึงผ่านทั้งที่กระดิ่งขึ้นท้ายว่าง
+    const real = { code: "ABCD2345", from: "requested", to: "accepted" };
+    const text = notificationText(en, "order_status_changed", real)!;
+    assert.match(text, /ABCD2345/);
+    assert.match(text, /Accepted/i);
+    assert.equal(text.trimEnd().endsWith("is now"), false, "ต้องไม่จบด้วยช่องว่าง");
+    assert.match(notificationText(th, "order_status_changed", real)!, /รับงานแล้ว/);
+  });
+
   it("สถานะถูกแปล ไม่ใช่โชว์ค่าดิบจาก DB", () => {
     const text = notificationText(en, "order_status_changed", {
       code: "ABCD2345",

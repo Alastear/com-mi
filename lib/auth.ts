@@ -25,6 +25,76 @@ import { getDb, schema } from "@/lib/db";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { LIMITS, rateLimit as pgRateLimit } from "@/lib/rate-limit";
 import { sendOtpEmail, sendPasswordChangedEmail } from "@/lib/email/auth-mails";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  isLocale,
+  localeFromAcceptLanguage,
+  type Locale,
+} from "@/lib/i18n/config";
+
+/** ส่วนของ endpoint context ที่ต้องใช้อ่านภาษา — ไม่ผูกกับ type ภายในของ Better Auth */
+type LocaleSource = {
+  getCookie: (key: string) => string | null;
+  getHeader: (key: string) => string | null;
+} | null | undefined;
+
+/**
+ * ภาษาของหน้าที่คนกดกำลังดูอยู่ — ลำดับเดียวกับ `getLocale()` (cookie → Accept-Language)
+ * ใช้กับอีเมลที่ตอบคำขอของคนที่อยู่หน้าจอตอนนี้ เช่นรหัส OTP
+ */
+function requestLocale(ctx: LocaleSource): Locale {
+  const cookie = ctx?.getCookie(LOCALE_COOKIE);
+  if (isLocale(cookie)) return cookie;
+  return localeFromAcceptLanguage(ctx?.getHeader("accept-language")) ?? DEFAULT_LOCALE;
+}
+
+/**
+ * จำภาษาไว้ที่บัญชีตอนล็อกอิน — อีเมลแจ้งเตือนอ่านจาก `user.locale` (lib/email/notify.ts)
+ *
+ * cookie ภาษา = คนกดเลือกเอง → เขียนทับเสมอ (อาจเลือกไว้ตอนยังไม่ล็อกอิน)
+ * ไม่มี cookie → เดาจาก Accept-Language แบบเดียวกับที่หน้าเว็บเดา แต่ **เติมเฉพาะช่องที่ว่าง**
+ * ห้ามทับภาษาที่เคยเลือกไว้จากเครื่องอื่นด้วยการเดาจากเบราว์เซอร์เครื่องนี้
+ *
+ * ⚠️ ล้มเงียบ — ล็อกอินต้องไม่พังเพราะจำภาษาไม่ได้
+ */
+async function rememberLocale(userId: string, ctx: LocaleSource): Promise<void> {
+  if (!ctx) return;
+  try {
+    const chosen = ctx.getCookie(LOCALE_COOKIE);
+    const u = schema.user;
+    if (isLocale(chosen)) {
+      await getDb()
+        .update(u)
+        .set({ locale: chosen })
+        .where(and(eq(u.id, userId), or(isNull(u.locale), ne(u.locale, chosen))));
+      return;
+    }
+    const guessed = localeFromAcceptLanguage(ctx.getHeader("accept-language"));
+    if (guessed) {
+      await getDb()
+        .update(u)
+        .set({ locale: guessed })
+        .where(and(eq(u.id, userId), isNull(u.locale)));
+    }
+  } catch (err) {
+    console.error("[auth] จำภาษาตอนล็อกอินไม่สำเร็จ", err);
+  }
+}
+
+/** ภาษาที่บัญชีจำไว้ — สำหรับอีเมลที่ผู้รับอาจไม่ใช่คนกด (เช่นเตือนรหัสผ่านถูกเปลี่ยน) */
+async function storedLocale(userId: string): Promise<Locale> {
+  try {
+    const row = await getDb().query.user.findFirst({
+      columns: { locale: true },
+      where: eq(schema.user.id, userId),
+    });
+    return isLocale(row?.locale) ? row.locale : DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
 
 /**
  * อีเมลส่งถึงคนจริงได้หรือยัง
@@ -80,7 +150,10 @@ function createAuth() {
       // ไม่ใช้ลิงก์รีเซ็ต — ทางกู้รหัสของเราคือรหัส OTP (ดู emailOTP ข้างล่าง)
     },
     async onPasswordReset({ user }) {
-      await sendPasswordChangedEmail(user.email);
+      /**
+       * ภาษาที่บัญชีจำไว้ ไม่ใช่ภาษาของคนกด — อีเมลนี้มีค่าเฉพาะตอนที่คนกด **ไม่ใช่** เจ้าของ
+       */
+      await sendPasswordChangedEmail(user.email, await storedLocale(user.id));
     },
   },
 
@@ -136,6 +209,13 @@ function createAuth() {
           if ((u as { suspendedAt?: Date | null } | null)?.suspendedAt) {
             throw APIError.from("FORBIDDEN", { message: "account_suspended", code: "ACCOUNT_SUSPENDED" });
           }
+        },
+        /**
+         * ล็อกอินสำเร็จ = จังหวะที่รู้ทั้ง "ใคร" และ "ภาษาที่เขาเห็นอยู่"
+         * (Google callback เป็น GET แบบ top-level จึงได้ cookie `samesite=lax` มาด้วย)
+         */
+        async after(session, ctx) {
+          await rememberLocale(session.userId, ctx);
         },
       },
     },
@@ -211,8 +291,9 @@ function createAuth() {
              * `throw` ตรงนี้จึงไม่มีทางหยุดคำขอได้ — เคยใส่ลิมิตไว้ตรงนี้แล้วพบว่า
              * ตัวนับขึ้นครบแต่ทุกคำขอยังตอบ 200 ลิมิตย้ายไปที่ `hooks.before` แทน
              */
-            async sendVerificationOTP({ email, otp }) {
-              await sendOtpEmail(email, otp, 10);
+            async sendVerificationOTP({ email, otp }, ctx) {
+              // คนขอรหัสกำลังดูหน้าเข้าสู่ระบบอยู่ — ใช้ภาษาของหน้านั้น
+              await sendOtpEmail(email, otp, 10, requestLocale(ctx));
             },
           }),
         ]

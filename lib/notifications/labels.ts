@@ -18,7 +18,12 @@ export function notificationText(
   if (!template) return null;
 
   return template.replace(/\{(\w+)\}/g, (_, key: string) => {
-    const raw = data[key];
+    /**
+     * ⚠️ `transitionOrder()` เก็บสถานะใหม่ไว้ที่ `to` (พร้อม `from`) ไม่ใช่ `status`
+     * ข้อความใช้ `{status}` มาตั้งแต่แรก กระดิ่งจึงขึ้น "งาน #X เปลี่ยนเป็น " ท้ายว่างมาตลอด
+     * แถวที่อยู่ใน DB แล้วแก้ย้อนไม่ได้ จึงอ่าน `to` แทนตรงนี้ — แถวเก่าที่มี `status` ก็ยังอ่านได้
+     */
+    const raw = key === "status" ? (data.status ?? data.to) : data[key];
     if (raw === undefined) return "";
     // สถานะต้องแปลด้วย ไม่ใช่โชว์ค่าดิบอย่าง "in_progress"
     if (key === "status") return t.orderStatus[String(raw) as OrderStatus] ?? String(raw);

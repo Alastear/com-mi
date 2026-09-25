@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from "./config";
 import { getDictionary, type Dictionary } from "./dictionaries";
+import { saveLocale } from "./actions";
 
 type LocaleContextValue = {
   locale: Locale;
@@ -22,7 +23,16 @@ export function LocaleProvider({
   const setLocale = useCallback((next: Locale) => {
     // คุกกี้อายุ 1 ปี — reload เพื่อให้ฝั่ง server เรนเดอร์ด้วยภาษาใหม่
     document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
-    window.location.reload();
+    /**
+     * จำไว้ที่บัญชีด้วย อีเมลที่ส่งตอนเราไม่ได้เปิดเว็บจะได้เป็นภาษาเดียวกัน
+     *
+     * ⚠️ ต้องรอให้คำขอออกไปก่อน reload — reload ตัดคำขอที่ค้างอยู่ทิ้ง
+     * แต่ห้ามรอนานเกินไป: ปุ่มเปลี่ยนภาษาต้องทำงานแม้ server ตอบช้าหรือพัง
+     * cookie เขียนไปแล้วข้างบน หน้าเว็บจึงเปลี่ยนภาษาได้เสมอ
+     */
+    const saved = saveLocale(next).catch(() => {});
+    const giveUp = new Promise<void>((resolve) => setTimeout(resolve, 2500));
+    void Promise.race([saved, giveUp]).then(() => window.location.reload());
   }, []);
 
   const value = useMemo<LocaleContextValue>(

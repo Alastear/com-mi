@@ -35,6 +35,18 @@ export const user = pgTable("user", {
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspensionReason: text("suspension_reason").notNull().default(""),
 
+  /**
+   * ภาษาที่ผู้ใช้เลือกล่าสุด ("th" | "en") — null = ไม่เคยรู้ อีเมลใช้ภาษาไทย
+   *
+   * ภาษาของหน้าเว็บอยู่ใน cookie ซึ่งอีเมลอ่านไม่ได้ อีเมลแจ้งเตือนส่งตอนที่
+   * **อีกฝ่าย** กดอะไรสักอย่าง ผู้รับไม่ได้อยู่ใน request นั้นเลย จึงต้องเก็บไว้ที่บัญชี
+   * เขียนจาก `saveLocale()` ตอนกดเปลี่ยนภาษา และจาก hook ตอนล็อกอิน (lib/auth.ts)
+   *
+   * ⚠️ ไม่ได้อยู่ใน `additionalFields` ของ Better Auth โดยตั้งใจ — ไม่ต้องอยู่ใน session
+   * และไม่ต้องให้ `/update-user` เขียนได้
+   */
+  locale: text("locale"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

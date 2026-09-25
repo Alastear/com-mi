@@ -3,7 +3,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { after } from "next/server";
 import { emailNotification, shouldEmail } from "@/lib/email/notify";
-import type { NotificationType } from "./types";
+import type { NotificationData, NotificationType } from "./types";
 
 /**
  * สร้างการแจ้งเตือน
@@ -12,14 +12,18 @@ import type { NotificationType } from "./types";
  * (เปลี่ยนสถานะออเดอร์ ยืนยันเงินเข้า) ถ้าเขียนแจ้งเตือนไม่สำเร็จแล้วโยน error
  * ขึ้นไป การกระทำหลักที่ทำสำเร็จไปแล้วจะดูเหมือนพัง ทั้งที่ข้อมูลจริงถูกต้อง
  * ผู้ใช้ก็จะกดซ้ำ ซึ่งแย่กว่าการไม่ได้รับแจ้งเตือนหนึ่งครั้ง
+ *
+ * `data` บังคับรูปตามชนิด (`NotificationData`) — ลืมส่งยอดเงินของรายการเงิน = tsc ไม่ผ่าน
+ * ⚠️ `entityType`/`entityId` ต้องชี้ออเดอร์ (หรือคำเชิญ) ของเรื่องนั้นเสมอ
+ * อีเมลอ่านชื่อลูกค้า ชื่อร้าน ชื่องาน และยอดเงินจากตรงนั้น ไม่มี = ไม่มีอีเมล
  */
-export async function notify(input: {
+export async function notify<T extends NotificationType>(input: {
   userId: string;
-  type: NotificationType;
+  type: T;
   url: string;
-  data?: Record<string, string | number>;
-  entityType?: string;
-  entityId?: string;
+  data: NotificationData[T];
+  entityType: "order" | "invite";
+  entityId: string;
   actorUserId?: string | null;
 }): Promise<void> {
   // ไม่ต้องแจ้งเตือนตัวเองว่าตัวเองทำอะไร
@@ -30,10 +34,10 @@ export async function notify(input: {
       id: newId("ntf"),
       userId: input.userId,
       type: input.type,
-      data: input.data ?? {},
+      data: input.data,
       url: input.url,
-      entityType: input.entityType ?? null,
-      entityId: input.entityId ?? null,
+      entityType: input.entityType,
+      entityId: input.entityId,
       actorUserId: input.actorUserId ?? null,
     });
   } catch (err) {
@@ -47,15 +51,22 @@ export async function notify(input: {
    * ทั้งที่งานจริงบันทึกลง DB เสร็จไปก่อนหน้านั้นแล้ว
    *
    * เรียกเฉพาะชนิดที่คุ้มค่าส่ง — ข้อความในเธรดถี่เกินกว่าจะส่งทุกครั้ง
+   * ลิงก์ในอีเมลไม่ได้ใช้ `url` ของแจ้งเตือน ชั้นอีเมลคิดเองจากฝั่งของผู้รับ
    */
-  if (shouldEmail(input.type)) {
+  if (shouldEmail(input.type, input.data)) {
     after(async () => {
-      await emailNotification({
-        userId: input.userId,
-        type: input.type,
-        data: input.data ?? {},
-        path: input.url,
-      });
+      try {
+        await emailNotification({
+          userId: input.userId,
+          type: input.type,
+          data: input.data,
+          entityType: input.entityType,
+          entityId: input.entityId,
+        });
+      } catch (err) {
+        // หลัง response แล้วไม่มีใครรับ error นี้ — log ไว้ให้ตามได้
+        console.error("[notify] ส่งอีเมลไม่สำเร็จ", input.type, err);
+      }
     });
   }
 }

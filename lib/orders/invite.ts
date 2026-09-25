@@ -576,11 +576,16 @@ export async function confirmInviteClaim(claimId: string): Promise<ConfirmResult
       .where(eq(schema.orderInvite.id, claim.inviteId)),
   ]);
 
+  /**
+   * ⚠️ ชนิดของ **ลูกค้า** — `order_created` คือ "มีคำขอใหม่เข้าร้าน" ที่เขียนถึงครีเอเตอร์
+   * เดิมใช้ตัวนั้น ลูกค้าจึงได้อีเมลว่ามีคนสั่งงานจากร้านที่ตัวเองไม่มี และไม่มีคำไหนบอก
+   * ว่าออเดอร์เปิดแล้ว ต้องโอนมัดจำเท่าไร
+   */
   await notify({
     userId: claim.userId,
     actorUserId: user.id,
-    type: "order_created",
-    data: { code: created.code, service: service.title },
+    type: "invite_confirmed",
+    data: { code: created.code },
     url: `/my/requests/${created.code}`,
     entityType: "order",
     entityId: created.orderId,

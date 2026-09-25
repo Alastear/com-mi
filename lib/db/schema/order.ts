@@ -318,6 +318,8 @@ export const orderRelations = relations(order, ({ one, many }) => ({
   messages: many(message),
   payments: many(paymentRecord),
   deliveries: many(delivery),
+  /** ใบเสนอราคาทุกฉบับ — ความสัมพันธ์ฝั่ง drizzle ล้วน ๆ ไม่มีอะไรเปลี่ยนใน DB */
+  quotes: many(orderQuote),
 }));
 
 export const orderItemRelations = relations(orderItem, ({ one }) => ({
