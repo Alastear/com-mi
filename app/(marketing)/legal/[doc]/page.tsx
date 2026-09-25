@@ -1,6 +1,16 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+
+/**
+ * ⚠️ ห้าม index จนกว่าจะมีเอกสารจริง — ตอนนี้ทั้งสองหน้ามีแค่ข้อความว่า "จะเขียนก่อนเปิดใช้งาน"
+ * ถอดจาก sitemap อย่างเดียวไม่พอ ลิงก์ใน footer ทุกหน้ายังพา bot มาถึงได้
+ * วันที่เขียนเอกสารเสร็จ: ลบ metadata นี้ แล้วใส่สองเส้นทางกลับเข้า app/sitemap.ts
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: true },
+};
 
 /** ชื่อเอกสารอยู่ในพจนานุกรมชุดเดียวกับที่ footer ใช้ จะได้ไม่หลุดกัน */
 const DOCS = ["terms", "privacy"] as const;

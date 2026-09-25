@@ -181,7 +181,12 @@ export function ShopEditor({
               />
             </div>
             <div>
-              <Label htmlFor="slotsTotal">{t.creator.queueCount}</Label>
+              {/*
+                เดิมช่องนี้ชื่อ "คิวปัจจุบัน" แต่หน้าร้านเอาตัวเลขเดียวกันไปเขียนว่า "เหลืออีก n คิว"
+                ตอนนี้ทั้งสองฝั่งเรียกว่า "ช่องที่เปิดรับ" และบอกตรง ๆ ว่าระบบไม่ได้นับลดให้
+                (ดู lib/shop/slots.ts)
+              */}
+              <Label htmlFor="slotsTotal">{t.shop.slotsLabel}</Label>
               <Input
                 id="slotsTotal"
                 name="slotsTotal"
@@ -189,8 +194,12 @@ export function ShopEditor({
                 min={0}
                 max={99}
                 defaultValue={shop.slotsTotal}
+                aria-describedby="slotsTotal-hint"
                 className="mt-1.5"
               />
+              <p id="slotsTotal-hint" className="mt-1.5 text-xs text-muted-foreground">
+                {t.shop.slotsHint}
+              </p>
             </div>
           </div>
 

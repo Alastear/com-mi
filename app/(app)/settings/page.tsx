@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { eq } from "drizzle-orm";
 import { Bell, CreditCard, MessageSquare, Store, User } from "lucide-react";
-import { ProBadge } from "@/components/locked-feature";
+import { ComingSoonBadge } from "@/components/locked-feature";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +13,8 @@ import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { shopUrlPrefix } from "@/lib/site";
 import { requireCreator } from "@/lib/auth-guard";
+import { planDisplay, type PlanId } from "@/lib/billing/plans";
+import { getDb, schema } from "@/lib/db";
 import { getOwnShop } from "@/lib/queries/creator";
 import { ensureShop } from "@/lib/shop/ensure";
 import { UserAvatar } from "@/components/user-avatar";
@@ -25,7 +28,26 @@ export default async function SettingsPage() {
 
   const { user } = await requireCreator();
   await ensureShop(user.id, user.name);
-  const shop = await getOwnShop(user.id);
+  const [shop, accounts] = await Promise.all([
+    getOwnShop(user.id),
+    /**
+     * ป้ายวิธีเข้าสู่ระบบต้องมาจากบัญชีที่ผูกไว้จริง
+     * เดิมขึ้นว่า "เข้าสู่ระบบด้วย Google" ให้ทุกคน ทั้งที่เปิดอีเมล+รหัสผ่านได้แล้ว
+     * (lib/auth.ts — เปิดเมื่อมี EMAIL_FROM) คนที่สมัครด้วยรหัสผ่านจึงถูกบอกเรื่องที่ไม่จริง
+     */
+    getDb()
+      .select({ providerId: schema.account.providerId })
+      .from(schema.account)
+      .where(eq(schema.account.userId, user.id)),
+  ]);
+  const providers = new Set(accounts.map((a) => a.providerId));
+  const signInBadges = [
+    providers.has("google") ? t.settings.signedInWithGoogle : null,
+    // "credential" คือชื่อที่ Better Auth ใช้กับบัญชีอีเมล+รหัสผ่าน
+    providers.has("credential") ? t.settings.signedInWithPassword : null,
+  ].filter((x): x is string => x !== null);
+
+  const plan = planDisplay((user.plan ?? "free") as PlanId);
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 lg:py-8">
@@ -68,9 +90,15 @@ export default async function SettingsPage() {
                 <div className="min-w-0">
                   <p className="font-medium">{user.name}</p>
                   <p className="truncate text-sm text-muted-foreground">{user.email}</p>
-                  <Badge variant="secondary" className="mt-1.5">
-                    {t.settings.signedInWithGoogle}
-                  </Badge>
+                  {signInBadges.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {signInBadges.map((label) => (
+                        <Badge key={label} variant="secondary">
+                          {label}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -139,26 +167,19 @@ export default async function SettingsPage() {
             </Button>
           </Card>
 
-          <Card className="gap-4 p-5">
+          {/*
+            ธีมหน้าร้านยังไม่ได้สร้าง — คอลัมน์ `creator_page.theme` ไม่มีใครเขียนหรืออ่าน
+            เดิมตรงนี้มีปุ่มวงกลมสีสามปุ่มที่กดแล้วไม่เกิดอะไร กับป้าย Pro ที่ชวนให้จ่ายเพื่อปลดล็อก
+            ปุ่มที่กดแล้วไม่บันทึกแย่กว่าไม่มีปุ่ม จึงเหลือแค่การ์ดที่บอกตรง ๆ ว่ายังไม่มี
+          */}
+          <Card className="gap-2 p-5">
             <div className="flex items-center gap-2">
               <p className="font-medium">{t.settings.themeTitle}</p>
-              <ProBadge />
+              <ComingSoonBadge />
             </div>
             <p className="text-sm text-muted-foreground">
               {t.settings.themeDesc}
             </p>
-            <div className="flex gap-2">
-              {["oklch(0.735 0.165 305)", "oklch(0.7 0.14 250)", "oklch(0.735 0.155 155)"].map(
-                (c, i) => (
-                  <button
-                    key={c}
-                    aria-label={`preset ${i + 1}`}
-                    className="size-8 rounded-full ring-2 ring-border ring-offset-2 ring-offset-background"
-                    style={{ background: c }}
-                  />
-                ),
-              )}
-            </div>
           </Card>
         </TabsContent>
 
@@ -183,43 +204,62 @@ export default async function SettingsPage() {
             </p>
           </Card>
 
-          <Card className="flex-row items-center gap-4 p-5">
-            <div className="flex-1">
+          {/*
+            แพ็กเกจที่โชว์ต้องเป็นตัวที่ใช้ตัดสินลิมิตจริง (planDisplay → effectivePlan)
+            ช่วงเบต้าทุกคนได้ Pro จึงไม่มีปุ่มอัปเกรด — ปุ่มที่ขายของที่ได้ไปแล้ว
+            ทำให้คนเข้าใจว่ายังขาดอะไรอยู่
+          */}
+          <Card className="flex-row flex-wrap items-center gap-4 p-5">
+            <div className="min-w-0 flex-1">
               <p className="font-medium">{t.settings.currentPlan}</p>
-              <p className="text-sm text-muted-foreground">{t.plan[(user.plan ?? "free") as "free" | "pro"]}</p>
+              <p className="text-sm text-muted-foreground">
+                {t.plan[plan.shown]}
+                {plan.viaBeta ? ` · ${t.settings.planBetaNote}` : null}
+              </p>
             </div>
-            <Button asChild>
-              <Link href="/pricing">{t.common.upgrade}</Link>
-            </Button>
+            {plan.offerUpgrade ? (
+              <Button asChild>
+                <Link href="/pricing">{t.common.upgrade}</Link>
+              </Button>
+            ) : (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/pricing">{t.settings.viewPlans}</Link>
+              </Button>
+            )}
           </Card>
         </TabsContent>
 
         {/* การแจ้งเตือน */}
+        {/*
+          ⚠️ `soon` = ยังไม่มีโค้ดส่งเลย (ไม่มี service worker / VAPID / webhook ในโปรเจกต์)
+          เดิมสองแถวนี้ติดป้าย Pro พร้อมปุ่ม "อัปเกรด" — ช่วงเบต้าทุกคนเป็น Pro อยู่แล้ว
+          และต่อให้จ่ายจริงก็ไม่ได้อะไร จึงเป็นป้าย "เร็ว ๆ นี้" ไม่มีปุ่มให้กด
+        */}
         <TabsContent value="notifications" className="mt-5 space-y-4">
           {[
             {
               icon: Bell,
               title: t.settings.notifyInApp,
               body: t.settings.notifyInAppBody,
-              pro: false,
+              soon: false,
             },
             {
               icon: MessageSquare,
               title: t.settings.notifyEmail,
               body: t.settings.notifyEmailBody,
-              pro: false,
+              soon: false,
             },
             {
               icon: Bell,
               title: "Web Push",
               body: t.settings.notifyPushBody,
-              pro: true,
+              soon: true,
             },
             {
               icon: MessageSquare,
               title: "Discord",
               body: t.settings.notifyDiscordBody,
-              pro: true,
+              soon: true,
             },
           ].map((n) => (
             <Card key={n.title} className="flex-row items-center gap-4 p-4">
@@ -227,16 +267,11 @@ export default async function SettingsPage() {
                 <n.icon className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 font-medium">
-                  {n.title}
-                  {n.pro ? <ProBadge /> : null}
-                </p>
+                <p className="flex items-center gap-2 font-medium">{n.title}</p>
                 <p className="text-sm text-muted-foreground">{n.body}</p>
               </div>
-              {n.pro ? (
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/pricing">{t.common.upgrade}</Link>
-                </Button>
+              {n.soon ? (
+                <ComingSoonBadge />
               ) : (
                 <Badge variant="secondary">{t.common.on}</Badge>
               )}

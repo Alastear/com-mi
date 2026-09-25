@@ -20,7 +20,7 @@ import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
 import { QuoteCard } from "@/components/app/quote-card";
-import { formatMoney } from "@/lib/format";
+import { formatLineAmount, formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { shopHref } from "@/lib/routes";
@@ -101,7 +101,12 @@ export default async function ClientRequestPage({ params }: Props) {
                 {item.quantity > 1 ? `${item.label} × ${item.quantity}` : item.label}
               </span>
               <span className="tabular shrink-0">
-                {formatMoney(item.unitPriceCents * item.quantity, order.currency, locale)}
+                {formatLineAmount(
+                  item.unitPriceCents * item.quantity,
+                  t.service.includedInPrice,
+                  order.currency,
+                  locale,
+                )}
               </span>
             </li>
           ))}

@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
-import { formatMoney } from "@/lib/format";
+import { formatLineAmount, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { dynamicHref, shopHref } from "@/lib/routes";
 import type { getShopByHandle } from "@/lib/queries/creator";
@@ -522,8 +522,14 @@ export function ServiceOrderFlow({
                     ? `${line.label} × ${line.quantity}`
                     : line.label}
               </span>
+              {/* ระดับที่ไม่บวกเงินขึ้นว่า "รวมในราคา" ไม่ใช่ "฿0" — ดู formatLineAmount */}
               <span className="tabular shrink-0">
-                {formatMoney(line.unitPriceCents * line.quantity, shop.currency, locale)}
+                {formatLineAmount(
+                  line.unitPriceCents * line.quantity,
+                  t.service.includedInPrice,
+                  shop.currency,
+                  locale,
+                )}
               </span>
             </li>
           ))}

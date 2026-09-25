@@ -2,14 +2,21 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Check, Minus, Sparkles } from "lucide-react";
+import { Check, Hourglass, Minus, Sparkles } from "lucide-react";
+import { ComingSoonBadge } from "@/components/locked-feature";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLocale } from "@/lib/i18n/client";
 import type { Dictionary } from "@/lib/i18n/dictionaries";
 import { formatMoney } from "@/lib/format";
-import { COMPARISON, PLANS, type CompareValue, type ComparisonGroup } from "@/lib/billing/plans";
+import {
+  COMPARISON,
+  PLANS,
+  PRO_BULLETS,
+  type CompareValue,
+  type ComparisonGroup,
+} from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 
 type Cycle = "monthly" | "yearly";
@@ -21,6 +28,10 @@ export function PricingClient() {
   const proPrice =
     cycle === "monthly" ? PLANS.pro.priceCentsMonthly : PLANS.pro.priceCentsYearly;
 
+  /**
+   * ⚠️ ข้อที่ `soon: true` คือยังไม่มีโค้ดรองรับ — ต้องติดป้ายเสมอ ห้ามแสดงเป็นเครื่องหมายถูก
+   * ข้อของ Free ใช้ได้จริงทุกข้อ (ลิมิตถูกบังคับในโค้ด) ส่วน Pro อ่านจาก PRO_BULLETS
+   */
   const tiers = [
     {
       id: "free" as const,
@@ -29,7 +40,7 @@ export function PricingClient() {
       price: 0,
       cta: t.pricing.startFree,
       highlight: false,
-      bullets: Object.values(t.pricing.freeBullets),
+      bullets: Object.values(t.pricing.freeBullets).map((text) => ({ text, soon: false })),
     },
     {
       id: "pro" as const,
@@ -38,7 +49,7 @@ export function PricingClient() {
       price: proPrice,
       cta: t.pricing.choosePlan,
       highlight: true,
-      bullets: Object.values(t.pricing.proBullets),
+      bullets: PRO_BULLETS.map((b) => ({ text: t.pricing.proBullets[b.key], soon: b.soon === true })),
     },
   ];
 
@@ -148,12 +159,23 @@ export function PricingClient() {
             </Button>
 
             <ul className="mt-6 space-y-2.5 text-sm">
-              {tier.bullets.map((b) => (
-                <li key={b} className="flex gap-2.5">
-                  <Check className="mt-0.5 size-4 shrink-0 text-success" />
-                  <span>{b}</span>
-                </li>
-              ))}
+              {tier.bullets.map((b) =>
+                b.soon ? (
+                  // ไม่ใช้เครื่องหมายถูก — ถูกแปลว่า "ได้แล้ว" ซึ่งไม่จริง
+                  <li key={b.text} className="flex gap-2.5 text-muted-foreground">
+                    <Hourglass aria-hidden className="mt-0.5 size-4 shrink-0" />
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {b.text}
+                      <ComingSoonBadge />
+                    </span>
+                  </li>
+                ) : (
+                  <li key={b.text} className="flex gap-2.5">
+                    <Check className="mt-0.5 size-4 shrink-0 text-success" />
+                    <span>{b.text}</span>
+                  </li>
+                ),
+              )}
             </ul>
           </Card>
         ))}
@@ -215,15 +237,27 @@ function ComparisonRows({
           </span>
         </td>
       </tr>
+      {/*
+        แถว `soon` ยังโชว์ค่าตามแผนไว้ (เป็น roadmap ให้เห็นว่าจะได้อะไร) แต่จางลง
+        และมีป้ายติดชื่อแถว — เครื่องหมายถูกเฉย ๆ ในตารางราคาอ่านว่า "มีแล้ว"
+      */}
       {group.rows.map((row) => (
         <tr key={row.key} className="border-t">
           <td className="sticky left-0 bg-background border-t py-2.5 pr-4">
-            {t.compare.rows[row.key]}
+            <span
+              className={cn(
+                "flex flex-wrap items-center gap-x-2 gap-y-1",
+                row.soon && "text-muted-foreground",
+              )}
+            >
+              {t.compare.rows[row.key]}
+              {row.soon ? <ComingSoonBadge /> : null}
+            </span>
           </td>
-          <td className="border-t py-2.5 text-center">
+          <td className={cn("border-t py-2.5 text-center", row.soon && "opacity-50")}>
             <Cell value={row.free} t={t} />
           </td>
-          <td className="border-t py-2.5 text-center">
+          <td className={cn("border-t py-2.5 text-center", row.soon && "opacity-50")}>
             <Cell value={row.pro} t={t} />
           </td>
         </tr>

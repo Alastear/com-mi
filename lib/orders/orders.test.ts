@@ -15,6 +15,7 @@ import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board"
 import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
 import { canPay, canRelease, depositSatisfied } from "./release";
 import { deliveryPrefix, isDeliveryPath } from "@/lib/delivery/path";
+import { formatLineAmount, formatMoney } from "@/lib/format";
 
 /**
  * ตรรกะที่พลาดแล้วเสียเงินจริง — คุ้มที่จะมีเทสต์ถึงแม้โปรเจกต์ยังไม่มี test suite ใหญ่
@@ -654,5 +655,40 @@ describe("เส้นทางที่ต้องเดินผ่าน act
     assert.equal(canTransition("in_progress", "delivered", "creator"), true);
     assert.equal(requiresAction("in_progress", "delivered"), "deliverAndRelease");
     assert.equal(requiresAction("in_progress", "in_review"), null);
+  });
+});
+
+describe("บรรทัดราคาที่เป็นศูนย์", () => {
+  const svc: PricingService = {
+    title: "ภาพเต็มตัว",
+    basePriceCents: 120_000,
+    tiers: [{ id: "full", label: "Full render", priceDeltaCents: 0 }],
+    options: [
+      { id: "bg", label: "พื้นหลังเรียบ", priceDeltaCents: 0, inputType: "checkbox", maxQuantity: null },
+    ],
+  };
+
+  it("ระดับที่ไม่บวกเงินขึ้นว่า 'รวมในราคา' ไม่ใช่ '฿0'", () => {
+    const q = quoteOrder(svc, { tierId: "full", options: [{ optionId: "bg", quantity: 1 }] });
+    const shown = q.lines.map((l) =>
+      formatLineAmount(l.unitPriceCents * l.quantity, "รวมในราคา", "THB", "th"),
+    );
+    assert.equal(shown[0], formatMoney(120_000, "THB", "th"));
+    assert.deepEqual(shown.slice(1), ["รวมในราคา", "รวมในราคา"]);
+    assert.ok(shown.every((s) => !/฿\s?0$/.test(s)), "ต้องไม่มีบรรทัด ฿0 หลุดขึ้นจอ");
+  });
+
+  it("แตะแค่การแสดงผล — บรรทัดยังอยู่ครบ และผลรวมยังเท่ากับยอดรวม", () => {
+    const q = quoteOrder(svc, { tierId: "full", options: [{ optionId: "bg", quantity: 1 }] });
+    assert.equal(q.lines.length, 3);
+    assert.equal(
+      q.lines.reduce((n, l) => n + l.unitPriceCents * l.quantity, 0),
+      q.totalCents,
+    );
+  });
+
+  it("บรรทัดที่มีเงินยังโชว์เป็นเงินตามปกติ ทั้งสองภาษา", () => {
+    assert.equal(formatLineAmount(80_000, "Included", "THB", "en"), formatMoney(80_000, "THB", "en"));
+    assert.equal(formatLineAmount(0, "Included", "THB", "en"), "Included");
   });
 });

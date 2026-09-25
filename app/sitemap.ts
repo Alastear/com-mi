@@ -29,14 +29,13 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
 
-  const staticRoutes = [
-    "",
-    "/explore",
-    "/for-creators",
-    "/pricing",
-    "/legal/terms",
-    "/legal/privacy",
-  ].map(
+  /**
+   * ⚠️ /legal/terms กับ /legal/privacy ถูกถอดออกโดยตั้งใจ — ตอนนี้เป็นหน้าว่างที่มีแค่
+   * "เอกสารฉบับจริงจะเขียนก่อนเปิดใช้งานจริง" การยื่นหน้านี้ให้ Google คือการให้คนค้นเจอ
+   * "ข้อกำหนดการใช้งานของ com-mi" แล้วพบว่าไม่มีข้อกำหนดอะไรเลย
+   * ใส่กลับเมื่อมีเอกสารจริงแล้ว พร้อมเอา `robots: noindex` ในหน้า legal ออก
+   */
+  const staticRoutes = ["", "/explore", "/for-creators", "/pricing"].map(
     (path) => ({
       url: `${base}${path}`,
       changeFrequency: "weekly" as const,

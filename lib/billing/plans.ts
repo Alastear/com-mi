@@ -165,9 +165,32 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
  */
 export const BETA_FREE_PRO = true;
 
-/** แพ็กเกจที่ใช้ตัดสินสิทธิ์จริง — ช่วงเบต้าทุกคนถูกยกเป็น pro */
-export function effectivePlan(plan: PlanId): PlanId {
-  return BETA_FREE_PRO && plan === "free" ? "pro" : plan;
+/**
+ * แพ็กเกจที่ใช้ตัดสินสิทธิ์จริง — ช่วงเบต้าทุกคนถูกยกเป็น pro
+ *
+ * `beta` เปิดให้ส่งเข้ามาได้เพื่อให้เทสต์ครอบทั้งสองฝั่งของสวิตช์ได้
+ * โค้ดจริงไม่ต้องส่ง ปล่อยให้อ่านจาก `BETA_FREE_PRO`
+ */
+export function effectivePlan(plan: PlanId, beta: boolean = BETA_FREE_PRO): PlanId {
+  return beta && plan === "free" ? "pro" : plan;
+}
+
+/**
+ * แพ็กเกจที่หน้า "ตั้งค่า" ควรบอกผู้ใช้ และควรเสนอปุ่มอัปเกรดไหม
+ *
+ * เดิมหน้าตั้งค่าอ่าน `user.plan` ตรง ๆ จึงขึ้นว่า "Free" พร้อมปุ่ม "อัปเกรดเป็น Pro"
+ * ทั้งที่ช่วงเบต้าทุกคนได้ Pro อยู่แล้ว — กดไปก็เจอหน้าราคาที่บอกว่าไม่มีอะไรให้จ่าย
+ * ปุ่มที่ขายของที่ผู้ใช้ได้ไปแล้วคือการบอกว่าเขาขาดอะไรบางอย่างที่เขาไม่ได้ขาด
+ *
+ * ⚠️ ต้องตัดสินจากแพ็กเกจที่ใช้จริง (effectivePlan) ไม่ใช่ค่าที่เก็บใน DB
+ * ไม่งั้นหน้าจอกับลิมิตที่บังคับจริงจะพูดไม่ตรงกัน
+ */
+export function planDisplay(
+  stored: PlanId,
+  beta: boolean = BETA_FREE_PRO,
+): { shown: PlanId; viaBeta: boolean; offerUpgrade: boolean } {
+  const shown = effectivePlan(stored, beta);
+  return { shown, viaBeta: shown !== stored, offerUpgrade: shown === "free" };
 }
 
 export function can(plan: PlanId, feature: Feature): boolean {
@@ -213,21 +236,47 @@ type ValueKey = keyof Dictionary["compare"]["values"];
  */
 export type CompareValue = boolean | string | { t: ValueKey };
 
+export type ComparisonRow = {
+  key: RowKey;
+  free: CompareValue;
+  pro: CompareValue;
+  /**
+   * `true` = **ยังไม่มีโค้ดรองรับ** — หน้า /pricing ติดป้าย "เร็ว ๆ นี้" ให้แถวนี้
+   *
+   * ⚠️ ห้ามลบ `soon` ออกจนกว่าของจะใช้ได้จริงบนเว็บ ไม่ใช่แค่ "เริ่มทำแล้ว"
+   * แถวที่ไม่มีป้ายคือคำสัญญาว่าจ่ายแล้วได้ใช้ทันที
+   */
+  soon?: true;
+};
+
 export type ComparisonGroup = {
   key: GroupKey;
-  rows: Array<{ key: RowKey; free: CompareValue; pro: CompareValue }>;
+  rows: ComparisonRow[];
 };
 
 const UNLIMITED_CELL = { t: "unlimited" } as const;
 
+/**
+ * ⚠️ ตรวจกับโค้ดจริงทีละแถวแล้ว (ก.ย. 2569) — แถวที่ติด `soon` ไม่มีของอยู่เบื้องหลังเลย:
+ *   theme      คอลัมน์ `creator_page.theme` มีแต่ไม่มีใครเขียนหรืออ่าน ปุ่มสีในตั้งค่ากดแล้วไม่มีผล
+ *   badge      บรรทัด "สร้างด้วย com-mi" แสดงทุกร้านเสมอ ไม่มีสวิตช์
+ *   form       ฟอร์มบรีฟเป็นชุดเดียวที่เขียนตายไว้ใน service-order-flow.tsx ไม่มีทั้ง 3 ชุดและแบบสร้างเอง
+ *   milestone  มีแค่มัดจำก้อนเดียว ไม่มีงวดงาน
+ *   push / discord / listing / auction / waitlist / crm / analytics
+ *              ไม่มีโค้ดเลย หน้า /listings /clients /analytics เป็นภาพตัวอย่างใต้ป้าย "กำลังพัฒนา"
+ *
+ * แถวอีเมลเดิมบอกว่า Free ได้ "สรุปวันละครั้ง" Pro ได้ "ทันที" — ระบบ digest ไม่เคยถูกสร้าง
+ * ของจริงคือทุกแพ็กเกจได้อีเมลทันทีเฉพาะงานใหม่กับเรื่องเงิน (lib/email/notify.ts)
+ * ถ้าวันหนึ่งทำ digest ให้แพ็กเกจฟรีจริง ค่อยแยกค่าสองฝั่งกลับมา
+ */
 export const COMPARISON: ComparisonGroup[] = [
   {
     key: "shop",
     rows: [
       { key: "shop", free: true, pro: true },
       { key: "portfolio", free: "30", pro: "300" },
-      { key: "theme", free: { t: "presets3" }, pro: true },
-      { key: "badge", free: false, pro: true },
+      { key: "theme", free: { t: "presets3" }, pro: true, soon: true },
+      { key: "badge", free: false, pro: true, soon: true },
     ],
   },
   {
@@ -235,26 +284,26 @@ export const COMPARISON: ComparisonGroup[] = [
     rows: [
       { key: "services", free: "5", pro: UNLIMITED_CELL },
       { key: "active", free: "5", pro: UNLIMITED_CELL },
-      { key: "form", free: { t: "presets3" }, pro: { t: "fullyCustom" } },
-      { key: "milestone", free: false, pro: true },
+      { key: "form", free: { t: "presets3" }, pro: { t: "fullyCustom" }, soon: true },
+      { key: "milestone", free: false, pro: true, soon: true },
     ],
   },
   {
     key: "notify",
     rows: [
       { key: "inapp", free: true, pro: true },
-      { key: "email", free: { t: "dailyDigest" }, pro: { t: "instant" } },
-      { key: "push", free: false, pro: true },
-      { key: "discord", free: false, pro: true },
+      { key: "email", free: true, pro: true },
+      { key: "push", free: false, pro: true, soon: true },
+      { key: "discord", free: false, pro: true, soon: true },
     ],
   },
   {
     key: "adopts",
     rows: [
-      { key: "listing", free: "3", pro: UNLIMITED_CELL },
-      { key: "auction", free: false, pro: true },
-      { key: "waitlist", free: false, pro: true },
-      { key: "crm", free: false, pro: true },
+      { key: "listing", free: "3", pro: UNLIMITED_CELL, soon: true },
+      { key: "auction", free: false, pro: true, soon: true },
+      { key: "waitlist", free: false, pro: true, soon: true },
+      { key: "crm", free: false, pro: true, soon: true },
     ],
   },
   {
@@ -263,7 +312,26 @@ export const COMPARISON: ComparisonGroup[] = [
       { key: "storage", free: "2 GB", pro: "20 GB" },
       { key: "filesize", free: "50 MB", pro: "200 MB" },
       { key: "retention", free: { t: "days90" }, pro: { t: "forever" } },
-      { key: "analytics", free: false, pro: true },
+      { key: "analytics", free: false, pro: true, soon: true },
     ],
   },
+];
+
+type ProBulletKey = keyof Dictionary["pricing"]["proBullets"];
+
+/**
+ * ข้อดีของ Pro บนการ์ดหน้า /pricing — เรียงของที่ใช้ได้จริงก่อน ของที่ยังไม่มีไว้ท้าย
+ *
+ * เดิมการ์ดมีห้าข้อ และสี่ข้อในนั้นยังไม่ได้สร้าง (แจ้งเตือน Push/Discord, ประมูล, ธีม, สถิติ)
+ * ข้อที่ใช้ได้จริงของ Pro ตอนนี้คือเพดานที่สูงกว่า ซึ่งบังคับอยู่จริงในโค้ด
+ * (active_orders, services, storage_bytes) จึงยกขึ้นมาไว้ก่อน
+ */
+export const PRO_BULLETS: ReadonlyArray<{ key: ProBulletKey; soon?: true }> = [
+  { key: "orders" },
+  { key: "services" },
+  { key: "storage" },
+  { key: "notify", soon: true },
+  { key: "auctions", soon: true },
+  { key: "theme", soon: true },
+  { key: "analytics", soon: true },
 ];

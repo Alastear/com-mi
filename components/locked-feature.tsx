@@ -86,6 +86,28 @@ export function LockedFeature({
   );
 }
 
+/**
+ * ป้าย "เร็ว ๆ นี้" — คู่ของ `variant="soon"` สำหรับวางข้างข้อความบรรทัดเดียว
+ *
+ * ⚠️ ใช้กับของที่ **ยังไม่มีโค้ดรองรับ** เท่านั้น ห้ามใช้แทน ProBadge
+ * ป้าย Pro แปลว่าจ่ายแล้วได้ใช้ทันที ป้ายนี้แปลว่าจ่ายไปก็ยังไม่ได้อะไร
+ * ไม่มีปุ่มอัปเกรดคู่กันโดยตั้งใจ ด้วยเหตุผลเดียวกับ LockedFeature ข้างบน
+ */
+export function ComingSoonBadge({ className }: { className?: string }) {
+  const t = useDict();
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground",
+        className,
+      )}
+    >
+      <Hammer aria-hidden className="size-2.5" />
+      {t.common.comingSoon}
+    </span>
+  );
+}
+
 /** ป้าย "Pro" เล็ก ๆ สำหรับวางข้างเมนูหรือปุ่ม */
 export function ProBadge({ className }: { className?: string }) {
   const t = useDict();

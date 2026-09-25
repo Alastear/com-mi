@@ -17,6 +17,25 @@ export function formatMoney(cents: number, currency = "THB", locale: Locale = "t
   }).format(cents / 100);
 }
 
+/**
+ * ยอดของหนึ่งบรรทัดในสรุปราคา — บรรทัดที่เป็นศูนย์ขึ้นว่า "รวมในราคา" แทน "฿0"
+ *
+ * ระดับที่ไม่บวกเงินเพิ่ม (เช่น "ลงสีเต็ม +0") ถูกเก็บเป็นบรรทัดของตัวเองเสมอ
+ * เพราะออเดอร์ต้องจำว่าลูกค้าเลือกระดับไหน พอแสดงเป็น "Full render ฿0"
+ * คนอ่านเข้าใจว่าได้งานนั้นฟรี หรือราคาหลักไม่ได้รวมมันไว้ ทั้งที่ยอดอยู่ในบรรทัดแรกแล้ว
+ *
+ * ⚠️ แตะแค่การแสดงผล — บรรทัดและยอดที่เก็บไม่เปลี่ยน ผลรวมของบรรทัดยังเท่ากับยอดรวมเสมอ
+ * ใช้ทุกที่ที่เรนเดอร์บรรทัดราคา ไม่งั้นลูกค้าเห็นคำหนึ่งตอนสั่ง อีกคำหนึ่งหลังสั่ง
+ */
+export function formatLineAmount(
+  cents: number,
+  includedLabel: string,
+  currency = "THB",
+  locale: Locale = "th",
+): string {
+  return cents === 0 ? includedLabel : formatMoney(cents, currency, locale);
+}
+
 export function formatNumber(value: number, locale: Locale = "th"): string {
   return new Intl.NumberFormat(intlLocale(locale)).format(value);
 }

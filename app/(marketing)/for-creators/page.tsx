@@ -9,14 +9,17 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
+import { ComingSoonBadge } from "@/components/locked-feature";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BETA_FREE_PRO } from "@/lib/billing/plans";
 import { creator, portfolio, services } from "@/lib/mock/data";
 import { DEMO_HANDLE } from "@/lib/site";
 import { shopHref } from "@/lib/routes";
 import { formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
-import { getDictionary } from "@/lib/i18n/dictionaries";
+import { fill, getDictionary } from "@/lib/i18n/dictionaries";
+import { cn } from "@/lib/utils";
 
 /**
  * หน้าสำหรับครีเอเตอร์ — เนื้อหาชุดนี้เคยอยู่ที่ `/`
@@ -31,13 +34,58 @@ export default async function LandingPage() {
   const locale = await getLocale();
   const t = getDictionary(locale);
 
-  const features = [
+  /**
+   * ⚠️ ทุกการ์ดต้องตรงกับของที่ใช้ได้บนเว็บจริงวันนี้ — ตรวจกับโค้ดแล้ว (ก.ย. 2569)
+   *
+   * `soon: true`  = ทั้งการ์ดยังไม่มีโค้ดรองรับ (ประมูล — หน้า /listings เป็นภาพตัวอย่าง)
+   * `soonNote`    = การ์ดนั้นมีของจริงแล้ว แต่ส่วนที่เคยโฆษณาไว้บางส่วนยังไม่มี
+   *                 เช่น อีเมลส่งจริงแล้ว แต่ Push/Discord ยังไม่มีสักบรรทัด
+   *                 ฟอร์มบรีฟมีจริงแต่เป็นชุดเดียวตายตัว ออกแบบเองไม่ได้และแนบไฟล์ไม่ได้
+   *
+   * ไม่ลบของที่ยังไม่มีทิ้ง — ติดป้ายไว้ให้เห็นว่ากำลังจะมา แต่ไม่ให้อ่านเหมือนมีแล้ว
+   */
+  const features: Array<{
+    icon: typeof Store;
+    title: string;
+    body: string;
+    soon?: true;
+    soonNote?: string;
+  }> = [
     { icon: Store, title: t.landing.features.shopTitle, body: t.landing.features.shopBody },
     { icon: LayoutGrid, title: t.landing.features.queueTitle, body: t.landing.features.queueBody },
-    { icon: ClipboardList, title: t.landing.features.briefTitle, body: t.landing.features.briefBody },
+    {
+      icon: ClipboardList,
+      title: t.landing.features.briefTitle,
+      body: t.landing.features.briefBody,
+      soonNote: t.landing.features.briefSoon,
+    },
     { icon: QrCode, title: t.landing.features.payTitle, body: t.landing.features.payBody },
-    { icon: Bell, title: t.landing.features.notifyTitle, body: t.landing.features.notifyBody },
-    { icon: Gavel, title: t.landing.features.adoptTitle, body: t.landing.features.adoptBody },
+    {
+      icon: Bell,
+      title: t.landing.features.notifyTitle,
+      body: t.landing.features.notifyBody,
+      soonNote: t.landing.features.notifySoon,
+    },
+    {
+      icon: Gavel,
+      title: t.landing.features.adoptTitle,
+      body: t.landing.features.adoptBody,
+      soon: true,
+    },
+  ];
+
+  /**
+   * ข้อเท็จจริงใต้ปุ่ม — เดิมเป็นสถิติที่แต่งขึ้น "ส่งแล้ว 132 งาน · 4.9★ · ส่งเฉลี่ย 9 วัน"
+   * วางไว้ใต้หัวข้อเหมือนเป็นผลงานของแพลตฟอร์ม ทั้งที่ยังไม่มีงานไหนผ่านระบบครบขนาดนั้น
+   * และระบบรีวิวก็ไม่มีอยู่จริง ตอนนี้ใช้ข้อที่จริงกับทุกร้านตั้งแต่วันแรก
+   * (ไม่หักเปอร์เซ็นต์ · เงินเข้าบัญชีตรง · เบต้าได้ Pro ฟรี — ดู BETA_FREE_PRO)
+   *
+   * ⚠️ อย่าใส่ตัวเลขสถิติกลับมาจนกว่าจะคำนวณจากข้อมูลจริงใน DB ได้
+   */
+  const facts = [
+    { k: t.landing.facts.feeLabel, v: t.landing.facts.feeValue },
+    { k: t.landing.facts.payoutLabel, v: t.landing.facts.payoutValue },
+    ...(BETA_FREE_PRO ? [{ k: t.landing.facts.betaLabel, v: t.landing.facts.betaValue }] : []),
   ];
 
   const steps = [
@@ -90,11 +138,7 @@ export default async function LandingPage() {
             </div>
 
             <dl className="mt-10 flex flex-wrap gap-x-8 gap-y-3 text-sm">
-              {[
-                { k: t.creator.completed, v: "132" },
-                { k: t.creator.rating, v: "4.9 ★" },
-                { k: t.creator.avgDelivery, v: `9 ${t.common.days}` },
-              ].map((s) => (
+              {facts.map((s) => (
                 <div key={s.k}>
                   <dt className="text-muted-foreground">{s.k}</dt>
                   <dd className="tabular text-lg font-semibold">{s.v}</dd>
@@ -103,8 +147,15 @@ export default async function LandingPage() {
             </dl>
           </div>
 
-          {/* ตัวอย่างหน้าร้านย่อส่วน — สื่อสารว่า "ได้อะไร" เร็วกว่าคำอธิบาย */}
+          {/*
+            ตัวอย่างหน้าร้านย่อส่วน — สื่อสารว่า "ได้อะไร" เร็วกว่าคำอธิบาย
+            ข้อมูลข้างในมาจาก lib/mock ทั้งหมด จึงต้องมีป้ายบอกว่าเป็นตัวอย่าง
+            ไม่งั้นชื่อร้าน ราคา และจำนวนช่องอ่านเหมือนร้านจริงบนแพลตฟอร์ม
+          */}
           <div className="relative">
+            <p className="absolute top-3 left-3 z-10 rounded-full border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
+              {t.landing.exampleLabel}
+            </p>
             <Card className="overflow-hidden p-0 shadow-2xl">
               <ArtImage seed={creator.bannerSeed} alt="" ratio={3} rounded={false} />
               <div className="-mt-8 px-5 pb-5">
@@ -118,8 +169,9 @@ export default async function LandingPage() {
                 <p className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-success">
                   <span className="size-1.5 rounded-full bg-success" />
                   {t.shopStatus.open}
+                  {/* ข้อความเดียวกับหน้าร้านจริง — ตัวอย่างต้องไม่โชว์สิ่งที่ร้านจริงไม่มี */}
                   <span className="text-muted-foreground">
-                    · {t.creator.queueCount} {creator.queueCount}
+                    · {fill(t.creator.slotsOpen, { n: creator.slotsTotal })}
                   </span>
                 </p>
 
@@ -155,12 +207,26 @@ export default async function LandingPage() {
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((f) => (
-              <Card key={f.title} className="gap-3 p-5">
-                <div className="grid size-9 place-items-center rounded-lg border border-primary/25 bg-primary/10">
-                  <f.icon className="size-4 text-primary" />
+              <Card key={f.title} className={cn("gap-3 p-5", f.soon && "border-dashed")}>
+                <div
+                  className={cn(
+                    "grid size-9 place-items-center rounded-lg border",
+                    f.soon ? "bg-muted/50" : "border-primary/25 bg-primary/10",
+                  )}
+                >
+                  <f.icon className={cn("size-4", f.soon ? "text-muted-foreground" : "text-primary")} />
                 </div>
-                <h3 className="font-medium">{f.title}</h3>
+                <h3 className="flex flex-wrap items-center gap-2 font-medium">
+                  {f.title}
+                  {f.soon ? <ComingSoonBadge /> : null}
+                </h3>
                 <p className="text-sm leading-relaxed text-muted-foreground">{f.body}</p>
+                {f.soonNote ? (
+                  <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <ComingSoonBadge />
+                    {f.soonNote}
+                  </p>
+                ) : null}
               </Card>
             ))}
           </div>

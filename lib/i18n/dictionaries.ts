@@ -55,6 +55,8 @@ const th = {
     on: "เปิดอยู่",
     yes: "มี",
     no: "ไม่มี",
+    /** ป้ายของฟีเจอร์ที่ยังไม่มีโค้ดรองรับ — ใช้ร่วมกันทุกหน้า จะได้เป็นคำเดียวกันทั้งเว็บ */
+    comingSoon: "เร็ว ๆ นี้",
   },
 
   /**
@@ -203,6 +205,8 @@ const th = {
     tosUseTemplate: "ใส่ร่างตั้งต้น",
     tosTemplateHint: "ยังไม่รู้จะเขียนอะไร กดใส่ร่างแล้วแก้ให้ตรงกับที่คุณรับจริงได้เลย",
     statusNote: "โน้ตต่อท้ายสถานะ เช่น เปิดรอบหน้า 15 ก.ย.",
+    slotsLabel: "จำนวนช่องที่เปิดรับ",
+    slotsHint: "ขึ้นบนหน้าร้านว่า \"เปิดรับ n ช่อง\" ตามตัวเลขนี้ตอนสถานะเป็นเปิดรับงาน — ระบบไม่ได้หักออกเองเมื่อมีงานเข้า · ใส่ 0 ถ้าไม่อยากแสดง",
   },
 
   media: {
@@ -272,7 +276,7 @@ const th = {
     heroTitle: "หาคนวาดงานให้คุณ",
     heroTitleAccent: "ได้ในที่เดียว",
     heroSubtitle:
-      "ดูราคาและคิวของแต่ละคนก่อนตัดสินใจ สั่งงานแล้วเห็นความคืบหน้าตลอดทาง ไม่ต้องทักไปถามว่าเสร็จยัง",
+      "ดูราคาและสถานะรับงานของแต่ละคนก่อนตัดสินใจ สั่งงานแล้วเห็นความคืบหน้าตลอดทาง ไม่ต้องทักไปถามว่าเสร็จยัง",
     searchPlaceholder: "ค้นหาชื่อครีเอเตอร์ หรือประเภทงาน",
     searchCta: "ค้นหา",
     browseAll: "ดูครีเอเตอร์ทั้งหมด",
@@ -419,23 +423,38 @@ const th = {
     heroCta: "สร้างหน้าร้านฟรี",
     heroCtaSecondary: "ดูตัวอย่างหน้าร้าน",
     heroNote: "ใช้ฟรีได้จริง ไม่ต้องใส่บัตร",
+    /**
+     * ข้อเท็จจริงใต้ hero — แทนตัวเลขสถิติที่เคยแต่งขึ้น ("ส่งแล้ว 132 งาน · 4.9★ · 9 วัน")
+     * ⚠️ ทุกข้อต้องจริงกับทุกร้านตั้งแต่วันแรก ห้ามใส่ตัวเลขที่ต้องมีประวัติการใช้งานรองรับ
+     */
+    facts: {
+      feeLabel: "หักจากออเดอร์",
+      feeValue: "0%",
+      payoutLabel: "เงินค่างาน",
+      payoutValue: "เข้าบัญชีคุณตรง",
+      betaLabel: "ช่วงเบต้า",
+      betaValue: "ได้ Pro ฟรี",
+    },
+    exampleLabel: "ตัวอย่างหน้าตา — ไม่ใช่ร้านจริง",
     featuresTitle: "ทุกอย่างที่ต้องใช้ อยู่ในที่เดียว",
     features: {
       shopTitle: "หน้าร้านที่ดูเป็นมืออาชีพ",
       shopBody:
-        "เมนูรับงาน ราคา คิวปัจจุบัน และผลงาน รวมอยู่ในลิงก์เดียวที่แชร์ลง X หรือ Discord แล้วสวย",
+        "เมนูรับงาน ราคา สถานะรับงาน และผลงาน รวมอยู่ในลิงก์เดียวที่แชร์ลง X หรือ Discord แล้วสวย",
       queueTitle: "บอร์ดจัดการคิวงาน",
       queueBody:
         "ลากการ์ดข้ามคอลัมน์เพื่อเปลี่ยนสถานะ เห็นทันทีว่างานไหนใกล้ครบกำหนด งานไหนรอลูกค้าตอบ",
-      briefTitle: "ฟอร์มบรีฟที่คุณออกแบบเอง",
+      briefTitle: "ฟอร์มบรีฟในตัว",
       briefBody:
-        "กำหนดเองว่าลูกค้าต้องกรอกอะไรบ้าง ไม่ต้องถามซ้ำใน DM อีกต่อไป พร้อมแนบ reference ได้เลย",
+        "ลูกค้ากรอกชื่อตัวละคร อารมณ์ภาพ และสิ่งที่ต้องเลี่ยงมาพร้อมคำขอ ไม่ต้องไล่ถามใน DM",
+      briefSoon: "ออกแบบฟอร์มเองและให้ลูกค้าแนบไฟล์อ้างอิง",
       payTitle: "PromptPay QR ในตัว",
       payBody:
         "สร้าง QR จากพร้อมเพย์ของคุณเอง เงินเข้าบัญชีคุณโดยตรง เราไม่แตะเงินของคุณแม้แต่บาทเดียว",
-      notifyTitle: "แจ้งเตือนทันทีที่มีงานเข้า",
+      notifyTitle: "รู้ทันทีที่มีงานเข้า",
       notifyBody:
-        "Push บนเบราว์เซอร์ อีเมล หรือเด้งเข้า Discord เซิร์ฟเวอร์ของคุณ ไม่พลาดงานอีกต่อไป",
+        "แจ้งเตือนในเว็บ และอีเมลถึงคุณทันทีเมื่อมีคำขอใหม่หรือลูกค้าแจ้งโอนเงิน",
+      notifySoon: "Push บนเบราว์เซอร์ และเด้งเข้า Discord ของคุณ",
       adoptTitle: "ระบบประมูล Adopts / YCH",
       adoptBody:
         "เปิดประมูลพร้อมระบบต่อเวลาอัตโนมัติเมื่อมีคนบิดช่วงท้าย ปิดประมูลแล้วกลายเป็นออเดอร์ทันที",
@@ -445,7 +464,7 @@ const th = {
       s1Title: "เข้าสู่ระบบด้วย Google",
       s1Body: "ไม่ต้องจำรหัสผ่านเพิ่มอีกอัน",
       s2Title: "ตั้งเมนูรับงาน",
-      s2Body: "เลือกจากเทมเพลตแล้วปรับราคาตามที่คุณต้องการ",
+      s2Body: "ใส่ราคา ระยะเวลาส่ง จำนวนครั้งที่แก้ได้ และตัวเลือกเสริมของแต่ละเมนู",
       s3Title: "แชร์ลิงก์หน้าร้าน",
       s3Body: "แปะใน bio แล้วรอรับงานได้เลย",
     },
@@ -456,7 +475,7 @@ const th = {
   pricing: {
     betaBadge: "ช่วงเบต้า",
     betaPrice: "ทดลองใช้ฟรี",
-    betaNote: "ช่วงเบต้าเปิดให้ทุกคนใช้ฟีเจอร์เต็มแบบไม่มีค่าใช้จ่าย จะแจ้งล่วงหน้าก่อนเริ่มเก็บเงินจริง",
+    betaNote: "ช่วงเบต้าทุกคนได้สิทธิ์ Pro โดยไม่มีค่าใช้จ่าย จะแจ้งล่วงหน้าก่อนเริ่มเก็บเงินจริง · ข้อที่ติดป้าย \"เร็ว ๆ นี้\" ยังไม่เปิดให้ใช้",
     betaLater: "ราคาหลังหมดช่วงเบต้า",
     betaCta: "เริ่มใช้ฟรีเลย",
     title: "ราคา",
@@ -476,7 +495,7 @@ const th = {
       "ไม่ครับ เงินโอนจากลูกค้าเข้าบัญชีคุณโดยตรงผ่าน PromptPay หรือช่องทางที่คุณตั้งไว้ ระบบทำหน้าที่บันทึกและล็อกไฟล์ส่งมอบจนกว่าจะได้รับเงินครบเท่านั้น",
     freeLimitQ: "ใช้ฟรีแล้วเจอกำแพงตอนไหน",
     freeLimitA:
-      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 2 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องและอยากได้แจ้งเตือนทันที",
+      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 2 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องจนเกินเพดานเหล่านี้",
     downgradeQ: "ถ้ายกเลิก Pro ข้อมูลหายไหม",
     downgradeA:
       "ไม่หายครับ งานที่รับอยู่ทำต่อจนจบได้ตามปกติ ส่วนเมนูและผลงานที่เกินโควตาจะถูกซ่อนไว้เฉย ๆ กลับมาสมัคร Pro เมื่อไหร่ก็แสดงกลับทันที",
@@ -487,8 +506,11 @@ const th = {
       storage: "พื้นที่เก็บไฟล์ 2 GB",
       noEscrow: "เงินเข้าบัญชีคุณโดยตรง ไม่หัก % จากออเดอร์",
     },
+    /** ลำดับและป้าย "เร็ว ๆ นี้" อยู่ที่ PRO_BULLETS ใน lib/billing/plans.ts */
     proBullets: {
       orders: "รับงานไม่จำกัด",
+      services: "เมนูรับงานไม่จำกัด",
+      storage: "พื้นที่เก็บไฟล์ 20 GB",
       notify: "Web Push + Discord แจ้งเตือนทันที",
       auctions: "ระบบประมูล Adopts / YCH",
       theme: "ธีมหน้าร้านของตัวเอง",
@@ -515,7 +537,7 @@ const th = {
       form: "ฟอร์มบรีฟ",
       milestone: "งวดงาน / มัดจำแบ่งจ่าย",
       inapp: "แจ้งเตือนในเว็บ",
-      email: "อีเมล",
+      email: "อีเมลทันทีเมื่อมีงานใหม่และการโอนเงิน",
       push: "Web Push บนเบราว์เซอร์",
       discord: "เด้งเข้า Discord ของคุณ",
       listing: "Listing ราคาตายตัว",
@@ -531,8 +553,6 @@ const th = {
       unlimited: "ไม่จำกัด",
       presets3: "3 ชุดสำเร็จรูป",
       fullyCustom: "สร้างเอง",
-      dailyDigest: "สรุปวันละครั้ง",
-      instant: "ทันที",
       days90: "90 วัน",
       forever: "ถาวร",
     },
@@ -571,7 +591,6 @@ const th = {
   },
 
   creator: {
-    queueCount: "คิวปัจจุบัน",
     avgDelivery: "ส่งงานเฉลี่ย",
     completed: "งานที่ส่งแล้ว",
     rating: "คะแนน",
@@ -586,7 +605,12 @@ const th = {
     joinWaitlist: "เข้าคิวรายชื่อรอ",
     noReviews: "ยังไม่มีรีวิว",
     reviewCount: "รีวิว",
-    slotsLeft: "เหลืออีก {n} คิว",
+    /**
+     * ตัวเลขที่ครีเอเตอร์ประกาศเองในหน้าจัดการร้าน (`slotsTotal`) — ไม่ใช่ยอดที่ระบบนับ
+     * ⚠️ ห้ามกลับไปใช้คำว่า "เหลือ" จนกว่าจะมีระบบหักช่องจริง เดิมเขียน "เหลืออีก n คิว"
+     * ทั้งที่ไม่เคยมีอะไรหักออก ร้านที่งานล้นมือก็ยังบอกลูกค้าว่าว่างอยู่
+     */
+    slotsOpen: "เปิดรับ {n} ช่อง",
     fullyBooked: "คิวเต็มแล้ว",
     poweredBy: "สร้างด้วย",
   },
@@ -597,6 +621,8 @@ const th = {
     revisions: "แก้ไขได้",
     times: "ครั้ง",
     whatYouGet: "สิ่งที่คุณจะได้รับ",
+    /** แทน "฿0" ในบรรทัดสรุปราคา — ระดับหรือตัวเลือกที่ไม่บวกเงินเพิ่ม */
+    includedInPrice: "รวมในราคา",
     addons: "ตัวเลือกเพิ่มเติม",
     tier: "ระดับความละเอียด",
     total: "ราคารวม",
@@ -882,12 +908,13 @@ const th = {
     needsAttention: "ต้องจัดการ",
     needsAttentionEmpty: "ไม่มีงานค้างที่ต้องจัดการ เยี่ยมมาก",
     recentActivity: "ความเคลื่อนไหวล่าสุด",
-    quotaTitle: "การใช้งานแพ็กเกจ Free",
+    quotaTitle: "การใช้งานแพ็กเกจ {plan}",
     quotaOrders: "งานที่รับพร้อมกัน",
     quotaStorage: "พื้นที่เก็บไฟล์",
     quotaServices: "เมนูรับงาน",
     shopLink: "ลิงก์หน้าร้านของคุณ",
-    upgradeHint: "อัปเกรดเป็น Pro เพื่อรับงานไม่จำกัดและเปิดแจ้งเตือนทันที",
+    /** ⚠️ ห้ามอ้างแจ้งเตือนทันที/Push — ยังไม่มีโค้ดส่ง ของที่ Pro ได้จริงคือเพดานที่สูงกว่า */
+    upgradeHint: "อัปเกรดเป็น Pro เพื่อรับงานพร้อมกันและเพิ่มเมนูได้ไม่จำกัด",
     overQuota: "เกินโควตาแพ็กเกจ — รับงานใหม่เพิ่มไม่ได้จนกว่าจะปิดงานเดิมหรืออัปเกรด",
   },
 
@@ -935,21 +962,24 @@ const th = {
     profile: "โปรไฟล์",
     payments: "การรับเงิน",
     signedInWithGoogle: "เข้าสู่ระบบด้วย Google",
+    signedInWithPassword: "เข้าสู่ระบบด้วยอีเมลและรหัสผ่าน",
     displayName: "ชื่อที่แสดง",
     handle: "ชื่อลิงก์ (handle)",
     shopStatusTitle: "สถานะการรับงาน",
     shopStatusDesc: "ข้อมูลชิ้นที่คนดูหน้าร้านมองหาเป็นอันดับแรก",
     themeTitle: "ธีมหน้าร้าน",
-    themeDesc: "แพ็กเกจ Free เลือกได้ 3 ชุดสีสำเร็จรูป · Pro ปรับสีและฟอนต์เองได้ทั้งหมด",
+    themeDesc: "เลือกชุดสีสำเร็จรูปหรือปรับสีหน้าร้านเอง — ยังไม่เปิดให้ใช้ ตอนนี้ทุกร้านใช้ธีมเดียวกัน",
     promptpayDesc: "ระบบสร้าง QR จากหมายเลขนี้ให้อัตโนมัติ เงินเข้าบัญชีคุณโดยตรง",
     promptpayLabel: "เบอร์โทร หรือ เลขบัตรประชาชน",
     noFeeNote:
       "แพลตฟอร์มไม่ได้ถือเงินของคุณและไม่หักเปอร์เซ็นต์จากออเดอร์ — เราเก็บเฉพาะค่าสมาชิกรายเดือนเท่านั้น",
     currentPlan: "แพ็กเกจปัจจุบัน",
+    planBetaNote: "ช่วงเบต้าทุกคนได้ Pro ฟรี ไม่ต้องอัปเกรด",
+    viewPlans: "ดูรายละเอียดแพ็กเกจ",
     notifyInApp: "แจ้งเตือนในเว็บ",
     notifyInAppBody: "เปิดใช้งานอยู่",
     notifyEmail: "อีเมล",
-    notifyEmailBody: "สรุปวันละ 1 ครั้ง · Pro ได้แบบทันที",
+    notifyEmailBody: "ส่งทันทีเมื่อมีคำขอใหม่ และเมื่อลูกค้าแจ้งโอนเงิน",
     notifyPushBody: "เด้งบนเบราว์เซอร์ทันทีที่มีงานเข้า แม้ปิดแท็บอยู่",
     notifyDiscordBody: "ส่งเข้าเซิร์ฟเวอร์ Discord ของคุณเองผ่าน webhook",
     account: "บัญชีที่ใช้เข้าสู่ระบบ",
@@ -1053,6 +1083,7 @@ const en: Dictionary = {
     on: "On",
     yes: "Yes",
     no: "No",
+    comingSoon: "Coming soon",
   },
 
   admin: {
@@ -1192,6 +1223,8 @@ const en: Dictionary = {
     tosUseTemplate: "Start from a draft",
     tosTemplateHint: "Not sure what to write? Load a draft and edit it to match how you actually work.",
     statusNote: "Note after the status, e.g. reopening 15 Sept",
+    slotsLabel: "Open slots",
+    slotsHint: "Shown on your shop as \"n slots open\" while your status is Open. It does not count down when orders come in · Set 0 to hide it",
   },
 
   media: {
@@ -1256,7 +1289,7 @@ const en: Dictionary = {
     heroTitle: "Find someone to draw it",
     heroTitleAccent: "in one place",
     heroSubtitle:
-      "See prices and queues before you commit. Order once and follow the work the whole way — no more asking whether it is done.",
+      "See prices and who is taking work before you commit. Order once and follow the work the whole way — no more asking whether it is done.",
     searchPlaceholder: "Search a creator or a kind of work",
     searchCta: "Search",
     browseAll: "Browse all creators",
@@ -1394,23 +1427,34 @@ const en: Dictionary = {
     heroCta: "Create your shop — free",
     heroCtaSecondary: "See an example shop",
     heroNote: "Genuinely free. No card required.",
+    facts: {
+      feeLabel: "Cut of your orders",
+      feeValue: "0%",
+      payoutLabel: "Client payments",
+      payoutValue: "Straight to you",
+      betaLabel: "During beta",
+      betaValue: "Pro for free",
+    },
+    exampleLabel: "Example layout — not a real shop",
     featuresTitle: "Everything you need, in one place",
     features: {
       shopTitle: "A shop page that looks professional",
       shopBody:
-        "Your menu, prices, current queue, and portfolio in a single link that looks good when shared to X or Discord.",
+        "Your menu, prices, availability, and portfolio in a single link that looks good when shared to X or Discord.",
       queueTitle: "A queue board that keeps up",
       queueBody:
         "Drag cards between columns to change status. See at a glance what's due soon and what's waiting on the client.",
-      briefTitle: "Brief forms you design yourself",
+      briefTitle: "A brief form built in",
       briefBody:
-        "Decide exactly what clients must fill in, with references attached up front. No more asking the same questions in DMs.",
+        "Clients give the character, the mood, and anything to avoid with their request. No more asking the same questions in DMs.",
+      briefSoon: "Design your own form and let clients attach reference files",
       payTitle: "PromptPay QR built in",
       payBody:
         "Generate a QR from your own PromptPay ID. Money goes straight to your account — we never touch it.",
       notifyTitle: "Know the moment work arrives",
       notifyBody:
-        "Browser push, email, or straight into your own Discord server. Stop refreshing to check for new requests.",
+        "In-app notifications, plus an instant email when a new request comes in or a client reports a payment.",
+      notifySoon: "Browser push, and alerts in your own Discord server",
       adoptTitle: "Adopts & YCH auctions",
       adoptBody:
         "Run auctions with automatic time extension when someone bids late. The winner becomes an order instantly.",
@@ -1420,7 +1464,7 @@ const en: Dictionary = {
       s1Title: "Sign in with Google",
       s1Body: "No new password to remember",
       s2Title: "Set up your menu",
-      s2Body: "Start from a template and adjust the prices",
+      s2Body: "Set the price, turnaround, revisions and add-ons for each item",
       s3Title: "Share your link",
       s3Body: "Put it in your bio and start taking work",
     },
@@ -1431,7 +1475,7 @@ const en: Dictionary = {
   pricing: {
     betaBadge: "Beta",
     betaPrice: "Free while in beta",
-    betaNote: "Everyone gets every feature at no cost during beta. We will tell you before any charging starts.",
+    betaNote: "Everyone gets Pro at no cost during beta. We will tell you before any charging starts · Items marked \"Coming soon\" are not available yet",
     betaLater: "Price after beta",
     betaCta: "Start free",
     title: "Pricing",
@@ -1451,7 +1495,7 @@ const en: Dictionary = {
       "No. Clients pay you directly via PromptPay or whichever method you set up. We only record the payment and keep delivery files locked until the full amount is marked received.",
     freeLimitQ: "Where does the free plan run out?",
     freeLimitA:
-      "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 2 GB of storage — enough room for video clips. Pro is for people taking work continuously who want instant notifications.",
+      "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 2 GB of storage — enough room for video clips. Pro is for people taking work continuously who outgrow those limits.",
     downgradeQ: "If I cancel Pro, do I lose my data?",
     downgradeA:
       "No. Orders in progress finish normally. Menu items and portfolio pieces over the quota are just hidden, and reappear the moment you resubscribe.",
@@ -1464,6 +1508,8 @@ const en: Dictionary = {
     },
     proBullets: {
       orders: "Unlimited orders",
+      services: "Unlimited menu items",
+      storage: "20 GB of file storage",
       notify: "Instant push + Discord alerts",
       auctions: "Adopts / YCH auctions",
       theme: "Custom shop theme",
@@ -1489,7 +1535,7 @@ const en: Dictionary = {
       form: "Brief form",
       milestone: "Milestones and split deposits",
       inapp: "In-app notifications",
-      email: "Email",
+      email: "Instant email for new orders and payments",
       push: "Browser push",
       discord: "Into your Discord server",
       listing: "Fixed-price listings",
@@ -1505,8 +1551,6 @@ const en: Dictionary = {
       unlimited: "Unlimited",
       presets3: "3 presets",
       fullyCustom: "Fully custom",
-      dailyDigest: "Daily digest",
-      instant: "Instant",
       days90: "90 days",
       forever: "Forever",
     },
@@ -1544,7 +1588,6 @@ const en: Dictionary = {
   },
 
   creator: {
-    queueCount: "In queue",
     avgDelivery: "Avg. delivery",
     completed: "Delivered",
     rating: "Rating",
@@ -1559,7 +1602,7 @@ const en: Dictionary = {
     joinWaitlist: "Join the waitlist",
     noReviews: "No reviews yet",
     reviewCount: "reviews",
-    slotsLeft: "{n} slots left",
+    slotsOpen: "{n} slots open",
     fullyBooked: "Fully booked",
     poweredBy: "Made with",
   },
@@ -1570,6 +1613,7 @@ const en: Dictionary = {
     revisions: "Revisions",
     times: "included",
     whatYouGet: "What you get",
+    includedInPrice: "Included",
     addons: "Add-ons",
     tier: "Detail level",
     total: "Total",
@@ -1851,12 +1895,12 @@ const en: Dictionary = {
     needsAttention: "Needs attention",
     needsAttentionEmpty: "Nothing waiting on you. Nice.",
     recentActivity: "Recent activity",
-    quotaTitle: "Free plan usage",
+    quotaTitle: "{plan} plan usage",
     quotaOrders: "Concurrent orders",
     quotaStorage: "File storage",
     quotaServices: "Menu items",
     shopLink: "Your shop link",
-    upgradeHint: "Upgrade to Pro for unlimited orders and instant notifications",
+    upgradeHint: "Upgrade to Pro for unlimited concurrent orders and menu items",
     overQuota: "Over your plan limit — finish existing work or upgrade to take more",
   },
 
@@ -1904,21 +1948,24 @@ const en: Dictionary = {
     profile: "Profile",
     payments: "Payments",
     signedInWithGoogle: "Signed in with Google",
+    signedInWithPassword: "Signed in with email and password",
     displayName: "Display name",
     handle: "Handle",
     shopStatusTitle: "Shop status",
     shopStatusDesc: "The first thing visitors look for",
     themeTitle: "Shop theme",
-    themeDesc: "Free includes 3 presets · Pro unlocks full colour and font control",
+    themeDesc: "Pick a preset or set your own shop colours — not available yet; every shop uses the same theme for now",
     promptpayDesc: "We generate the QR from this number. Money goes straight to your account.",
     promptpayLabel: "Phone number or national ID",
     noFeeNote:
       "We never hold your money and take no cut of your orders — we only charge the subscription.",
     currentPlan: "Current plan",
+    planBetaNote: "Everyone gets Pro free during beta — nothing to upgrade",
+    viewPlans: "See plan details",
     notifyInApp: "In-app notifications",
     notifyInAppBody: "Enabled",
     notifyEmail: "Email",
-    notifyEmailBody: "Daily digest · Pro sends instantly",
+    notifyEmailBody: "Sent instantly for new requests and when a client reports a payment",
     notifyPushBody: "Fires the moment work arrives, even with the tab closed",
     notifyDiscordBody: "Posts into your own Discord server via webhook",
     account: "Signed-in account",

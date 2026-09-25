@@ -18,6 +18,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
 import { shopUrl } from "@/lib/site";
 import { normalizeHandle, redirectToCanonicalHandle } from "@/lib/canonical";
+import { openSlotsToShow } from "@/lib/shop/slots";
 import type { ShopStatus } from "@/lib/types";
 
 type Props = { params: Promise<{ handle: string }> };
@@ -55,6 +56,7 @@ export default async function CreatorPage({ params }: Props) {
   const ownerHandle = shop.owner.handle ?? handle;
   const avatarSrc = shop.avatar?.url ?? shop.owner.image ?? null;
   const hasServices = shop.services.length > 0;
+  const openSlots = openSlotsToShow(shop.status as ShopStatus, shop.slotsTotal);
 
   return (
     <div className="pb-20">
@@ -130,9 +132,13 @@ export default async function CreatorPage({ params }: Props) {
             status={shop.status as ShopStatus}
             note={shop.statusNote || undefined}
           />
-          {shop.slotsTotal > 0 ? (
+          {/*
+            ตัวเลขที่ครีเอเตอร์ประกาศเอง ไม่ใช่ยอดคงเหลือ — ห้ามกลับไปเขียนว่า "เหลือ"
+            จนกว่าจะมีระบบหักช่องจริง (เหตุผลเต็มอยู่ที่ lib/shop/slots.ts)
+          */}
+          {openSlots !== null ? (
             <span className="tabular text-sm text-muted-foreground">
-              {fill(t.creator.slotsLeft, { n: shop.slotsTotal })}
+              {fill(t.creator.slotsOpen, { n: openSlots })}
             </span>
           ) : null}
           {hasServices ? (

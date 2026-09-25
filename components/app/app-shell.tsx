@@ -17,7 +17,8 @@ import {
   Send,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
-import { ProBadge } from "@/components/locked-feature";
+import { ComingSoonBadge } from "@/components/locked-feature";
+import { planDisplay, type PlanId } from "@/lib/billing/plans";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
 import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,13 @@ import { cn } from "@/lib/utils";
 import { shopHref } from "@/lib/routes";
 import { shopUrlDisplay } from "@/lib/site";
 
-/** เมนูที่มี `pro: true` จะขึ้นป้าย Pro — การบังคับจริงต้องอยู่ใน Server Action */
+/**
+ * เมนูที่มี `soon: true` จะขึ้นป้าย "เร็ว ๆ นี้"
+ *
+ * ⚠️ เดิมสามเมนูนี้ติดป้าย Pro รูปกุญแจ ซึ่งแปลว่า "จ่ายแล้วได้ใช้" — แต่หน้าข้างในทั้งสาม
+ * เป็นภาพตัวอย่างใต้ `LockedFeature variant="soon"` ไม่มีของจริงเลย (ช่วงเบต้าทุกคนเป็น Pro
+ * อยู่แล้วด้วย กุญแจจึงบอกว่าล็อกทั้งที่ไม่ได้ล็อก) เปลี่ยนกลับเป็น Pro เมื่อสร้างเสร็จจริงเท่านั้น
+ */
 function useNavItems() {
   const t = useDict();
   return [
@@ -51,10 +58,10 @@ function useNavItems() {
     { href: "/shop", label: t.nav.shop, icon: Store },
     { href: "/services", label: t.nav.services, icon: LayoutList },
     { href: "/invites", label: t.nav.invites, icon: Send },
-    { href: "/listings", label: t.nav.listings, icon: Gavel, pro: true },
+    { href: "/listings", label: t.nav.listings, icon: Gavel, soon: true },
     { href: "/portfolio", label: t.nav.portfolio, icon: Images },
-    { href: "/clients", label: t.nav.clients, icon: Users, pro: true },
-    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, pro: true },
+    { href: "/clients", label: t.nav.clients, icon: Users, soon: true },
+    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, soon: true },
     { href: "/settings", label: t.nav.settings, icon: Settings },
   ] as const;
 }
@@ -82,7 +89,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           >
             <item.icon className="size-4 shrink-0" />
             <span className="flex-1 truncate">{item.label}</span>
-            {"pro" in item && item.pro ? <ProBadge /> : null}
+            {"soon" in item && item.soon ? <ComingSoonBadge /> : null}
           </Link>
         );
       })}
@@ -250,7 +257,14 @@ export function AppShell({
 }) {
   const t = useDict();
   const router = useRouter();
-  const isPro = user.plan !== "free";
+  /**
+   * ⚠️ ป้ายแพ็กเกจต้องมาจากแพ็กเกจที่ใช้จริง ไม่ใช่ค่าที่เก็บใน DB
+   * เดิมอ่าน `user.plan` ตรง ๆ ช่วงเบต้าทุกคนจึงเห็น "Free" + ปุ่มอัปเกรดทุกหน้า
+   * ทั้งที่ได้ลิมิตของ Pro อยู่แล้ว (effectivePlan) และข้อความชวนอัปเกรดก็สัญญา
+   * "แจ้งเตือนทันที" ซึ่งยังไม่มีโค้ดรองรับ
+   */
+  const plan = planDisplay(user.plan as PlanId);
+  const isPro = plan.shown !== "free";
   // ยังไม่ได้ตั้ง handle = ยังไม่ได้ทำ onboarding — ชี้ไปหน้า onboarding แทนหน้าร้าน
   const shopPageHref = user.handle ? shopHref(user.handle) : "/onboarding";
 
@@ -276,12 +290,20 @@ export function AppShell({
                 {isPro ? t.plan.pro : t.plan.free}
               </Badge>
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              {t.dashboard.upgradeHint}
-            </p>
-            <Button asChild size="sm" className="mt-3 w-full">
-              <Link href="/pricing">{t.common.upgrade}</Link>
-            </Button>
+            {plan.offerUpgrade ? (
+              <>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {t.dashboard.upgradeHint}
+                </p>
+                <Button asChild size="sm" className="mt-3 w-full">
+                  <Link href="/pricing">{t.common.upgrade}</Link>
+                </Button>
+              </>
+            ) : plan.viaBeta ? (
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {t.settings.planBetaNote}
+              </p>
+            ) : null}
           </div>
         </div>
       </aside>

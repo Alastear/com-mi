@@ -19,7 +19,7 @@ import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { QuoteBuilder } from "@/components/app/quote-builder";
 import { readDelivery } from "@/lib/delivery/read";
 import { canPay, canRelease } from "@/lib/orders/release";
-import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
+import { daysUntil, formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
 import type { OrderStatus } from "@/lib/types";
@@ -167,7 +167,12 @@ export default async function OrderPage({ params }: Props) {
                     {i.quantity > 1 ? `${i.label} × ${i.quantity}` : i.label}
                   </span>
                   <span className="tabular shrink-0">
-                    {formatMoney(i.unitPriceCents * i.quantity, order.currency, locale)}
+                    {formatLineAmount(
+                      i.unitPriceCents * i.quantity,
+                      t.service.includedInPrice,
+                      order.currency,
+                      locale,
+                    )}
                   </span>
                 </li>
               ))}

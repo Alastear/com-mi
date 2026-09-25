@@ -16,8 +16,8 @@ import { SetupChecklist } from "@/components/app/setup-checklist";
 import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/types";
 import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
-import { getDictionary } from "@/lib/i18n/dictionaries";
-import { effectivePlan, formatLimit, isUnlimited, PLANS, type PlanId } from "@/lib/billing/plans";
+import { fill, getDictionary } from "@/lib/i18n/dictionaries";
+import { formatLimit, isUnlimited, planDisplay, PLANS, type PlanId } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 import { orderHref, shopHref } from "@/lib/routes";
 import { shopUrl } from "@/lib/site";
@@ -55,7 +55,8 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   const storageUsed = usage.storageBytes;
-  const freeLimits = PLANS[effectivePlan((user.plan ?? "free") as PlanId)].limits;
+  const plan = planDisplay((user.plan ?? "free") as PlanId);
+  const freeLimits = PLANS[plan.shown].limits;
 
   const stats = [
     { label: t.dashboard.newRequests, value: newRequests.length, icon: Inbox, tone: "text-info" },
@@ -221,7 +222,8 @@ export default async function DashboardPage() {
         {/* ขวา: โควตา + ความเคลื่อนไหว */}
         <aside className="space-y-6">
           <Card className="gap-4 p-5">
-            <p className="font-medium">{t.dashboard.quotaTitle}</p>
+            {/* ชื่อแพ็กเกจตามที่ใช้จริง — ช่วงเบต้าลิมิตข้างล่างเป็นของ Pro ถ้าหัวข้อยังเขียนว่า Free จะขัดกันเอง */}
+            <p className="font-medium">{fill(t.dashboard.quotaTitle, { plan: t.plan[plan.shown] })}</p>
 
             <Quota
               label={t.dashboard.quotaOrders}
@@ -245,9 +247,12 @@ export default async function DashboardPage() {
               overLabel={t.dashboard.overQuota}
             />
 
-            <Button asChild size="sm" variant="outline" className="mt-1 w-full">
-              <Link href="/pricing">{t.common.upgrade}</Link>
-            </Button>
+            {/* ไม่ชวนอัปเกรดคนที่ได้ Pro อยู่แล้ว (ช่วงเบต้าคือทุกคน) — ดู planDisplay */}
+            {plan.offerUpgrade ? (
+              <Button asChild size="sm" variant="outline" className="mt-1 w-full">
+                <Link href="/pricing">{t.common.upgrade}</Link>
+              </Button>
+            ) : null}
           </Card>
 
           {/*
