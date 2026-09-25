@@ -1,0 +1,1 @@
+ALTER TABLE "service" ADD COLUMN "deposit_percent" integer DEFAULT 0 NOT NULL;

@@ -114,6 +114,12 @@ const SaveSchema = z.object({
   basePriceCents: z.coerce.number().min(0).max(1_000_000).transform((b) => Math.round(b) * 100),
   deliveryDays: z.coerce.number().int().min(1).max(365),
   revisionsIncluded: z.coerce.number().int().min(0).max(99),
+  /**
+   * ⚠️ optional โดยตั้งใจ ไม่ใช่ `.default(0)` — ฟอร์มที่ค้างอยู่ในแท็บก่อนมีช่องนี้
+   * จะส่งมาโดยไม่มีค่า ถ้าตีเป็น 0 การกดบันทึกครั้งนั้นจะล้างมัดจำ 50% ทิ้งเงียบ ๆ
+   * ไม่มีค่า = ไม่แตะคอลัมน์
+   */
+  depositPercent: z.coerce.number().int().min(0).max(100).optional(),
   includes: z.string().max(2000),
   isActive: z.coerce.boolean(),
   tiers: z.string().transform((s, ctx) => {
@@ -160,6 +166,7 @@ export async function saveService(
       basePriceCents: v.basePriceCents,
       deliveryDays: v.deliveryDays,
       revisionsIncluded: v.revisionsIncluded,
+      ...(v.depositPercent !== undefined ? { depositPercent: v.depositPercent } : {}),
       includes: v.includes
         .split("\n")
         .map((l) => l.trim())

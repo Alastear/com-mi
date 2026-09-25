@@ -19,6 +19,7 @@ import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { QuoteBuilder } from "@/components/app/quote-builder";
 import { readDelivery } from "@/lib/delivery/read";
 import { canRelease, paymentMode } from "@/lib/orders/release";
+import { depositPercentOf } from "@/lib/orders/pricing";
 import { closedText } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { daysUntil, formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
@@ -119,10 +120,19 @@ export default async function OrderPage({ params }: Props) {
                 เทียบกับยอดที่จ่ายมาตรง ๆ การปัดเป็นบาทเต็มทำให้เพี้ยนได้ไม่ถึง 1%
                 `Math.round` จึงคืนปุ่มเดิมที่ครีเอเตอร์เคยกดไว้เสมอ
               */
+              /*
+                ยังไม่มีใบ แต่ออเดอร์จากเมนูมีมัดจำอยู่แล้ว = ตั้งต้นจากมัดจำนั้น ไม่ใช่ 50
+                ลูกค้าเห็น "มัดจำ 25%" บนฟอร์มสั่งงานมาแล้ว ถ้าปุ่มเริ่มที่ 50 แล้วครีเอเตอร์
+                กดส่งโดยไม่ได้ดู ลูกค้าจะเจอมัดจำคนละตัวกับที่ตกลงไว้
+                ออเดอร์ที่มัดจำ 0 ยังเริ่มที่ 50 เหมือนเดิม — เมนูเก่าทุกเมนูเป็น 0 เพราะยังไม่เคยมีช่องนี้
+                จึงแยกไม่ออกว่า "ตั้งใจไม่เก็บ" หรือ "ยังไม่เคยตั้ง"
+              */
               initialDepositPercent={
                 liveQuote && liveQuote.totalCents > 0
-                  ? Math.round((liveQuote.depositCents / liveQuote.totalCents) * 100)
-                  : 50
+                  ? depositPercentOf(liveQuote.depositCents, liveQuote.totalCents)
+                  : order.depositCents > 0
+                    ? depositPercentOf(order.depositCents, order.totalCents)
+                    : 50
               }
             />
           ) : null}

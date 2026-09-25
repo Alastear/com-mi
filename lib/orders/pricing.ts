@@ -307,3 +307,41 @@ export function depositFor(totalCents: number, percent: number): number {
   const pct = Math.min(100, percent);
   return Math.min(totalCents, Math.round((totalCents * pct) / 100 / 100) * 100);
 }
+
+/** ปุ่มเปอร์เซ็นต์มัดจำที่ให้เลือกในหน้าแก้ไขเมนู — ชุดเดียวกับตัวเขียนใบเสนอราคา */
+export const DEPOSIT_PERCENTS = [0, 25, 50, 100] as const;
+
+export type DepositSummary =
+  | { kind: "none" }
+  /** จ่ายบางส่วนก่อนเริ่ม ที่เหลือจ่ายก่อนรับไฟล์ */
+  | { kind: "deposit"; cents: number }
+  /** มัดจำเท่ายอดรวม = จ่ายเต็มก่อนเริ่ม — ไม่มี "ส่วนที่เหลือ" ให้พูดถึง */
+  | { kind: "full"; cents: number };
+
+/**
+ * มัดจำของออเดอร์จากเมนู ในรูปที่หน้าจอเอาไปเลือกข้อความได้ตรง ๆ
+ *
+ * ⚠️ ต้องคิดผ่าน `depositFor()` ตัวเดียวกับที่ `createOrder` เขียนลง DB เสมอ —
+ * ตัวเลขบนฟอร์มคือสิ่งที่ลูกค้าจะอ้างตอนมีเรื่อง ถ้าคิดคนละสูตร ลูกค้าเห็น ฿400
+ * แต่ออเดอร์เรียก ฿500 และคนที่ดูผิดคือเรา
+ *
+ * แยก "full" ออกมาเพราะข้อความ "ส่วนที่เหลือจ่ายก่อนรับไฟล์" ไม่จริงเมื่อไม่มีส่วนที่เหลือ
+ * และเช็คจากเงินที่ปัดแล้ว ไม่ใช่จากเปอร์เซ็นต์ — งานราคาน้อยมาก ๆ ปัดแล้วเต็มยอดได้
+ */
+export function depositSummary(totalCents: number, percent: number): DepositSummary {
+  const cents = depositFor(totalCents, percent);
+  if (cents <= 0) return { kind: "none" };
+  return cents >= totalCents ? { kind: "full", cents } : { kind: "deposit", cents };
+}
+
+/**
+ * แปลงมัดจำที่เป็นเงินกลับเป็นเปอร์เซ็นต์ — ใช้ตั้งต้นปุ่มในตัวเขียนใบเสนอราคา
+ *
+ * ย้อนกลับได้ไม่เป๊ะเพราะ `depositFor()` ปัดเป็นบาทเต็ม (เพี้ยนได้ไม่ถึง 1% บนยอดปกติ)
+ * `Math.round` จึงคืนปุ่มเดิมที่ตั้งไว้ ค่าเพี้ยนหรือยอดรวมไม่บวกคืน 0 ไม่ใช่ NaN
+ */
+export function depositPercentOf(depositCents: number, totalCents: number): number {
+  if (!Number.isFinite(depositCents) || !Number.isFinite(totalCents)) return 0;
+  if (totalCents <= 0 || depositCents <= 0) return 0;
+  return Math.min(100, Math.round((depositCents / totalCents) * 100));
+}

@@ -219,6 +219,17 @@ export const service = pgTable(
     basePriceCents: integer("base_price_cents").notNull().default(0),
     deliveryDays: integer("delivery_days").notNull().default(7),
     revisionsIncluded: integer("revisions_included").notNull().default(2),
+    /**
+     * มัดจำเป็นเปอร์เซ็นต์ของยอดรวม (0–100) — 0 = ไม่บังคับมัดจำ
+     *
+     * เก็บเป็นเปอร์เซ็นต์ที่เมนู แต่ออเดอร์เก็บเป็น **จำนวนเงิน** (`order.depositCents`)
+     * เพราะยอดรวมของเมนูเดียวกันต่างกันตามระดับ/ตัวเลือกที่ลูกค้าเลือก
+     * ตัวแปลงมีตัวเดียวคือ `depositFor()` ใช้ทั้งตอนโชว์บนฟอร์มสั่งงานและตอนเขียนออเดอร์
+     *
+     * ⚠️ default 0 = เมนูที่มีอยู่ก่อนคอลัมน์นี้ไม่มีมัดจำเหมือนเดิม — ไม่เดาแทนครีเอเตอร์
+     * ขอบเขต 0–100 บังคับที่ `saveService` และ `depositFor()` ปัดค่าเกินทิ้งอีกชั้น
+     */
+    depositPercent: integer("deposit_percent").notNull().default(0),
 
     coverMediaId: text("cover_media_id").references(() => media.id, { onDelete: "set null" }),
     includes: jsonb("includes").$type<string[]>().notNull().default([]),

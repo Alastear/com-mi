@@ -27,6 +27,7 @@ export default async function EditServicePage({
         basePriceCents: svc.basePriceCents,
         deliveryDays: svc.deliveryDays,
         revisionsIncluded: svc.revisionsIncluded,
+        depositPercent: svc.depositPercent,
         includes: svc.includes,
         isActive: svc.isActive,
         coverUrl: svc.cover?.url ?? null,

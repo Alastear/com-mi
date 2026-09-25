@@ -15,9 +15,10 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { useDict } from "@/lib/i18n/client";
+import { fill } from "@/lib/i18n/dictionaries";
 import { serviceHref } from "@/lib/routes";
 import { SERVICE_KINDS, SERVICE_MODES } from "@/lib/types";
-import { MAX_MULTIPLIER_BP } from "@/lib/orders/pricing";
+import { DEPOSIT_PERCENTS, MAX_MULTIPLIER_BP } from "@/lib/orders/pricing";
 import { deleteService, saveService, setServiceCover, type SaveServiceResult } from "../actions";
 
 type Tier = { id?: string; label: string; priceDeltaCents: number };
@@ -42,6 +43,7 @@ type Service = {
   basePriceCents: number;
   deliveryDays: number;
   revisionsIncluded: number;
+  depositPercent: number;
   includes: string[];
   isActive: boolean;
   coverUrl: string | null;
@@ -77,6 +79,7 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
   const [kind, setKind] = useState(service.kind);
   const [mode, setMode] = useState(service.mode);
   const [isActive, setIsActive] = useState(service.isActive);
+  const [depositPercent, setDepositPercent] = useState(service.depositPercent);
   const [tiers, setTiers] = useState<Tier[]>(service.tiers);
   const [options, setOptions] = useState<Option[]>(service.options);
   const [deleting, startDelete] = useTransition();
@@ -148,6 +151,7 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
         <input type="hidden" name="kind" value={kind} />
         <input type="hidden" name="mode" value={mode} />
         <input type="hidden" name="isActive" value={isActive ? "on" : ""} />
+        <input type="hidden" name="depositPercent" value={depositPercent} />
         <input type="hidden" name="tiers" value={JSON.stringify(tiers)} />
         <input type="hidden" name="options" value={JSON.stringify(options)} />
 
@@ -270,6 +274,38 @@ export function ServiceEditor({ handle, service }: { handle: string; service: Se
                 className="tabular mt-1.5"
               />
             </div>
+          </div>
+
+          {/*
+            ปุ่มชุดเดียวกับตัวเขียนใบเสนอราคา — ครีเอเตอร์เจอมัดจำสองที่ ต้องหน้าตาเหมือนกัน
+            ค่าที่ไม่ตรงปุ่มไหน (แก้ตรง DB) จะไม่มีปุ่มถูกเลือก แต่ช่องซ่อนยังส่งค่าเดิมกลับไป
+          */}
+          <div>
+            <Label>{t.service.depositLabel}</Label>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {DEPOSIT_PERCENTS.map((d) => (
+                <Button
+                  key={d}
+                  type="button"
+                  size="sm"
+                  variant={d === depositPercent ? "default" : "outline"}
+                  aria-pressed={d === depositPercent}
+                  onClick={() => setDepositPercent(d)}
+                >
+                  {d === 0 ? t.service.depositNone : `${d}%`}
+                </Button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {depositPercent > 0
+                ? fill(t.service.depositHint, { n: depositPercent })
+                : t.service.depositNoneHint}
+            </p>
+            {/*
+              ข้อตกลงร้านเป็นข้อความอิสระที่เราอ่านไม่ออก ร้านที่เคยกดใส่ร่างเก่าจะมี "มัดจำ 50%"
+              ค้างอยู่ทั้งที่เมนูตั้ง 0 — บอกให้ครีเอเตอร์ทำให้ตรงกันเอง เพราะลูกค้าเห็นทั้งสองที่
+            */}
+            <p className="mt-1 text-xs text-muted-foreground">{t.service.depositTosHint}</p>
           </div>
 
           <div>

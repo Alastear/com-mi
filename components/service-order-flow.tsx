@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { dynamicHref, shopHref } from "@/lib/routes";
 import type { getShopByHandle } from "@/lib/queries/creator";
 import { createOrder } from "@/lib/orders/create";
-import { isMultiplierOption, quoteOrder } from "@/lib/orders/pricing";
+import { depositSummary, isMultiplierOption, quoteOrder } from "@/lib/orders/pricing";
 import { fill } from "@/lib/i18n/dictionaries";
 
 type Shop = NonNullable<Awaited<ReturnType<typeof getShopByHandle>>>;
@@ -88,6 +88,8 @@ export function ServiceOrderFlow({
   );
 
   const total = quote.totalCents;
+  // สูตรเดียวกับที่ `createOrder` เขียนลงออเดอร์ — ลูกค้าเห็นเท่าไหร่ ออเดอร์เรียกเท่านั้น
+  const deposit = depositSummary(total, service.depositPercent);
 
   const briefComplete = BRIEF_FIELDS.filter((f) => f.required).every((f) =>
     (brief[f.key] ?? "").trim(),
@@ -543,6 +545,25 @@ export function ServiceOrderFlow({
             {formatMoney(total, shop.currency, locale)}
           </span>
         </div>
+
+        {/*
+          ต้องบอกก่อนกดส่ง ไม่ใช่ไปเจอทีหลังบนหน้าออเดอร์ — ข้อตกลงร้านเขียนแค่
+          "มัดจำตามที่ระบุในแต่ละแพ็กเกจ" ตัวเลขจริงมีที่นี่ที่เดียวก่อนออเดอร์เกิด
+          ยอดเปลี่ยนตามระดับ/ตัวเลือกที่ติ๊ก เพราะคิดจากยอดรวมสด ๆ
+        */}
+        {deposit.kind !== "none" ? (
+          <div className="mt-3 rounded-lg bg-muted/60 px-3 py-2">
+            <p className="tabular text-sm font-medium">
+              {fill(
+                deposit.kind === "full" ? t.service.fullBeforeStart : t.service.depositBeforeStart,
+                { amount: formatMoney(deposit.cents, shop.currency, locale) },
+              )}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {deposit.kind === "full" ? t.service.fullThen : t.service.depositThen}
+            </p>
+          </div>
+        ) : null}
 
         <dl className="mt-4 space-y-1.5 text-xs text-muted-foreground">
           <div className="flex justify-between">

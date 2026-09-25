@@ -34,7 +34,7 @@ type ServiceSeed = {
 
 const TH: { tos: string[]; services: ServiceSeed[] } = {
   tos: [
-    "ชำระมัดจำ 50% ก่อนเริ่มงาน ส่วนที่เหลือชำระก่อนส่งไฟล์ความละเอียดเต็ม",
+    "ชำระมัดจำตามที่ระบุในแต่ละแพ็กเกจก่อนเริ่มงาน (ถ้ามี) และชำระครบก่อนรับไฟล์ความละเอียดเต็ม",
     "แก้ไขได้ตามจำนวนที่ระบุในแต่ละแพ็กเกจ เกินจากนั้นคิดเพิ่มตามตกลง",
     "งานที่ส่งมอบใช้สำหรับส่วนตัวเท่านั้น หากต้องการใช้เชิงพาณิชย์กรุณาแจ้งก่อน",
     "สงวนสิทธิ์ในการนำผลงานไปลงเป็นตัวอย่างในพอร์ต หากไม่สะดวกแจ้งได้ก่อนเริ่มงาน",
@@ -103,7 +103,7 @@ const TH: { tos: string[]; services: ServiceSeed[] } = {
 
 const EN: { tos: string[]; services: ServiceSeed[] } = {
   tos: [
-    "50% deposit before I start; the rest before I send the full-resolution files.",
+    "Any deposit listed on the package is due before I start; the full amount is due before I send the full-resolution files.",
     "Revisions are limited to the number listed on each package; extra rounds are charged separately.",
     "Delivered work is for personal use. Let me know beforehand if you need commercial rights.",
     "I may post the finished piece in my portfolio — tell me before we start if you'd rather I didn't.",
@@ -181,6 +181,11 @@ export function starterShop(locale: Locale) {
  * ก็มีข้อตกลงที่ไม่ได้เขียนเองผูกอยู่ — และไม่ใช่ข้อความลอย ๆ ด้วย
  * "มัดจำ 50%" กับ "ห้ามใช้เชิงพาณิชย์" คือเงื่อนไขที่ลูกค้าใช้อ้างได้จริง
  * ตอนนี้จึงให้กดใส่เองจากหน้าแก้ไข จะได้อ่านก่อนที่มันจะกลายเป็นข้อตกลงของตัวเอง
+ *
+ * ⚠️ ข้อมัดจำห้ามใส่ตัวเลข — มัดจำจริงตั้งที่เมนู (`service.depositPercent`) ทีละเมนู
+ * และค่าเริ่มต้นคือ 0 ร่างเดิมเขียน "มัดจำ 50%" ขณะที่ออเดอร์จากเมนูไม่เคยเรียกมัดจำเลย
+ * ข้อตกลงกับระบบจึงขัดกันเองตั้งแต่วันแรก ข้อความต้องชี้ไปที่ตัวเลขบนแพ็กเกจแทน
+ * ซึ่งลูกค้าเห็นบนฟอร์มสั่งงานก่อนกดส่ง ("ชำระครบก่อนรับไฟล์" ตรงกับด่าน `canRelease()`)
  */
 export function starterTos(locale: Locale): string[] {
   return starterShop(locale).tos;

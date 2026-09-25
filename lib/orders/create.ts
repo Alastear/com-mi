@@ -6,7 +6,7 @@ import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { ACTIVE_STATUSES } from "@/lib/types";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
-import { quoteOrder } from "./pricing";
+import { depositFor, quoteOrder } from "./pricing";
 import { assertCanAcceptNewOrder, insertNewOrder } from "./new-order";
 import { notify } from "@/lib/notifications/create";
 
@@ -122,13 +122,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
    */
   if (quote.totalCents <= 0) return { ok: false, error: "not_found" };
 
+  /**
+   * มัดจำคิดจากยอดที่คำนวณใหม่ข้างบน ด้วยเปอร์เซ็นต์ของเมนูใน DB — ไม่รับจาก client
+   *
+   * เดิมทางเมนูไม่ส่งค่านี้เลย ออเดอร์จากหน้าร้านจึงมีมัดจำ 0 ทุกใบ
+   * ด่าน `depositSatisfied()` เลยเปิดให้เริ่มงานได้ทันทีโดยไม่มีเงินเข้าสักบาท
+   * ทั้งที่ข้อตกลงร้านเขียนว่า "มัดจำก่อนเริ่มงาน"
+   *
+   * ⚠️ ต้องเป็น `depositFor()` ตัวเดียวกับที่ฟอร์มสั่งงานใช้โชว์ (`depositSummary`)
+   * ตัวเลขที่ลูกค้าเห็นก่อนกดส่งต้องเท่ากับที่ออเดอร์เรียกเก็บจริงเสมอ
+   */
+  const depositCents = depositFor(quote.totalCents, service.depositPercent);
+
   const created = await insertNewOrder({
     page,
     owner,
     service,
     clientUserId: session.user.id,
     actorUserId: session.user.id,
-    quote,
+    quote: { ...quote, depositCents },
     answers: v.answers,
     isPublicInQueue: v.isPublicInQueue,
   });
