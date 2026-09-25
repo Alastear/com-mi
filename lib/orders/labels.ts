@@ -58,6 +58,33 @@ export function isPrimaryAction(to: OrderStatus): boolean {
 }
 
 /**
+ * ข้อความบอกสถานะของออเดอร์ที่จบแล้ว — แทนที่แผงชำระเงินบนหน้าออเดอร์
+ *
+ * เดิมออเดอร์ที่ยกเลิก/ปฏิเสธ/หมดอายุ ตกไปอยู่ข้อความ "ยังไม่ต้องโอน รอครีเอเตอร์ตอบรับ"
+ * ซึ่งพูดผิดทั้งสองท่อน: ไม่มีใครรออะไรอยู่แล้ว และมันทำเหมือนเงินยังไม่เคยขยับ
+ *
+ * คืน null สำหรับสถานะที่ยังไม่จบ — ผู้เรียกไม่ต้องเดาเองว่าสถานะไหนมีข้อความ
+ */
+export function closedText(
+  t: Dictionary,
+  status: OrderStatus,
+): { title: string; body: string } | null {
+  const c = t.orderClosed;
+  switch (status) {
+    case "cancelled":
+      return { title: c.cancelled, body: c.cancelledBody };
+    case "declined":
+      return { title: c.declined, body: c.declinedBody };
+    case "expired":
+      return { title: c.expired, body: c.expiredBody };
+    case "completed":
+      return { title: c.completed, body: c.completedBody };
+    default:
+      return null;
+  }
+}
+
+/**
  * event ของเงิน — ข้อความมี `{amount}` ที่ต้องจัดรูปตามภาษาคนอ่าน
  * DB เก็บเป็นสตางค์ (ตัวเลข) ไม่ใช่ "฿1,500" สำเร็จรูป ด้วยเหตุผลเดียวกับที่เก็บ key แทนประโยค
  */

@@ -10,7 +10,9 @@ import { getLiveQuote, getOrderForClient } from "@/lib/queries/orders";
 import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
-import { canPay } from "@/lib/orders/release";
+import { paymentMode } from "@/lib/orders/release";
+import { closedText } from "@/lib/orders/labels";
+import { moneyMoved } from "@/lib/orders/cancel";
 import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
@@ -54,6 +56,10 @@ export default async function ClientRequestPage({ params }: Props) {
   const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
   // ยอดใน QR ต้องเป็นตัวเดียวกับที่แผงชำระเงินโชว์ — ใช้ฟังก์ชันเดียวกัน ไม่คำนวณซ้ำสองที่
   const amountDue = dueNowCents(order);
+  const status = order.status as OrderStatus;
+  const mode = paymentMode(status);
+  const closed = closedText(t, status);
+  const payments = toPaymentRows(order.payments);
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -175,10 +181,39 @@ export default async function ClientRequestPage({ params }: Props) {
             }}
           />
         </div>
-      ) : !canPay(order.status as OrderStatus) ? (
-        <Card className="mt-4 gap-1.5 p-6">
-          <p className="font-medium">{t.payment.awaitingApproval}</p>
-          <p className="text-sm text-muted-foreground">{t.payment.awaitingApprovalBody}</p>
+      ) : mode !== "open" ? (
+        /*
+          ออเดอร์ที่จบแล้วต้องบอกตรง ๆ ว่าจบแบบไหน — เดิมตกมาที่ "ยังไม่ต้องโอน รอครีเอเตอร์ตอบรับ"
+          ทั้งที่ยกเลิกไปแล้ว และรายการเงินที่จ่ายไปก็หายจากหน้าไปด้วย
+          ⚠️ มีรายการเงินเมื่อไหร่ต้องโชว์เสมอ ไม่ว่าสถานะไหน — มันคือหลักฐานตอนคุยเรื่องคืนเงิน
+        */
+        <Card className="mt-4 gap-3 p-6">
+          <div className="space-y-1.5">
+            <p className="font-medium">{closed ? closed.title : t.payment.awaitingApproval}</p>
+            <p className="text-sm text-muted-foreground">
+              {closed ? closed.body : t.payment.awaitingApprovalBody}
+            </p>
+            {/* เสร็จสมบูรณ์ไม่มีเรื่องคืนเงิน — บอกเฉพาะออเดอร์ที่จบก่อนงานเสร็จแต่มีเงินขยับแล้ว */}
+            {closed && status !== "completed" && payments.length > 0 ? (
+              <p className="text-sm leading-relaxed">{t.payment.noRefundClient}</p>
+            ) : null}
+          </div>
+          {payments.length > 0 ? (
+            <>
+              <Separator />
+              <PaymentPanel
+                code={order.code}
+                viewer="client"
+                totalCents={order.totalCents}
+                paidCents={order.amountPaidCents}
+                depositCents={order.depositCents}
+                currency={order.currency}
+                payments={payments}
+                hasPayout={Boolean(order.page.promptpayId)}
+                closed
+              />
+            </>
+          ) : null}
         </Card>
       ) : (
       <Card className="mt-4 gap-3 p-6">
@@ -190,7 +225,7 @@ export default async function ClientRequestPage({ params }: Props) {
           paidCents={order.amountPaidCents}
           depositCents={order.depositCents}
           currency={order.currency}
-          payments={toPaymentRows(order.payments)}
+          payments={payments}
           hasPayout={Boolean(order.page.promptpayId)}
           /*
             QR สร้างฝั่ง server แล้วส่งเป็น element ลงมา
@@ -228,7 +263,13 @@ export default async function ClientRequestPage({ params }: Props) {
       ) : null}
 
       <Card className="mt-4 p-4">
-        <OrderActions code={order.code} status={order.status as OrderStatus} actor="client" />
+        <OrderActions
+          code={order.code}
+          status={status}
+          actor="client"
+          money={moneyMoved(order.amountPaidCents, payments)}
+          currency={order.currency}
+        />
       </Card>
 
       {order.tosSnapshot.length > 0 ? (

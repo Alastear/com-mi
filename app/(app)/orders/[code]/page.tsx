@@ -18,7 +18,9 @@ import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { QuoteBuilder } from "@/components/app/quote-builder";
 import { readDelivery } from "@/lib/delivery/read";
-import { canPay, canRelease } from "@/lib/orders/release";
+import { canRelease, paymentMode } from "@/lib/orders/release";
+import { closedText } from "@/lib/orders/labels";
+import { moneyMoved } from "@/lib/orders/cancel";
 import { daysUntil, formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
@@ -52,6 +54,10 @@ export default async function OrderPage({ params }: Props) {
     pendingFiles,
   } = await readDelivery(order.id, order.deliveries);
   const remaining = order.totalCents - order.amountPaidCents;
+  const status = order.status as OrderStatus;
+  const mode = paymentMode(status);
+  const closed = closedText(t, status);
+  const payments = toPaymentRows(order.payments);
 
   /**
    * ออกใบเสนอราคาได้ก่อนลูกค้าตอบรับเท่านั้น — หลังจากนั้นราคาถือว่าตกลงกันแล้ว
@@ -210,13 +216,39 @@ export default async function OrderPage({ params }: Props) {
             </div>
           </Card>
 
-          {/* ก่อนตอบรับ ลูกค้ายังจ่ายไม่ได้ — บอกครีเอเตอร์ตรง ๆ ว่าปุ่มไหนเป็นตัวปลด */}
-          {!canPay(order.status as OrderStatus) ? (
-            <Card className="gap-1.5 p-5">
-              <p className="text-sm font-medium">{t.payment.title}</p>
-              <p className="text-sm text-muted-foreground">
-                {t.payment.awaitingApprovalCreator}
-              </p>
+          {/*
+            ก่อนตอบรับ ลูกค้ายังจ่ายไม่ได้ — บอกครีเอเตอร์ตรง ๆ ว่าปุ่มไหนเป็นตัวปลด
+            ออเดอร์ที่จบแล้วบอกว่าจบแบบไหน แล้วโชว์รายการเงินแบบอ่านอย่างเดียว
+            ⚠️ เดิมออเดอร์ที่ยกเลิกหลังจ่ายเงินตกมาที่ "ลูกค้ายังจ่ายไม่ได้จนกว่าคุณจะกดรับงาน"
+            และรายการเงินหายไปจากหน้า — มีรายการเมื่อไหร่ต้องโชว์เสมอ
+          */}
+          {mode !== "open" ? (
+            <Card className="gap-3 p-5">
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">{closed ? closed.title : t.payment.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {closed ? closed.body : t.payment.awaitingApprovalCreator}
+                </p>
+                {closed && status !== "completed" && payments.length > 0 ? (
+                  <p className="text-sm leading-relaxed">{t.payment.noRefundCreator}</p>
+                ) : null}
+              </div>
+              {payments.length > 0 ? (
+                <>
+                  <Separator />
+                  <PaymentPanel
+                    code={order.code}
+                    viewer="creator"
+                    totalCents={order.totalCents}
+                    paidCents={order.amountPaidCents}
+                    depositCents={order.depositCents}
+                    currency={order.currency}
+                    payments={payments}
+                    hasPayout={Boolean(order.page.promptpayId)}
+                    closed
+                  />
+                </>
+              ) : null}
             </Card>
           ) : (
           <Card className="gap-3 p-5">
@@ -228,7 +260,7 @@ export default async function OrderPage({ params }: Props) {
               paidCents={order.amountPaidCents}
               depositCents={order.depositCents}
               currency={order.currency}
-              payments={toPaymentRows(order.payments)}
+              payments={payments}
               // ครีเอเตอร์ไม่ต้องเห็น QR ของตัวเอง แต่ต้องรู้ว่าตั้งค่ารับเงินแล้วหรือยัง
               hasPayout={Boolean(order.page.promptpayId)}
             />
@@ -260,7 +292,13 @@ export default async function OrderPage({ params }: Props) {
 
       {/* แถบปฏิบัติการอยู่ล่างสุดและติดหน้าจอ — เป็นสิ่งที่ครีเอเตอร์มาหาบนหน้านี้ */}
       <Card className="sticky bottom-4 mt-6 p-4 shadow-lg">
-        <OrderActions code={order.code} status={order.status as OrderStatus} actor="creator" />
+        <OrderActions
+          code={order.code}
+          status={status}
+          actor="creator"
+          money={moneyMoved(order.amountPaidCents, payments)}
+          currency={order.currency}
+        />
       </Card>
     </div>
   );

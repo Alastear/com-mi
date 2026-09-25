@@ -104,6 +104,10 @@ function usePaymentAction() {
  * ต่างกันที่คำเดียวแต่เปลี่ยนสิ่งที่คนไปตรวจ — สลิปปลอมดูด้วยตาไม่ออกแล้ว
  * ส่วนยอดในแอปธนาคารของตัวเองปลอมไม่ได้ (docs/00 §5.2.1)
  *
+ * `closed` = ออเดอร์จบแล้ว (ดู `paymentMode()`): เหลือแค่ยอดที่ยืนยันแล้วกับรายการทั้งหมด
+ * แบบอ่านอย่างเดียว ไม่มี QR ไม่มีฟอร์ม ไม่มีปุ่มยืนยัน/ปฏิเสธ/ยกเลิกการยืนยัน
+ * รายการต้องยังอยู่ — หลังยกเลิกคือเวลาที่ทั้งสองฝั่งต้องใช้มันคุยเรื่องคืนเงิน
+ *
  * ⚠️ ทุกอย่างที่ซ่อน/ปิดปุ่มที่นี่เป็นแค่ความสะดวก ด่านจริงอยู่ใน lib/payments/actions.ts
  */
 export function PaymentPanel({
@@ -116,6 +120,7 @@ export function PaymentPanel({
   payments,
   qr,
   hasPayout,
+  closed = false,
 }: {
   code: string;
   viewer: "creator" | "client";
@@ -128,6 +133,8 @@ export function PaymentPanel({
   qr?: React.ReactNode;
   /** ครีเอเตอร์ตั้งค่าหมายเลขรับเงินแล้วหรือยัง — ถ้ายัง ลูกค้าโอนไม่ได้เลย */
   hasPayout: boolean;
+  /** ออเดอร์จบแล้ว — ประวัติอ่านอย่างเดียว ไม่มีปุ่มขยับเงิน */
+  closed?: boolean;
 }) {
   const { t, locale } = useLocale();
   const money = (cents: number) => formatMoney(cents, currency, locale);
@@ -139,6 +146,45 @@ export function PaymentPanel({
   const dueIsDeposit = depositCents > 0 && paidCents < depositCents;
   // มีได้แถวเดียว — server ไม่รับแจ้งเพิ่มระหว่างที่ยังมีรายการรอตอบ
   const pendingReport = payments.find((p) => p.state === "pending");
+
+  if (closed) {
+    return (
+      <div className="space-y-4">
+        {/*
+          ยอดที่ยืนยันแล้ว ไม่ใช่ "ยอดที่ต้องชำระ" — ออเดอร์ที่ปิดแล้วไม่มีใครต้องจ่ายอะไรอีก
+          โชว์ยอดค้างบนออเดอร์ที่ยกเลิกแล้ว = ลูกค้าอ่านว่ายังติดเงินอยู่
+        */}
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm text-muted-foreground">{t.order.paid}</span>
+          <span className="tabular text-lg font-semibold">{money(paidCents)}</span>
+        </div>
+        {payments.length > 0 ? (
+          <>
+            <Separator />
+            <div>
+              <p className="text-sm font-medium">{t.payment.history}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {t.payment.historyClosed}
+              </p>
+            </div>
+            <ul className="space-y-2">
+              {payments.map((p) => (
+                <PaymentItem
+                  key={p.id}
+                  code={code}
+                  row={p}
+                  viewer={viewer}
+                  fits={false}
+                  money={money}
+                  readOnly
+                />
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -367,12 +413,15 @@ function PaymentItem({
   viewer,
   fits,
   money,
+  readOnly = false,
 }: {
   code: string;
   row: PaymentRow;
   viewer: "creator" | "client";
   fits: boolean;
   money: (c: number) => string;
+  /** ออเดอร์ปิดแล้ว — ไม่มีปุ่มตอบรายการ และคำแนะนำ "แจ้งใหม่ได้" ต้องไม่โผล่ */
+  readOnly?: boolean;
 }) {
   const { t, locale } = useLocale();
   const [pending, run] = usePaymentAction();
@@ -411,14 +460,26 @@ function PaymentItem({
         <div className="mt-1.5 space-y-0.5 text-xs leading-relaxed">
           {viewer === "client" ? (
             <p className="text-muted-foreground">
-              {row.state === "rejected" ? t.payment.rejectedClientHint : t.payment.voidedClientHint}
+              {row.state === "rejected"
+                ? // คำแนะนำปกติบอกให้แจ้งโอนใหม่ ซึ่งทำไม่ได้แล้วบนออเดอร์ที่ปิด
+                  readOnly
+                  ? t.payment.rejectedClosedHint
+                  : t.payment.rejectedClientHint
+                : t.payment.voidedClientHint}
             </p>
           ) : null}
           {row.reason ? <p>{fill(t.payment.reasonLabel, { reason: row.reason })}</p> : null}
         </div>
       ) : null}
 
-      {viewer === "creator" && row.state === "pending" && open === null ? (
+      {/* รายการที่ค้างรอตอบตอนออเดอร์ปิด — badge "รอยืนยัน" อย่างเดียวจะอ่านเหมือนยังจะมีคนตอบ */}
+      {readOnly && row.state === "pending" ? (
+        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+          {t.payment.pendingClosedHint}
+        </p>
+      ) : null}
+
+      {!readOnly && viewer === "creator" && row.state === "pending" && open === null ? (
         <div className="mt-2.5">
           {/*
             คำอธิบายอยู่เหนือปุ่มเสมอ ไม่ใช่ tooltip — คนกดต้องอ่านก่อนกด
@@ -450,7 +511,7 @@ function PaymentItem({
         </div>
       ) : null}
 
-      {viewer === "creator" && counted && open === null ? (
+      {!readOnly && viewer === "creator" && counted && open === null ? (
         <Button
           size="sm"
           variant="ghost"
@@ -462,7 +523,7 @@ function PaymentItem({
         </Button>
       ) : null}
 
-      {open ? (
+      {!readOnly && open ? (
         <div className="mt-2.5 space-y-2 rounded-md bg-muted/50 p-2.5">
           <p className="text-xs leading-relaxed text-muted-foreground">
             {open === "reject" ? t.payment.rejectHint : t.payment.undoHint}

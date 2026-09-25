@@ -1,4 +1,5 @@
 import type { OrderStatus } from "@/lib/types";
+import { isTerminal } from "./state-machine";
 
 /**
  * เงื่อนไข "จ่ายครบแล้ว" — จุดเดียวในระบบ
@@ -46,4 +47,26 @@ const PAYABLE_STATUSES: readonly OrderStatus[] = [
 
 export function canPay(status: OrderStatus): boolean {
   return PAYABLE_STATUSES.includes(status);
+}
+
+/**
+ * แผงชำระเงินบนหน้าออเดอร์ควรอยู่ในโหมดไหน
+ *
+ *   open    — จ่าย/แจ้งโอน/ยืนยันได้ตามปกติ
+ *   not_yet — ยังไม่ตอบรับ ยังไม่มีช่องทางจ่าย
+ *   closed  — ออเดอร์จบแล้ว (ยกเลิก/ปฏิเสธ/หมดอายุ/เสร็จสมบูรณ์) ประวัติเงินแสดงแบบอ่านอย่างเดียว
+ *
+ * ⚠️ เช็ค closed ก่อน open เสมอ — `completed` อยู่ในทั้ง `canPay` และสถานะปลายทาง
+ * ตัดสินไว้ว่าหน้าจอถือว่าออเดอร์ที่เสร็จแล้วปิดบัญชี ไม่มีปุ่มขยับเงินอีก
+ * ส่วน server ยังรับ `recordPayment` บน `completed` อยู่ (ด่านจริงไม่ได้แคบลง)
+ *
+ * เดิมหน้าจอดูแค่ `canPay()` ออเดอร์ที่ยกเลิกหลังจ่ายเงินแล้วจึงตกไปอยู่ฝั่ง
+ * "ยังไม่ต้องโอน รอครีเอเตอร์ตอบรับ" และรายการเงินที่จ่ายไปแล้วหายไปจากหน้าทั้งสองฝั่ง
+ * ทั้งที่ตอนนั้นคือเวลาที่ทั้งคู่ต้องใช้หลักฐานนี้คุยเรื่องคืนเงินกันมากที่สุด
+ */
+export type PaymentMode = "open" | "not_yet" | "closed";
+
+export function paymentMode(status: OrderStatus): PaymentMode {
+  if (isTerminal(status)) return "closed";
+  return canPay(status) ? "open" : "not_yet";
 }

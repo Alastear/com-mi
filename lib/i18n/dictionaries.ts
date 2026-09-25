@@ -392,6 +392,14 @@ const th = {
     errStale: "รายการนี้เปลี่ยนไปแล้ว โหลดหน้าใหม่เพื่อดูสถานะล่าสุด",
     errRateLimited: "ทำรายการถี่เกินไป ลองใหม่อีกครั้งภายหลัง",
     errClosed: "ออเดอร์นี้รับชำระเงินไม่ได้แล้ว",
+    /* ── ออเดอร์จบแล้ว: ประวัติเงินอ่านอย่างเดียว ── */
+    historyClosed: "ออเดอร์ปิดแล้ว รายการนี้เป็นบันทึกอย่างเดียว แก้ไขไม่ได้",
+    rejectedClosedHint: "ครีเอเตอร์แจ้งว่ายังไม่ได้รับยอดนี้",
+    pendingClosedHint: "ไม่มีการตอบรายการนี้ก่อนออเดอร์ปิด",
+    noRefundCreator:
+      "แพลตฟอร์มไม่ได้ถือเงินและคืนเงินให้ไม่ได้ เงินโอนตรงเข้าบัญชีของคุณ — ถ้าต้องคืนเงิน เป็นเรื่องที่คุณกับลูกค้าตกลงและโอนคืนกันเอง",
+    noRefundClient:
+      "แพลตฟอร์มไม่ได้ถือเงินและคืนเงินให้ไม่ได้ เงินโอนตรงเข้าบัญชีครีเอเตอร์ — ถ้าต้องการเงินคืน ต้องตกลงกับครีเอเตอร์โดยตรง",
   },
 
   /**
@@ -847,6 +855,29 @@ const th = {
     acceptOrder: "รับงานนี้",
     cancel: "ยกเลิกงาน",
     noActions: "ตอนนี้ยังไม่มีอะไรให้ทำ",
+    /* ── ยืนยันก่อนยกเลิกออเดอร์ที่มีเงินเกี่ยวข้อง ── */
+    cancelConfirmTitle: "ยกเลิกงานนี้?",
+    cancelPaid: "ออเดอร์นี้ยืนยันรับเงินไปแล้ว {amount}",
+    cancelNonePaid: "มีการแจ้งชำระเงินในออเดอร์นี้ แต่ยังไม่มียอดไหนที่ยืนยันว่าได้รับ",
+    cancelPendingCreator:
+      "ลูกค้าแจ้งโอน {amount} ที่คุณยังไม่ได้ตอบ — เช็คยอดในแอปธนาคารแล้วตอบรายการนั้นก่อน เพราะหลังยกเลิกจะแก้รายการชำระเงินไม่ได้แล้ว",
+    cancelPendingClient:
+      "คุณแจ้งโอน {amount} ที่ครีเอเตอร์ยังไม่ได้ยืนยัน — หลังยกเลิกจะตอบรายการนี้ในระบบไม่ได้แล้ว",
+    cancelHistoryKept: "ประวัติการชำระเงินยังดูได้ที่หน้านี้หลังยกเลิก",
+    cancelConfirm: "ยืนยันยกเลิกงาน",
+    cancelKeep: "ไม่ยกเลิก",
+  },
+
+  /** หัวข้อของออเดอร์ที่จบแล้ว — แทนแผงชำระเงินบนหน้าออเดอร์ทั้งสองฝั่ง */
+  orderClosed: {
+    cancelled: "ออเดอร์นี้ถูกยกเลิกแล้ว",
+    cancelledBody: "ออเดอร์นี้ไม่รับชำระเงินอีกแล้ว",
+    declined: "คำขอนี้ถูกปฏิเสธ",
+    declinedBody: "ยังไม่ได้เริ่มงาน และไม่มียอดที่ต้องชำระสำหรับคำขอนี้",
+    expired: "คำขอนี้หมดอายุแล้ว",
+    expiredBody: "คำขอปิดไปก่อนเริ่มงาน ไม่มียอดที่ต้องชำระ",
+    completed: "งานนี้เสร็จสมบูรณ์แล้ว",
+    completedBody: "ยืนยันรับงานแล้ว ออเดอร์นี้ปิดแล้ว",
   },
 
   /** ข้อความบน timeline — DB เก็บเป็น key ไม่ใช่ข้อความ จะได้แปลตามภาษาของคนอ่าน */
@@ -1451,6 +1482,13 @@ const en: Dictionary = {
     errStale: "This entry has changed. Reload the page to see where it stands",
     errRateLimited: "Too many attempts. Try again later",
     errClosed: "This order no longer takes payments",
+    historyClosed: "The order is closed, so this list is a record only and cannot be changed.",
+    rejectedClosedHint: "The creator said this amount never arrived.",
+    pendingClosedHint: "This report was not answered before the order closed.",
+    noRefundCreator:
+      "We never hold money and cannot refund it. Payments went straight to your account — any refund is between you and the client.",
+    noRefundClient:
+      "We never hold money and cannot refund it. Payments went straight to the creator's account — any refund is between you and the creator.",
   },
 
   email: {
@@ -1885,6 +1923,27 @@ const en: Dictionary = {
     acceptOrder: "Take this on",
     cancel: "Cancel order",
     noActions: "Nothing to do right now",
+    cancelConfirmTitle: "Cancel this order?",
+    cancelPaid: "{amount} has already been confirmed as paid on this order.",
+    cancelNonePaid: "Payments were reported on this order, but none has been confirmed as received.",
+    cancelPendingCreator:
+      "The client reported {amount} that you have not answered. Check your banking app and answer it first — once cancelled, the payment list can no longer be changed.",
+    cancelPendingClient:
+      "You reported {amount} that the creator has not confirmed yet. Once cancelled, that report can no longer be answered here.",
+    cancelHistoryKept: "The payment history stays on this page after cancelling.",
+    cancelConfirm: "Cancel order",
+    cancelKeep: "Keep order",
+  },
+
+  orderClosed: {
+    cancelled: "This order was cancelled",
+    cancelledBody: "This order no longer takes payments.",
+    declined: "This request was declined",
+    declinedBody: "No work was started, and there is nothing to pay for this request.",
+    expired: "This request has expired",
+    expiredBody: "It closed before any work started. There is nothing to pay.",
+    completed: "This order is complete",
+    completedBody: "Delivery was confirmed and this order is closed.",
   },
 
   invite: {
