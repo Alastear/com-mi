@@ -73,7 +73,9 @@ export async function getOrderForClient(code: string, clientUserId: string) {
         columns: { id: true, note: true, licenseType: true, releasedAt: true, mediaIds: true },
       },
       messages: {
-        orderBy: [asc(schema.message.createdAt)],
+        // id เป็นตัวตัดสินรองเมื่อเวลาเท่ากัน — ไม่ได้บอกลำดับจริง (ดู `EVENT_AFTER`) แต่ทำให้ลำดับนิ่ง
+        // ทุกครั้งที่โหลด ไม่สลับไปมาระหว่างรีเฟรช
+        orderBy: [asc(schema.message.createdAt), asc(schema.message.id)],
         with: { sender: { columns: { name: true, image: true } } },
       },
     },
@@ -183,7 +185,8 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
         page: { columns: { promptpayId: true } },
         // เธรดกับ timeline อยู่ตารางเดียวกัน เรียงตามเวลาแล้วได้ทั้งสองอย่างพร้อมกัน
         messages: {
-          orderBy: [asc(schema.message.createdAt)],
+          // ตัวตัดสินรองเมื่อเวลาเท่ากัน — เหตุผลอยู่ที่ query ฝั่งลูกค้าข้างบน
+          orderBy: [asc(schema.message.createdAt), asc(schema.message.id)],
           with: { sender: { columns: { name: true, image: true } } },
         },
         payments: { orderBy: [asc(schema.paymentRecord.createdAt)] },

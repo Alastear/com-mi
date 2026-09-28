@@ -730,6 +730,23 @@ describe("ด่านใน SQL ที่เทสต์นี้รันไ�
     assert.match(inv, /\.set\(\{ status: "accepted", updatedAt: now, \.\.\.startClockOnAcceptSet\(now\) \}\)/);
   });
 
+  it("event ที่เป็นผลของอีก event (นาฬิกาเริ่ม / มัดจำครบ) ลงเวลาหลังตัวต้นเหตุ ไม่ใช่เวลาเดียวกันเป๊ะ", () => {
+    const clock = read("lib/orders/due-clock-sql.ts");
+    assert.match(clock, /export const EVENT_AFTER = sql`interval '1 millisecond'`/);
+    const fn = clock.slice(clock.indexOf("export function insertClockStartedEvent"));
+    assert.match(fn, /o\.deposit_met_at \+ \$\{EVENT_AFTER\}/);
+
+    const pay = read("lib/payments/actions.ts");
+    const dep = pay.slice(pay.indexOf("function insertDepositMetEvent"), pay.indexOf("function insertEventIf"));
+    assert.match(dep, /\$\{at\}::timestamptz \+ \$\{EVENT_AFTER\}/);
+    // ด่าน "เพิ่งเกิดตรงนี้" ยังเทียบเวลาเดิม ไม่ใช่เวลาที่เลื่อนแล้ว
+    assert.match(dep, /o\.deposit_met_at = \$\{at\}::timestamptz\n/);
+
+    // เธรดทั้งสองฝั่งมีตัวตัดสินรองให้ลำดับนิ่งเมื่อเวลาเท่ากัน
+    const q = read("lib/queries/orders.ts");
+    assert.equal(q.match(/orderBy: \[asc\(schema\.message\.createdAt\), asc\(schema\.message\.id\)\]/g)?.length, 2);
+  });
+
   it("ตอบรับงาน (ไม่มีมัดจำ) เขียนกำหนดส่งใหม่ลงเธรดใน batch เดียวกับ UPDATE — ครบทั้งสามทาง", () => {
     const clock = read("lib/orders/due-clock-sql.ts");
     const fn = clock.slice(clock.indexOf("export function insertClockStartedEvent"));

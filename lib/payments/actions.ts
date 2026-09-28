@@ -11,6 +11,7 @@ import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
 // ทุก batch ที่แตะเงินของออเดอร์ต้องเริ่มด้วยตัวนี้ — ตัวเดียวกับที่ `transitionOrder` ใช้
 import { lockOrder } from "@/lib/orders/lock";
+import { EVENT_AFTER } from "@/lib/orders/due-clock-sql";
 import { notify } from "@/lib/notifications/create";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedSum } from "./money";
@@ -231,7 +232,7 @@ function insertDepositMetEvent(orderId: string, now: Date) {
   return getDb().execute(sql`
     insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
     select ${newId("msg")}::text, o.id, null, true, 'deposit_met'::text,
-           jsonb_build_object('actor', 'system', 'due', o.due_at), ${at}::timestamptz
+           jsonb_build_object('actor', 'system', 'due', o.due_at), ${at}::timestamptz + ${EVENT_AFTER}
     from "order" o
     where o.id = ${orderId} and o.deposit_met_at = ${at}::timestamptz
   `);

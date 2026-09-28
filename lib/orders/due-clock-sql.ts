@@ -35,6 +35,17 @@ export function startClockOnAcceptSet(at: Date, deposit?: number) {
 }
 
 /**
+ * event ที่ **เป็นผลของ** event อื่นใน request เดียวกัน (นาฬิกาเริ่ม/มัดจำครบ) ลงเวลาช้ากว่า 1 ms
+ *
+ * ⚠️ เธรดเรียงตาม `created_at` — เดิมทั้งคู่ได้ `now` เดียวกันเป๊ะ ลำดับจึงแล้วแต่ Postgres
+ * เคยเห็นจริง: "ตอบรับงานแล้ว เริ่มนับวันส่งงาน" ขึ้นก่อน "เปลี่ยนสถานะเป็น รับงานแล้ว"
+ * id (ULID) ช่วยไม่ได้ — ส่วนสุ่มท้าย id ไม่เรียงตามลำดับที่สร้างในมิลลิวินาทีเดียวกัน
+ * และ event ผลลัพธ์ถูกสร้าง id ก่อน event สถานะด้วยซ้ำ (อยู่ใน batch ส่วน event สถานะเขียนตามหลัง)
+ * ด่าน "เพิ่งเกิดตรงนี้" ยังเทียบกับ `deposit_met_at` ของออเดอร์ ไม่ใช่เวลาของ event — ไม่กระทบกัน
+ */
+export const EVENT_AFTER = sql`interval '1 millisecond'`;
+
+/**
  * event "เริ่มนับวันส่งงาน" พร้อมกำหนดส่งใหม่ — เขียนเฉพาะเมื่อ UPDATE ก่อนหน้าใน batch นี้เพิ่งเริ่มนาฬิกา
  *
  * ตอบรับงานไม่มีมัดจำเลื่อน `due_at` เงียบ ๆ ทั้งที่ทางมัดจำ (`insertDepositMetEvent`) เก็บกำหนดส่งใหม่
@@ -54,7 +65,8 @@ export function insertClockStartedEvent(orderId: string, at: Date) {
   return getDb().execute(sql`
     insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
     select ${newId("msg")}::text, o.id, null, true, 'due_started'::text,
-           jsonb_build_object('actor', 'system', 'due', o.due_at), o.deposit_met_at
+           jsonb_build_object('actor', 'system', 'due', o.due_at),
+           o.deposit_met_at + ${EVENT_AFTER}
     from "order" o
     where o.id = ${orderId}::text
       and o.status = 'accepted'
