@@ -1125,6 +1125,7 @@ const th = {
     expiredCta: "ใบเสนอราคาหมดอายุแล้ว",
     expiredHint: "ขอให้ครีเอเตอร์ออกใบใหม่ให้ได้เลย",
     errorExpired: "ใบเสนอราคานี้หมดอายุแล้ว",
+    errorNotOpen: "ใบเสนอราคานี้ปิดไปแล้ว (ถูกถอนหรือออเดอร์เปลี่ยนสถานะ) — โหลดข้อมูลล่าสุดให้แล้ว",
   },
 
   orderEvent: {
@@ -2338,6 +2339,7 @@ const en: Dictionary = {
     expiredCta: "This quote has expired",
     expiredHint: "Ask the creator to send a new one",
     errorExpired: "This quote has expired",
+    errorNotOpen: "This quote is no longer open (withdrawn, or the order moved on) — we loaded the latest",
   },
 
   orderEvent: {

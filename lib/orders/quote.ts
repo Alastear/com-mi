@@ -40,6 +40,24 @@ function revalidateBothSides(code: string) {
   revalidatePath(`/my/requests/${code}`);
 }
 
+/**
+ * ล็อกแถวออเดอร์ก่อนแตะแถวใบเสนอราคา — แบบ **FOR NO KEY UPDATE** ไม่ใช่ FOR UPDATE
+ *
+ * ⚠️ FOR UPDATE กันไม่ให้ใครเพิ่มแถวลูกที่อ้างออเดอร์นี้ (FK check ต้องใช้ FOR KEY SHARE ซึ่งชนกับ
+ * FOR UPDATE) แล้ว `issueQuote` บนออเดอร์ที่ `quoted` อยู่แล้วทำ [ปิดใบเก่า → เพิ่มใบใหม่ → เพิ่ม event]
+ * โดยไม่ล็อกออเดอร์ก่อน: มันถือแถวใบเก่าแล้วรอ KEY SHARE บนออเดอร์ ขณะที่ `acceptQuote` ถือออเดอร์
+ * แล้วรอแถวใบเก่า = deadlock (ลองจริงบน Postgres 18 แล้ว) NO KEY UPDATE ไม่ชนกับ KEY SHARE
+ * ฝั่งออกใบจึงไปต่อได้ แล้ว `acceptQuote` เห็นใบเก่าถูกปิด → ตอบ `superseded`
+ * ยังกันกันเองกับ batch เงินและ `transitionOrder` ได้เหมือนเดิม (NO KEY UPDATE ชนกับ FOR UPDATE)
+ */
+function lockOrderForQuote(orderId: string) {
+  return getDb()
+    .select({ id: schema.order.id })
+    .from(schema.order)
+    .where(eq(schema.order.id, orderId))
+    .for("no key update");
+}
+
 /* ── ออกใบ ────────────────────────────────────────────────────────── */
 
 const LineSchema = z.object({
@@ -190,6 +208,14 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
    */
 
   /**
+   * ล็อกออเดอร์ก่อนแตะแถวใบ — ลำดับเดียวกับ `acceptQuote`/`withdrawQuote` (ดู `lockOrderForQuote`)
+   * ไม่มีบรรทัดนี้: ถอนใบพร้อมออกใบใหม่จากอีกแท็บ ฝั่งถอนรอแถวใบเก่าแล้วปิดได้แค่ใบเก่า
+   * (ใบใหม่ไม่อยู่ใน snapshot ของมัน) → ออเดอร์กลับไป reviewing พร้อมใบใหม่ที่ยังเปิดค้าง
+   * = สภาพที่ `withdrawQuote` มีไว้กันไม่ให้เกิด (ลองจริงบน Postgres 18 แล้ว) มีบรรทัดนี้แล้วสองฝั่งเข้าคิวกัน
+   */
+  const lock = lockOrderForQuote(order.id);
+
+  /**
    * ยิงพร้อมกันสองครั้งแล้วชน index `order_quote_live_idx` — ตอบว่าชนกัน
    * ไม่ใช่ปล่อยให้ throw ขึ้นไปเป็น 500 ที่ผู้ใช้อ่านไม่ออก
    *
@@ -200,6 +226,7 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
     await db.batch(
       from !== "quoted"
         ? [
+            lock,
             supersede,
             insert,
             db
@@ -223,7 +250,7 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
       ),
             event,
           ]
-        : [supersede, insert, event],
+        : [lock, supersede, insert, event],
     );
   } catch (err) {
     if (isUniqueViolation(err, "order_quote_live_idx")) return { ok: false, error: "conflict" };
@@ -343,12 +370,9 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
     /**
      * ล็อกแถวออเดอร์ก่อนทุกอย่าง — สถานะที่คำสั่งถัดไปเห็นจะไม่เปลี่ยนจนจบ batch
      * ลำดับการล็อกเหมือนทุก batch ที่แตะออเดอร์: ออเดอร์ก่อน แล้วค่อยแถวลูก
+     * ⚠️ NO KEY UPDATE ไม่ใช่ FOR UPDATE — เหตุผลอยู่ที่ `lockOrderForQuote`
      */
-    db
-      .select({ id: schema.order.id })
-      .from(schema.order)
-      .where(eq(schema.order.id, order.id))
-      .for("update"),
+    lockOrderForQuote(order.id),
 
     /**
      * ⚠️ แถวใบคือตัวตัดสิน — compare-and-set ว่าใบยังเปิดอยู่ ยังไม่หมดอายุ และออเดอร์ยัง `quoted`
@@ -422,7 +446,8 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
 
   /**
    * ไม่มีแถวไหนถูกเขียน = แพ้การแข่ง ต้องไม่แจ้งเตือน (ซึ่งตอนนี้ส่งอีเมลด้วย) และตอบให้ตรงเรื่อง
-   * หน้าจอรีเฟรชจาก error เหล่านี้อยู่แล้ว จะได้เห็นใบใหม่หรือสถานะล่าสุด
+   * หน้าจอรีเฟรชจาก error เหล่านี้ทุกตัว รวม `wrong_status` (ดู `acceptQuoteFailure` ใน labels.ts)
+   * จะได้เห็นใบใหม่หรือสถานะล่าสุด
    */
   if (acceptedQuote.length === 0 || updatedOrder.length === 0) {
     const [freshQuote, freshOrder] = await Promise.all([
@@ -499,7 +524,27 @@ export async function withdrawQuote(
   if (order.status !== "quoted") return { ok: false, error: "wrong_status" };
 
   const now = new Date();
-  await db.batch([
+  const at = now.toISOString();
+  /**
+   * "request นี้เป็นคนถอนจริง" — ออเดอร์เป็น reviewing ที่ updated_at ตรงกับเวลาของ request นี้
+   * ⚠️ batch ไม่มี if: ถ้าไม่ผูก event ไว้กับเงื่อนไขนี้ ลูกค้ากดยอมรับชนะไปก่อน (ออเดอร์ accepted แล้ว)
+   * เรายังเขียน "ครีเอเตอร์ถอนใบเสนอราคา" ลงเธรดทั้งที่ไม่ได้ถอนอะไร และตอบ ok ให้ครีเอเตอร์เห็นว่าถอนแล้ว
+   * เธรดเป็นหลักฐานของทั้งสองฝั่ง ห้ามมี event ที่ไม่ได้เกิดขึ้นจริง (เจอจริงตอนทดสอบกดสองฝั่งพร้อมกัน)
+   */
+  const withdrawnHere = sql`select 1 from "order" o
+    where o.id = ${order.id} and o.status = 'reviewing' and o.updated_at = ${at}::timestamptz`;
+  const stillQuoted = sql`exists (select 1 from "order" o where o.id = ${order.id} and o.status = 'quoted')`;
+
+  const [, , updatedOrder] = await db.batch([
+    /**
+     * ⚠️ ล็อกออเดอร์ก่อนแตะแถวใบ — ลำดับเดียวกับ `acceptQuote` (ออเดอร์ก่อน แล้วค่อยแถวลูก)
+     * ไม่มีบรรทัดนี้ = deadlock: เราล็อกแถวใบ (ปิดใบ) แล้วรอแถวออเดอร์ ขณะที่ `acceptQuote` ของลูกค้า
+     * ถือแถวออเดอร์แล้วรอแถวใบเดียวกัน Postgres ฆ่าฝั่งหนึ่งทิ้งเป็น 40P01 ซึ่งไม่มีใครจับ = error 500
+     * มีบรรทัดนี้แล้ว ใครได้ล็อกออเดอร์ก่อนก็ทำจนจบ อีกฝั่งรอแล้วเห็นผลที่ commit แล้ว
+     * และเพราะล็อกไว้แล้ว สถานะที่คำสั่งถัด ๆ ไปเห็นจึงไม่เปลี่ยนจนจบ batch
+     */
+    lockOrderForQuote(order.id),
+    // ปิดใบเฉพาะตอนออเดอร์ยัง quoted — ลูกค้ายกเลิกไปก่อนแล้วก็ไม่ต้องไปแตะแถวใบ
     db
       .update(schema.orderQuote)
       .set({ supersededAt: now })
@@ -508,6 +553,7 @@ export async function withdrawQuote(
           eq(schema.orderQuote.orderId, order.id),
           isNull(schema.orderQuote.supersededAt),
           isNull(schema.orderQuote.acceptedAt),
+          stillQuoted,
         ),
       ),
     /**
@@ -517,17 +563,18 @@ export async function withdrawQuote(
     db
       .update(schema.order)
       .set({ status: "reviewing", updatedAt: now })
-      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, "quoted"))),
-    db.insert(schema.message).values({
-      id: newId("msg"),
-      orderId: order.id,
-      senderUserId: session.user.id,
-      isSystemEvent: true,
-      eventType: "quote_withdrawn",
-      eventData: { actor: "creator" },
-      createdAt: now,
-    }),
+      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, "quoted")))
+      .returning({ id: schema.order.id }),
+    db.execute(sql`
+      insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
+      select ${newId("msg")}::text, ${order.id}::text, ${session.user.id}::text, true,
+             'quote_withdrawn'::text, ${JSON.stringify({ actor: "creator" })}::jsonb, ${at}::timestamptz
+      where exists (${withdrawnHere})
+    `),
   ]);
+
+  // แพ้การแข่ง (ลูกค้ายอมรับหรือยกเลิกไปก่อน) — บอกตามจริง หน้าจอรีเฟรชให้เห็นสถานะล่าสุด
+  if (updatedOrder.length === 0) return { ok: false, error: "wrong_status" };
 
   revalidateBothSides(code);
   return { ok: true };

@@ -76,6 +76,31 @@ describe("ยอมรับใบเสนอราคาที่แพ้ก�
     assert.ok(gated.length >= 4, `พบ ${gated.length} ที่`);
   });
 
+  it("ล็อกออเดอร์แบบ NO KEY UPDATE ไม่ใช่ FOR UPDATE — FOR UPDATE deadlock กับ issueQuote ที่เพิ่มใบใหม่", () => {
+    assert.match(accept, /lockOrderForQuote\(order\.id\)/);
+    assert.doesNotMatch(src, /\.for\("update"\)/);
+    assert.match(src, /\.for\("no key update"\)/);
+  });
+
+  it("ออกใบใหม่ล็อกออเดอร์ก่อนแตะแถวใบ ทั้งสองเส้น", () => {
+    const issue = src.slice(src.indexOf("export async function issueQuote"), src.indexOf("/* ── ยอมรับใบ"));
+    assert.match(issue, /\? \[\n\s+lock,\n\s+supersede,/);
+    assert.match(issue, /: \[lock, supersede, insert, event\]/);
+  });
+
+  it("ถอนใบที่แพ้การแข่ง ไม่เขียน event ถอนใบลงเธรด และไม่ตอบ ok", () => {
+    const withdraw = src.slice(src.indexOf("export async function withdrawQuote"));
+    assert.match(withdraw, /'quote_withdrawn'::text[\s\S]*where exists \(\$\{withdrawnHere\}\)/);
+    assert.match(withdraw, /if \(updatedOrder\.length === 0\) return \{ ok: false, error: "wrong_status" \}/);
+  });
+
+  it("ถอนใบล็อกออเดอร์ก่อนแตะแถวใบ — ลำดับเดียวกับ acceptQuote ไม่งั้น deadlock", () => {
+    const withdraw = src.slice(src.indexOf("export async function withdrawQuote"));
+    const lock = withdraw.indexOf("lockOrderForQuote(order.id)");
+    const supersede = withdraw.indexOf(".update(schema.orderQuote)");
+    assert.ok(lock > 0 && lock < supersede, "lock ต้องมาก่อน update order_quote");
+  });
+
   it("ไม่มีแถวไหนถูกเขียน = ไม่แจ้งเตือน (ซึ่งส่งอีเมลด้วย)", () => {
     const bail = accept.indexOf("acceptedQuote.length === 0 || updatedOrder.length === 0");
     const notifyAt = accept.indexOf("await notify(");

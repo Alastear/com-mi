@@ -150,6 +150,10 @@ export function QuoteBuilder({
                 if (res.ok) {
                   toast.success(t.quote.withdrawn);
                   router.refresh();
+                } else if (res.error === "wrong_status") {
+                  // ลูกค้ายอมรับ/ยกเลิกไปก่อนพอดี — ปุ่มถอนบนจอนี้ค้างอยู่ ดึงสถานะจริงมาวาดใหม่
+                  toast.error(t.order.moveStale);
+                  router.refresh();
                 } else {
                   toast.error(t.error.title);
                 }

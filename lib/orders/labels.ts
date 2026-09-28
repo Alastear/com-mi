@@ -4,6 +4,7 @@ import { daysUntil, formatDate, formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import type { Actor } from "./state-machine";
 import { dueState, type DueOrder } from "./lifecycle";
+import type { AcceptQuoteResult } from "./quote";
 
 /**
  * ปุ่มบน action bar มาจาก `allowedNext()` เสมอ ไม่ใช่รายการที่เขียนตายไว้
@@ -237,5 +238,32 @@ export function dueLabel(t: Dictionary, o: DueOrder, now: Date = new Date()): Du
         tone: left <= 2 ? "soon" : "normal",
       };
     }
+  }
+}
+
+/**
+ * กดยอมรับใบเสนอราคาไม่ผ่าน → ข้อความ + ต้องรีเฟรชหน้าไหม
+ *
+ * ⚠️ ไม่ผ่านเกือบทุกแบบแปลว่าหน้าจอถือของเก่าอยู่ ต้องดึงของใหม่มาวาด ไม่ใช่แค่บอกว่าพลาด
+ * เดิมรีเฟรชแค่ `superseded`/`expired` — ครีเอเตอร์ถอนใบ (ออเดอร์กลับไป reviewing) หรือลูกค้ายกเลิก
+ * จากอีกแท็บ ได้ `wrong_status` แล้วหน้าจอขึ้น error กว้าง ๆ พร้อมปุ่มยอมรับที่ตายแล้วค้างอยู่ กดกี่ครั้งก็เหมือนเดิม
+ * ยกเว้น `invalid` (ข้อมูลที่ส่งผิดรูป รีเฟรชไม่ช่วย) กับ `unauthenticated` (หลุดล็อกอิน — รีเฟรชแล้วหน้าเด้งไปที่อื่น)
+ */
+export function acceptQuoteFailure(
+  t: Dictionary,
+  error: Extract<AcceptQuoteResult, { ok: false }>["error"],
+): { message: string; refresh: boolean } {
+  switch (error) {
+    case "expired":
+      return { message: t.quote.errorExpired, refresh: true };
+    case "superseded":
+      return { message: t.quote.errorSuperseded, refresh: true };
+    case "wrong_status":
+      return { message: t.quote.errorNotOpen, refresh: true };
+    case "not_found":
+      return { message: t.error.title, refresh: true };
+    case "invalid":
+    case "unauthenticated":
+      return { message: t.error.title, refresh: false };
   }
 }

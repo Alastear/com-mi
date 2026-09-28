@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { eventText } from "./labels";
+import { acceptQuoteFailure, eventText } from "./labels";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 
 const th = getDictionary("th");
@@ -35,5 +35,24 @@ describe("event เรื่องเงินบน timeline", () => {
 
   it("event ที่ไม่รู้จักยังคืน null เหมือนเดิม", () => {
     assert.equal(eventText(th, "payment_unknown", {}, "th"), null);
+  });
+});
+
+describe("กดยอมรับใบเสนอราคาไม่ผ่าน", () => {
+  it("ใบถูกถอน/ออเดอร์ไปต่อแล้ว (wrong_status) ต้องรีเฟรชและบอกตรงเรื่อง ไม่ใช่ error กว้าง ๆ", () => {
+    for (const t of [th, en]) {
+      const r = acceptQuoteFailure(t, "wrong_status");
+      assert.equal(r.refresh, true);
+      assert.equal(r.message, t.quote.errorNotOpen);
+      assert.notEqual(r.message, t.error.title);
+    }
+  });
+
+  it("ใบเก่า/หมดอายุ/ไม่พบ รีเฟรชทั้งหมด — ข้อมูลผิดรูปกับหลุดล็อกอินเท่านั้นที่ไม่รีเฟรช", () => {
+    assert.equal(acceptQuoteFailure(th, "superseded").refresh, true);
+    assert.equal(acceptQuoteFailure(th, "expired").refresh, true);
+    assert.equal(acceptQuoteFailure(th, "not_found").refresh, true);
+    assert.equal(acceptQuoteFailure(th, "invalid").refresh, false);
+    assert.equal(acceptQuoteFailure(th, "unauthenticated").refresh, false);
   });
 });

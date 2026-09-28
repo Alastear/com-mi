@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useLocale } from "@/lib/i18n/client";
 import { formatMoney } from "@/lib/format";
 import { acceptQuote } from "@/lib/orders/quote";
+import { acceptQuoteFailure } from "@/lib/orders/labels";
 
 /**
  * ใบเสนอราคาฝั่งลูกค้า
@@ -55,13 +56,10 @@ export function QuoteCard({
         router.refresh();
         return;
       }
-      // ใบถูกเปลี่ยนหรือหมดอายุ = ดึงของใหม่มาให้ดู ไม่ใช่แค่บอกว่าพลาด
-      if (res.error === "superseded" || res.error === "expired") {
-        toast.error(res.error === "expired" ? t.quote.errorExpired : t.quote.errorSuperseded);
-        router.refresh();
-        return;
-      }
-      toast.error(t.error.title);
+      // ใบถูกเปลี่ยน หมดอายุ ถูกถอน หรือออเดอร์ไปต่อแล้ว = ดึงของใหม่มาให้ดู ไม่ใช่แค่บอกว่าพลาด
+      const fail = acceptQuoteFailure(t, res.error);
+      toast.error(fail.message);
+      if (fail.refresh) router.refresh();
     });
   }
 
