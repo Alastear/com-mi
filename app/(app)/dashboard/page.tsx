@@ -133,7 +133,11 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+      {/*
+        ⚠️ `grid-cols-1` (= minmax(0, 1fr)) ต้องมี — ไม่ใส่ คอลัมน์บนมือถือเป็น `auto` ที่กว้างตาม
+        แถวป้ายที่ไม่ตัดบรรทัดข้างใน ภาษาอังกฤษ ("Client reviewing" + "Overdue") ดันทั้งหน้าเลื่อนแนวนอนที่ 390px
+      */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.5fr_1fr] lg:items-start">
         {/* ต้องจัดการ */}
         <section>
           <div className="flex items-center justify-between">
@@ -160,7 +164,8 @@ export default async function DashboardPage() {
                       <Card className="flex-row items-center gap-3 p-3 transition-colors hover:bg-accent/40">
                         <ArtImage seed={o.id} alt="" ratio={1} className="size-12 shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          {/* ตัดบรรทัดได้ — การ์ดเป็น overflow-hidden ถ้าไม่ตัด ป้าย "เลยกำหนด" จะถูกบังบนจอแคบ */}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="tabular font-mono text-xs text-muted-foreground">
                               #{o.code}
                             </span>
