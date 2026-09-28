@@ -206,7 +206,15 @@ export function DeliveryPanel({
       const res = await registerDelivery(up, (phase) => setProgress({ i: 1, n: 1, pct: 100, phase }));
       if (res.ok) toast.success(t.delivery.saved, { description: name });
       else if (res.error === "unconfirmed") notifyUnconfirmed(up, name);
-      else toast.error(failureText(uploadFailure(res.error)), { description: name });
+      else {
+        /**
+         * ล้มถาวรหลังกดบันทึกอีกครั้ง — ส่วนใหญ่คือคำขอใช้ไม่ได้แล้ว (`forbidden`: หมดอายุ ถูกยกเลิก)
+         * ⚠️ ต้องบอกตรง ๆ ว่าต้องอัปใหม่ — toast ก่อนหน้าเพิ่งบอกว่า "ไม่ต้องอัปใหม่"
+         * ข้อความกลาง "อัปโหลดไม่สำเร็จ" เฉย ๆ ทำให้กดบันทึกซ้ำวนไปโดยไม่รู้ว่าต้องทำอะไร
+         */
+        const f = uploadFailure(res.error);
+        toast.error(f === "failed" ? t.delivery.reuploadNeeded : failureText(f), { description: name });
+      }
     } finally {
       router.refresh();
       setProgress(null);

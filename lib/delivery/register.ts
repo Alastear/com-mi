@@ -18,7 +18,9 @@ import {
 } from "@/lib/storage/r2";
 import {
   affectedRows,
+  claimHeld,
   claimIntent,
+  closeIntent,
   lockStorage,
   planLimits,
   registeredMediaId,
@@ -26,6 +28,7 @@ import {
   withinQuotaSql,
   type UploadIntent,
 } from "@/lib/uploads/intent";
+import { STALE_CLAIM_MS } from "@/lib/uploads/register-retry";
 
 /**
  * บันทึกไฟล์ส่งมอบที่เพิ่งอัปโหลดลงตาราง media
@@ -41,6 +44,9 @@ import {
  *   - รอบก่อนสำเร็จแต่คำตอบหาย → ได้ `mediaId` เดิมคืน ไม่ได้แถวที่สอง
  *   - รอบก่อนล้มเพราะเรื่องชั่วคราว → คำขอถูกคืนสิทธิ์ (`releaseIntent`) บันทึกต่อได้
  *     โดยไม่ต้องอัปไฟล์ 2 GB ใหม่ — ชิ้นที่ส่งไปแล้วยังอยู่ ไม่ถูกยกเลิกทิ้ง
+ *   - รอบก่อนยังถือคำขออยู่ (ยังวิ่ง หรือตายไปโดยคืนสิทธิ์ไม่ทัน) → `busy` ลองต่อได้
+ *     ถ้าตายจริง ค้างครบ `STALE_CLAIM_MS` แล้วครั้งถัดไป claim ต่อได้เอง
+ *   - ล้มถาวร → คำขอถูกปิด (`closeIntent`) ครั้งถัดไปได้ `forbidden` ทันที ไม่ต้องรอ
  */
 
 const Schema = z.object({
@@ -55,8 +61,12 @@ export type RegisterDeliveryResult =
   | { ok: true; mediaId: string }
   | {
       ok: false;
-      /** `retry` = ล้มเพราะเรื่องชั่วคราว คำขอยังใช้ได้ เรียกซ้ำด้วยค่าเดิมได้เลย */
-      error: "forbidden" | "invalid" | "invalid_state" | "storage_quota_exceeded" | "upload_failed" | "retry";
+      /**
+       * `retry` = ล้มเพราะเรื่องชั่วคราว คำขอยังใช้ได้ เรียกซ้ำด้วยค่าเดิมได้เลย
+       * `busy`  = การเรียกอื่นถือคำขออยู่ เรียกซ้ำทีหลังได้ (ไฟล์ยังไม่หาย)
+       * `forbidden` = คำขอนี้ใช้ไม่ได้แล้ว (ไม่มี ไม่ใช่ของเรา หมดอายุ ถูกยกเลิก) — ต้องอัปใหม่
+       */
+      error: "forbidden" | "invalid" | "invalid_state" | "storage_quota_exceeded" | "upload_failed" | "retry" | "busy";
     };
 
 export async function registerDeliveryFile(
@@ -70,27 +80,62 @@ export async function registerDeliveryFile(
   const v = parsed.data;
   const userId = session.user.id;
 
-  const intent = await claimIntent(v.intentId, userId, "private");
+  const intent = await claimIntent(v.intentId, userId, "private", { reclaimStaleAfterMs: STALE_CLAIM_MS });
   if (!intent) {
     // ถูกใช้ไปแล้ว — ถ้าเป็นเพราะรอบก่อนบันทึกสำเร็จ ตอบแถวเดิม
     const done = await registeredMediaId(v.intentId, userId);
-    return done ? { ok: true, mediaId: done } : { ok: false, error: "forbidden" };
+    if (done) return { ok: true, mediaId: done };
+    /**
+     * ⚠️ แยก "มีคนถืออยู่" ออกจาก "ใช้ไม่ได้แล้ว" — เบราว์เซอร์ลองต่อเฉพาะ `busy`
+     * ตอบ `forbidden` ทั้งสองกรณี (แบบเดิม) ทำให้ต้องเดาจากฝั่งเบราว์เซอร์ และเดาผิดได้ทั้งสองทาง:
+     * ทิ้งไฟล์ที่ยังบันทึกได้ หรือบอกว่า "ไฟล์ยังไม่หาย" กับคำขอที่ตายไปแล้ว
+     */
+    return (await claimHeld(v.intentId, userId, "private"))
+      ? { ok: false, error: "busy" }
+      : { ok: false, error: "forbidden" };
   }
   if (intent.kind !== "final" || !intent.orderId || !intent.uploadId) {
     return { ok: false, error: "forbidden" };
   }
 
   try {
-    return await registerClaimed(intent as ClaimedIntent, v.parts, userId, session.user.plan);
+    const res = await registerClaimed(intent as ClaimedIntent, v.parts, userId, session.user.plan);
+    /**
+     * ทุกผลที่ไม่ผ่านจาก `registerClaimed` เป็นล้มถาวร (ไฟล์ถูกทิ้งไปแล้ว) — ปิดคำขอด้วย
+     * ถ้าคำตอบนี้หายกลางทาง ครั้งถัดไปจะได้ `forbidden` ทันที แทนที่จะได้ `busy` ไปอีกสิบกว่านาที
+     * ปิดไม่ได้ก็ไม่เป็นไร: ค้างครบ `STALE_CLAIM_MS` แล้ว claim ต่อ ก็ได้คำตอบเดิม
+     */
+    if (!res.ok) await closeIntent(intent.id, userId).catch(() => {});
+    return res;
   } catch (err) {
     /**
      * ล้มกลางทางด้วยเหตุที่ไม่ได้ตั้งใจ (Neon/R2 สะดุด เน็ตของ function หลุด) — คืนสิทธิ์คำขอ
-     * ให้เบราว์เซอร์ลองใหม่ได้ ถ้าคืนไม่ได้ (DB ยังล่ม) คำขอค้างเป็นใช้แล้ว ต้องอัปใหม่
-     * ปลอดภัยแม้ insert อาจ commit ไปแล้ว — ดู `releaseIntent`
+     * ให้เบราว์เซอร์ลองใหม่ได้ ปลอดภัยแม้ insert อาจ commit ไปแล้ว — ดู `releaseIntent`
+     *
+     * ⚠️ Neon ที่ล่มจนงานบันทึกล้ม มักยังล่มอยู่ตอนคืนสิทธิ์ (query ถัดไปทันที) จึงลองคืนซ้ำ
+     * สั้น ๆ ราว 15 วินาที ถ้ายังไม่ได้ คำขอค้างเป็นใช้แล้ว — ไม่ถาวร: ครบ `STALE_CLAIM_MS`
+     * แล้วครั้งถัดไปของเบราว์เซอร์ claim ต่อได้เอง (ระหว่างนั้นได้ `busy`) ไม่ต้องอัปใหม่
      */
     console.error("[delivery-register]", err instanceof Error ? err.message : err);
-    await releaseIntent(intent.id, userId).catch(() => {});
+    if (!(await releaseWithRetry(intent.id, userId))) {
+      console.error("[delivery-register] release failed — intent reclaimable after STALE_CLAIM_MS", intent.id);
+    }
     return { ok: false, error: "retry" };
+  }
+}
+
+/** รอก่อนลองคืนสิทธิ์ครั้งถัดไป — รวมราว 15 วินาที พอสำหรับ Neon สะดุดครู่เดียว */
+const RELEASE_BACKOFF_MS = [500, 1000, 2000, 4000, 8000];
+
+async function releaseWithRetry(id: string, userId: string): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await releaseIntent(id, userId);
+      return true;
+    } catch {
+      if (attempt >= RELEASE_BACKOFF_MS.length) return false;
+      await new Promise((r) => setTimeout(r, RELEASE_BACKOFF_MS[attempt]));
+    }
   }
 }
 

@@ -493,6 +493,7 @@ const th = {
     unconfirmedHint:
       "{name} · อาจบันทึกไปแล้ว ถ้ายังไม่ขึ้นในรายการ กด \"บันทึกอีกครั้ง\" ได้เลยโดยไม่ต้องอัปใหม่ (ตราบที่ยังไม่ปิดหน้านี้)",
     saveAgain: "บันทึกอีกครั้ง",
+    reuploadNeeded: "บันทึกไฟล์นี้ไม่ได้แล้ว — ต้องอัปโหลดไฟล์ใหม่อีกครั้ง",
     saved: "บันทึกไฟล์แล้ว",
     waitCurrent: "รอให้ไฟล์ที่กำลังอัปเสร็จก่อน แล้วค่อยกดบันทึกอีกครั้ง",
     files: "ไฟล์ที่เตรียมไว้",
@@ -1786,6 +1787,7 @@ const en: Dictionary = {
     unconfirmedHint:
       "{name} · It may already be saved. If it isn't in the list, press \"Save again\" — no re-upload needed, as long as this page stays open.",
     saveAgain: "Save again",
+    reuploadNeeded: "This upload can no longer be saved — upload the file again",
     saved: "File saved",
     waitCurrent: "Wait for the current upload to finish, then press Save again",
     files: "Files ready",

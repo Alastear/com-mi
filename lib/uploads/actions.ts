@@ -189,7 +189,8 @@ async function insertIntentWithinQuota(input: {
       lockStorage(input.userId),
       db
         .update(schema.uploadIntent)
-        .set({ consumedAt: sql`now()` })
+        // ⚠️ ปิดแบบหมดอายุด้วย ไม่ใช่แค่ใช้แล้ว — ดู `claimIntent` (ใช้แล้ว+ยังไม่หมดอายุ = มีคนถืออยู่)
+        .set({ consumedAt: sql`now()`, expiresAt: sql`least(${schema.uploadIntent.expiresAt}, now())` })
         .where(
           and(
             eq(schema.uploadIntent.userId, input.userId),
@@ -334,6 +335,8 @@ export async function startDeliveryUpload(
  * ⚠️ ปิดคำขอด้วย compare-and-set ก่อนลบไฟล์เสมอ — หลังจากนี้ `registerMedia` /
  * `registerDeliveryFile` claim คำขอนี้ไม่ได้แล้ว ไฟล์ที่กำลังจะลบจึงไม่มีทางถูกบันทึกทีหลัง
  * และถ้ามีแถว `media` ชี้ key นี้อยู่แล้ว (บันทึกสำเร็จแต่คำตอบหาย) ห้ามแตะไฟล์
+ * ⚠️ ต้องตั้งให้หมดอายุด้วย — `registerDeliveryFile` claim คำขอที่ "ใช้แล้วแต่ค้างนาน" ต่อได้
+ * (การเรียกที่ถือไว้ตายไป) ใช้แล้วเฉย ๆ อีกสิบกว่านาทีคำขอที่ยกเลิกแล้วจะกลับมาบันทึกได้
  */
 export async function cancelUpload(intentId: string): Promise<void> {
   const session = await getSession();
@@ -342,7 +345,7 @@ export async function cancelUpload(intentId: string): Promise<void> {
 
   const [row] = await db
     .update(schema.uploadIntent)
-    .set({ consumedAt: sql`now()` })
+    .set({ consumedAt: sql`now()`, expiresAt: sql`least(${schema.uploadIntent.expiresAt}, now())` })
     .where(
       and(
         eq(schema.uploadIntent.id, intentId),

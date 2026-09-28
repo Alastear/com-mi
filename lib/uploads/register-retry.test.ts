@@ -6,6 +6,7 @@ import {
   nextRegisterDelay,
   REGISTER_RETRY_WINDOW_MS,
   registerWithRetry,
+  STALE_CLAIM_MS,
   type RegisterCallResult,
   type RegisterStatus,
 } from "./register-retry";
@@ -62,18 +63,13 @@ function harness(opts: {
 }
 
 describe("แยกผลการบันทึกหนึ่งครั้ง", () => {
-  it("retry ชั่วคราว, ok เสร็จ, ที่เหลือล้มถาวร", () => {
-    assert.equal(classifyRegisterResult({ ok: true }, false), "done");
-    assert.equal(classifyRegisterResult({ ok: false, error: "retry" }, false), "retry");
+  it("retry/busy ชั่วคราว, ok เสร็จ, ที่เหลือล้มถาวร", () => {
+    assert.equal(classifyRegisterResult({ ok: true }), "done");
+    assert.equal(classifyRegisterResult({ ok: false, error: "retry" }), "retry");
+    assert.equal(classifyRegisterResult({ ok: false, error: "busy" }), "retry");
     for (const e of ["forbidden", "invalid", "invalid_state", "storage_quota_exceeded", "upload_failed"]) {
-      assert.equal(classifyRegisterResult({ ok: false, error: e }, false), "hard", e);
+      assert.equal(classifyRegisterResult({ ok: false, error: e }), "hard", e);
     }
-  });
-
-  it("forbidden หลังครั้งที่โยน = ครั้งนั้นอาจยังถือคำขออยู่ ต้องลองต่อ ไม่ใช่ทิ้ง", () => {
-    assert.equal(classifyRegisterResult({ ok: false, error: "forbidden" }, true), "retry");
-    // เรื่องอื่นมาจากครั้งที่ claim ได้จริง — ผลแน่นอนแล้ว
-    assert.equal(classifyRegisterResult({ ok: false, error: "invalid_state" }, true), "hard");
   });
 });
 
@@ -95,6 +91,13 @@ describe("ระยะรอก่อนลองครั้งถัดไป"
 
   it("หน้าต่างเป็นนาที ไม่ใช่วินาที", () => {
     assert.ok(REGISTER_RETRY_WINDOW_MS >= 5 * 60 * 1000);
+  });
+
+  it("หน้าต่างยาวพอให้คำขอที่ค้าง (claim แล้วคืนสิทธิ์ไม่ได้) ถูก claim ต่อได้ก่อนเลิกลอง", () => {
+    // ช่วงรอยาวสุด 30 วินาที — ครั้งที่ลองหลังครบ STALE_CLAIM_MS ต้องยังอยู่ในหน้าต่าง
+    assert.ok(REGISTER_RETRY_WINDOW_MS >= STALE_CLAIM_MS + 60_000);
+    // และคำขอค้างต้องนานกว่า function ที่ยาวที่สุดของ Vercel (900 วินาที)
+    assert.ok(STALE_CLAIM_MS > 900_000);
   });
 });
 
@@ -139,16 +142,46 @@ describe("ลองบันทึกซ้ำ", () => {
     assert.equal(h.cancels, 1);
   });
 
-  it("ครั้งแรกโยนแต่จริง ๆ ยังวิ่งอยู่ ครั้งถัดไปได้ forbidden แล้วได้ id เดิม — ไม่ยกเลิก", async () => {
+  it("ครั้งแรกโยนแต่จริง ๆ ยังวิ่งอยู่ ครั้งถัดไปได้ busy แล้วได้ id เดิม — ไม่ยกเลิก", async () => {
     const h = harness({
-      answers: (n) => (n === 1 ? "throw" : n < 4 ? { ok: false, error: "forbidden" } : { ok: true }),
+      answers: (n) => (n === 1 ? "throw" : n < 4 ? { ok: false, error: "busy" } : { ok: true }),
     });
     assert.deepEqual(await h.run, { ok: true });
     assert.equal(h.cancels, 0);
   });
 
-  it("forbidden ค้างไปตลอดหลังครั้งที่โยน = unconfirmed ไม่ใช่ยกเลิก", async () => {
+  it("Neon ล่มหลัง claim จนคืนสิทธิ์ไม่ได้: retry → โยน → busy จนครบ STALE_CLAIM_MS → claim ต่อแล้วบันทึกผ่าน", async () => {
+    // จำลองเซิร์ฟเวอร์: claim ครั้งแรกที่ t=0 ค้างไว้ (คืนสิทธิ์ล้ม) DB ล่ม 10 วินาที
+    // หลังจากนั้นทุกครั้งได้ busy จนคำขอค้างครบ STALE_CLAIM_MS แล้วครั้งถัดไป claim ต่อได้
+    const h = harness({
+      answers: (n, now) => {
+        if (n === 1) return { ok: false, error: "retry" };
+        if (now < 10_000) return "throw";
+        return now < STALE_CLAIM_MS ? { ok: false, error: "busy" } : { ok: true };
+      },
+      expiresInMs: 6 * HOUR,
+    });
+    assert.deepEqual(await h.run, { ok: true });
+    assert.equal(h.cancels, 0);
+    assert.ok(h.now >= STALE_CLAIM_MS);
+  });
+
+  it("retry แล้วตามด้วย forbidden = คำขอใช้ไม่ได้แล้วจริง ล้มถาวรทันที ไม่หลอกว่าไฟล์ยังอยู่", async () => {
+    const h = harness({ answers: (n) => (n === 1 ? { ok: false, error: "retry" } : { ok: false, error: "forbidden" }) });
+    assert.deepEqual(await h.run, { ok: false, error: "forbidden" });
+    assert.equal(h.calls, 2);
+    assert.equal(h.cancels, 1);
+  });
+
+  it("โยนแล้วตามด้วย forbidden ก็ล้มถาวรทันที — ไม่ลองต่อสิบนาทีแล้วขึ้นว่าไม่หาย", async () => {
     const h = harness({ answers: (n) => (n === 1 ? "throw" : { ok: false, error: "forbidden" }) });
+    assert.deepEqual(await h.run, { ok: false, error: "forbidden" });
+    assert.equal(h.calls, 2);
+    assert.equal(h.cancels, 1);
+  });
+
+  it("busy ค้างไปตลอด (ไม่ควรเกิด) = unconfirmed ไม่ใช่ยกเลิก", async () => {
+    const h = harness({ answers: (n) => (n === 1 ? "throw" : { ok: false, error: "busy" }) });
     assert.deepEqual(await h.run, { ok: false, error: "unconfirmed" });
     assert.equal(h.cancels, 0);
   });

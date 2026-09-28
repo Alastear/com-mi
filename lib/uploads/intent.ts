@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, eq, gt, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
 import { PART_URL_TTL_SECONDS } from "@/lib/storage/keys";
@@ -79,28 +79,93 @@ export function affectedRows(result: unknown): number {
  * (โควตานับซ้ำ และลบแถวหนึ่งเมื่อไรไฟล์ของอีกแถวก็หายไปด้วย)
  *
  * บันทึกล้มเพราะเรื่องชั่วคราว (R2/Neon สะดุด) ผู้เรียกคืนสิทธิ์ด้วย `releaseIntent` ได้
- * ส่วนที่ล้มถาวร (ไฟล์ไม่ขึ้น ขนาดไม่ตรง) = ผู้ใช้ต้องอัปใหม่
+ * ส่วนที่ล้มถาวร (ไฟล์ไม่ขึ้น ขนาดไม่ตรง) ผู้เรียกปิดคำขอด้วย `closeIntent` = ผู้ใช้ต้องอัปใหม่
  * ไฟล์ที่ค้างอยู่ งานเก็บกวาดตามลบให้ เพราะไม่มีแถว `media` ไหนชี้ถึง key นั้น
+ *
+ * `reclaimStaleAfterMs` (ไฟล์ส่งมอบเท่านั้น) — claim คำขอที่ถูก claim ไว้นานเกินนี้แล้ว
+ * และยังไม่มีแถว `media` ชี้ key ได้ด้วย: การเรียกที่ถือไว้ตายไปโดยคืนสิทธิ์ไม่ทัน
+ * (Neon ล่มหลัง claim จน `releaseIntent` ก็ล้ม หรือ function ถูกฆ่ากลางทาง)
+ * ⚠️ ปลอดภัยได้เพราะ "ใช้แล้ว + ยังไม่หมดอายุ" มีความหมายเดียวคือ "มีการเรียกถือไว้" —
+ * ทุกทางที่ปิดคำขอถาวร (`cancelUpload`, คำขอถูกแทนที่, ล้มถาวร, ลบไฟล์) ตั้งให้หมดอายุด้วยเสมอ
+ * ทางปิดคำขอใหม่ที่ไม่ตั้งหมดอายุ = คำขอที่ปิดไปแล้วกลับมาบันทึกได้อีก
  */
 export async function claimIntent(
   id: string,
   userId: string,
   bucket: Bucket,
+  opts: { reclaimStaleAfterMs?: number } = {},
 ): Promise<UploadIntent | null> {
+  const t = schema.uploadIntent;
+  const stale = opts.reclaimStaleAfterMs;
+  const unclaimed =
+    stale === undefined
+      ? isNull(t.consumedAt)
+      : or(
+          isNull(t.consumedAt),
+          and(
+            lt(t.consumedAt, sql`now() - (${stale / 1000}::double precision * interval '1 second')`),
+            // บันทึกสำเร็จไปแล้ว (คำตอบหาย) ห้าม claim ซ้ำ — ผู้เรียกตอบแถวเดิมด้วย `registeredMediaId`
+            sql`not exists (select 1 from media m where m.pathname = upload_intent.key)`,
+          ),
+        );
   const [row] = await getDb()
-    .update(schema.uploadIntent)
+    .update(t)
     .set({ consumedAt: sql`now()` })
     .where(
       and(
-        eq(schema.uploadIntent.id, id),
-        eq(schema.uploadIntent.userId, userId),
-        eq(schema.uploadIntent.bucket, bucket),
-        isNull(schema.uploadIntent.consumedAt),
-        gt(schema.uploadIntent.expiresAt, sql`now()`),
+        eq(t.id, id),
+        eq(t.userId, userId),
+        eq(t.bucket, bucket),
+        unclaimed,
+        gt(t.expiresAt, sql`now()`),
       ),
     )
     .returning();
   return row ?? null;
+}
+
+/**
+ * มีการเรียกอื่นถือคำขอนี้อยู่ไหม (claim แล้ว ยังไม่หมดอายุ) — ใช้หลัง `claimIntent` ไม่ได้แถว
+ * เพื่อแยก "รอก่อน" (`busy`) ออกจาก "คำขอนี้ใช้ไม่ได้แล้ว" (`forbidden`)
+ *
+ * เบราว์เซอร์ลองซ้ำเมื่อได้ `busy` เท่านั้น — ครั้งก่อนที่คำตอบหายอาจยังวิ่งอยู่ (อีกไม่กี่วินาที
+ * ได้แถวเดิมหรือคืนสิทธิ์) หรือตายไปแล้ว (claim ต่อได้เมื่อค้างครบ `STALE_CLAIM_MS`)
+ */
+export async function claimHeld(id: string, userId: string, bucket: Bucket): Promise<boolean> {
+  const t = schema.uploadIntent;
+  const [row] = await getDb()
+    .select({ id: t.id })
+    .from(t)
+    .where(
+      and(
+        eq(t.id, id),
+        eq(t.userId, userId),
+        eq(t.bucket, bucket),
+        isNotNull(t.consumedAt),
+        gt(t.expiresAt, sql`now()`),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * ปิดคำขอถาวร — ตั้งให้หมดอายุทันที (และถือว่าใช้แล้ว) หลังจากนี้ claim ไม่ได้อีก
+ * แม้ด้วย `reclaimStaleAfterMs` และไม่ถูกคืนสิทธิ์ด้วย `releaseIntent`
+ *
+ * ใช้เมื่อบันทึกล้มถาวร (ไฟล์ถูกทิ้งไปแล้ว) — ไม่ปิด ครั้งถัดไปจะได้ `busy` แล้วรออีกสิบกว่านาที
+ * ก่อนจะ claim ต่อแล้วได้คำตอบเดิม
+ * งานเก็บกวาดยังนับเวลาผ่อนผันของคำขอที่ใช้แล้วจาก `created_at` เหมือนเดิม (cleanup-rules.ts)
+ */
+export async function closeIntent(id: string, userId: string): Promise<void> {
+  const t = schema.uploadIntent;
+  await getDb()
+    .update(t)
+    .set({
+      consumedAt: sql`coalesce(${t.consumedAt}, now())`,
+      expiresAt: sql`least(${t.expiresAt}, now())`,
+    })
+    .where(and(eq(t.id, id), eq(t.userId, userId)));
 }
 
 /**
