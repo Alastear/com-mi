@@ -89,6 +89,7 @@ const ROLES: Record<EmailKind, EmailRole[]> = {
   order_accepted: ["client"],
   order_declined: ["client"],
   order_cancelled: ["client", "creator"],
+  order_closed_early: ["creator"],
   quote_issued: ["client"],
   quote_accepted: ["creator"],
   delivery_released: ["client"],
@@ -117,10 +118,13 @@ function emailingCalls(): Array<{ type: NotificationType; data: Record<string, u
   const out: Array<{ type: NotificationType; data: Record<string, unknown>; kind: EmailKind }> = [];
   for (const type of NOTIFICATION_TYPES) {
     if (type === "order_status_changed") {
-      for (const to of ORDER_STATUSES) {
-        const data = { code: CODE, from: "requested" as const, to };
-        const kind = emailKindFor("order_status_changed", data);
-        if (kind) out.push({ type, data, kind });
+      // ทุกคู่ต้นทาง→ปลายทาง — อีเมลบางแบบขึ้นกับต้นทาง (ลูกค้าปิดงานระหว่างรอบแก้)
+      for (const from of ORDER_STATUSES) {
+        for (const to of ORDER_STATUSES) {
+          const data = { code: CODE, from, to };
+          const kind = emailKindFor("order_status_changed", data);
+          if (kind) out.push({ type, data, kind });
+        }
       }
       continue;
     }
@@ -226,6 +230,18 @@ describe("ส่งเมื่อไร", () => {
     for (const to of ["completed", "expired"] as const) {
       assert.equal(emailKindFor("order_status_changed", { code: CODE, from: "delivered", to }), null, to);
     }
+  });
+
+  it("ลูกค้าปิดงานระหว่างรอบแก้ ส่งอีเมลถึงครีเอเตอร์ — อาจยังนั่งแก้งานที่ไม่มีวันถูกส่งอยู่", () => {
+    for (const from of ["in_progress", "in_review", "revision_requested"] as const) {
+      assert.equal(
+        emailKindFor("order_status_changed", { code: CODE, from, to: "completed" }),
+        "order_closed_early",
+        from,
+      );
+    }
+    // กดรับงานที่ส่งมอบแล้ว = ไม่มีงานค้าง ไม่ส่ง
+    assert.equal(emailKindFor("order_status_changed", { code: CODE, from: "delivered", to: "completed" }), null);
   });
 });
 
@@ -337,6 +353,17 @@ describe("เนื้อความถูกเรื่อง", () => {
     const pending = render("order_cancelled", client(order({ moneyMoved: true })));
     assert.ok(pending.body.includes(th.cancelledMoneyClient));
     assert.equal(pending.body.includes(formatMoney(0, "THB", "th")), false, pending.body);
+  });
+
+  it("ลูกค้าปิดงานระหว่างรอบแก้: ถึงครีเอเตอร์เท่านั้น บอกว่าไม่ต้องทำรอบแก้ต่อ และลิงก์ไปหน้าออเดอร์", () => {
+    const th = getDictionary("th").email;
+    const toCreator = render("order_closed_early", creator(order({ paidCents: 110_000, moneyMoved: true })));
+    assert.ok(toCreator.subject.startsWith("Mali"), toCreator.subject);
+    assert.ok(toCreator.subject.includes(CODE));
+    assert.ok(toCreator.body.includes(th.orderClosedEarlyFiles));
+    assert.equal(toCreator.path, `/orders/${CODE}`);
+    const wrong = renderEmail({ kind: "order_closed_early", data: {}, facts: client(order()), locale: "th" });
+    assert.equal(!wrong.ok && wrong.reason, "wrong_audience");
   });
 
   it("คำเชิญที่มีคนกดรับ: ชื่อ อีเมลที่กด ยอด และลิงก์ไปหน้าคำเชิญ", () => {

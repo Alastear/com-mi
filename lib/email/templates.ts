@@ -3,6 +3,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { formatMoney } from "@/lib/format";
 import { dueNowCents, paymentState } from "@/lib/payments/money";
 import { moneyMoved } from "@/lib/orders/cancel";
+import { closedEarly } from "@/lib/orders/state-machine";
 import type { NotificationData, NotificationType } from "@/lib/notifications/types";
 import type { OrderStatus } from "@/lib/types";
 
@@ -23,6 +24,7 @@ export const EMAIL_KINDS = [
   "order_accepted",
   "order_declined",
   "order_cancelled",
+  "order_closed_early",
   "quote_issued",
   "quote_accepted",
   "delivery_released",
@@ -51,6 +53,7 @@ const AUDIENCE: Record<EmailKind, EmailRole | "either"> = {
   order_accepted: "client",
   order_declined: "client",
   order_cancelled: "either",
+  order_closed_early: "creator",
   quote_issued: "client",
   quote_accepted: "creator",
   delivery_released: "client",
@@ -84,7 +87,14 @@ type KindRule<T extends NotificationType> =
  */
 const KIND_OF: { [T in NotificationType]: KindRule<T> } = {
   order_created: "order_created",
-  order_status_changed: (d) => STATUS_EMAIL[d.to] ?? null,
+  /**
+   * ลูกค้าปิดงานระหว่างรอบแก้ — ต้องเป็นอีเมลถึงครีเอเตอร์ ไม่ใช่แค่กระดิ่ง
+   * ⚠️ ครีเอเตอร์อาจยังนั่งแก้งานอยู่นอกเว็บ งานนั้นไม่มีวันถูกส่งแล้ว (ออเดอร์ที่ปิดรับไฟล์ส่งมอบไม่ได้)
+   * ยกเลิก/ปฏิเสธซึ่งก็ทำให้งานจบส่งอีเมลอยู่แล้ว เส้นนี้ต้องไม่เงียบกว่า
+   * ปิดจาก `delivered` (ลูกค้ากดรับงาน / cron ปิดให้) ไม่ส่ง — ไม่มีงานค้างให้ใครเสียแรงต่อ
+   */
+  order_status_changed: (d) =>
+    closedEarly(d.from, d.to) ? "order_closed_early" : (STATUS_EMAIL[d.to] ?? null),
   /**
    * ⚠️ ข้อความแชทไม่ส่งอีเมล — ถี่เกินไป คุยกันสิบข้อความ = อีเมลสิบฉบับ
    * แผนคือ digest วันละครั้ง (docs/01 §6) ยังไม่ได้ทำ
@@ -333,6 +343,15 @@ export function renderEmail(input: {
       const subject = byCreator ? e.orderCancelledByCreatorSubject : e.orderCancelledByClientSubject;
       return finish(subject, lines, vars, e.viewOrder, path);
     }
+
+    case "order_closed_early":
+      return finish(
+        e.orderClosedEarlySubject,
+        [e.orderClosedEarlyBody, e.orderClosedEarlyFiles],
+        vars,
+        e.viewOrder,
+        path,
+      );
 
     case "quote_issued": {
       // ใบถูกถอนไปแล้วระหว่างรอส่ง — ไม่ส่งตัวเลขของใบที่กดยอมรับไม่ได้แล้ว

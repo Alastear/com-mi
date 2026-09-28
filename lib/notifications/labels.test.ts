@@ -48,6 +48,29 @@ describe("ข้อความแจ้งเตือน", () => {
     assert.match(thai, /กำลังทำ/);
   });
 
+  it("ลูกค้าปิดงานระหว่างรอบแก้: กระดิ่งบอกว่าไม่ต้องส่งรอบแก้ ไม่ใช่แค่ 'เปลี่ยนเป็นเสร็จสมบูรณ์'", () => {
+    for (const t of [th, en]) {
+      const early = notificationText(t, "order_status_changed", {
+        code: "ABCD2345",
+        from: "revision_requested",
+        to: "completed",
+      })!;
+      assert.equal(early, t.notification.orderClosedEarly.replace("{code}", "ABCD2345"));
+      // กดรับงานที่ส่งมอบแล้ว / แถวเก่าที่ไม่มี from = ข้อความเดิม
+      const normals: Record<string, string>[] = [
+        { code: "ABCD2345", from: "delivered", to: "completed" },
+        { code: "ABCD2345", to: "completed" },
+      ];
+      for (const data of normals) {
+        const normal = notificationText(t, "order_status_changed", data)!;
+        const expected = t.notification.order_status_changed
+          .replace("{code}", "ABCD2345")
+          .replace("{status}", t.orderStatus.completed);
+        assert.equal(normal, expected);
+      }
+    }
+  });
+
   it("ชนิดที่ไม่รู้จักคืน null — ไม่โชว์ key ดิบให้ผู้ใช้เห็น", () => {
     assert.equal(notificationText(th, "ยังไม่มีชนิดนี้", {}), null);
   });

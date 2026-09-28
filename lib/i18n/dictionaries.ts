@@ -432,6 +432,9 @@ const th = {
     orderCancelledByClientBody: "{client} ยกเลิกงาน \"{service}\" แล้ว งานนี้ปิดแล้ว ไม่ต้องทำต่อ",
     cancelledPaidCreator: "คุณยืนยันรับเงินงานนี้ไปแล้ว {paid}",
     cancelledMoneyCreator: "แพลตฟอร์มไม่ได้ถือเงิน ถ้าต้องคืนเงิน เป็นเรื่องที่คุณกับลูกค้าตกลงและโอนคืนกันเอง ดูรายการเงินทั้งหมดได้ที่หน้างาน",
+    orderClosedEarlySubject: "{client} ปิดงาน #{code} ด้วยไฟล์ที่ได้รับไปแล้ว",
+    orderClosedEarlyBody: "{client} ปิดงาน \"{service}\" ด้วยไฟล์ที่คุณส่งมอบไปแล้ว รอบแก้ที่ค้างอยู่ไม่ต้องทำต่อ",
+    orderClosedEarlyFiles: "ออเดอร์นี้ปิดแล้ว ส่งไฟล์เพิ่มไม่ได้อีก ไฟล์ที่อัปไว้แต่ยังไม่ได้ส่งลบได้ที่หน้างาน",
     paymentReportedSubject: "ลูกค้าแจ้งโอนเงินงาน #{code}",
     paymentReportedBody: "{client} แจ้งว่าโอนแล้ว {amount}\n\nกรุณาเช็คในแอปธนาคารของคุณเองว่ายอดเข้าจริง แล้วค่อยกดยืนยัน — อย่าดูจากสลิปอย่างเดียว",
 
@@ -1329,6 +1332,8 @@ const th = {
     /** ข้อความแจ้งเตือน — DB เก็บเป็น key + ข้อมูล แปลตอนแสดงเหมือน timeline */
     order_created: "มีคำขอใหม่ #{code}",
     order_status_changed: "งาน #{code} เปลี่ยนเป็น {status}",
+    /** ลูกค้าปิดงานระหว่างรอบแก้ — แทน `order_status_changed` (ดู `notificationText`) */
+    orderClosedEarly: "ลูกค้าปิดงาน #{code} ด้วยไฟล์ที่ได้รับไปแล้ว — รอบแก้ที่ค้างอยู่ไม่ต้องส่ง",
     order_message: "ข้อความใหม่ในงาน #{code}",
     payment_reported: "ลูกค้าแจ้งโอนเงินงาน #{code}",
     payment_recorded_by_creator: "ครีเอเตอร์บันทึกว่าได้รับเงินงาน #{code} จากคุณแล้ว",
@@ -1751,6 +1756,9 @@ const en: Dictionary = {
     orderCancelledByClientBody: "{client} cancelled \"{service}\". The order is closed and needs no more work",
     cancelledPaidCreator: "You had confirmed receiving {paid} for this order",
     cancelledMoneyCreator: "We never hold money — any refund is between you and the client. The order page lists every payment",
+    orderClosedEarlySubject: "{client} closed order #{code} with the files already delivered",
+    orderClosedEarlyBody: "{client} closed \"{service}\" with the files you already delivered. The pending revision needs no more work",
+    orderClosedEarlyFiles: "The order is closed and cannot take more files. You can delete files you uploaded but never sent on the order page",
     paymentReportedSubject: "A payment was reported on order #{code}",
     paymentReportedBody: "{client} reported paying {amount}\n\nCheck your own banking app that the amount really arrived before you confirm it — do not rely on the slip alone",
 
@@ -2593,6 +2601,7 @@ const en: Dictionary = {
     markAllRead: "Mark all read",
     order_created: "New request #{code}",
     order_status_changed: "Order #{code} is now {status}",
+    orderClosedEarly: "The client closed order #{code} with the files already delivered — the pending revision is no longer needed",
     order_message: "New message on order #{code}",
     payment_reported: "A payment was reported on order #{code}",
     payment_recorded_by_creator: "The creator recorded a payment from you on order #{code}",
