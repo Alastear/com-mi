@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { SITE_NAME, siteUrl } from "@/lib/site";
+import { isUndeliverableAddress } from "./address";
+import { EMAIL_GAP_MS, createPacer, rateLimitDelayMs } from "./pace";
 
 /**
  * ส่งอีเมลผ่าน Resend
@@ -41,6 +43,12 @@ function from(): string {
   return process.env.EMAIL_FROM ?? `${SITE_NAME} <onboarding@resend.dev>`;
 }
 
+/**
+ * ตัวเดียวทั้ง process — callback ของ `after()` ทุกตัวในคำขอเดียวกัน (และคำขออื่นที่มาลงเครื่องเดียวกัน)
+ * ต่อคิวผ่านตัวนี้ ไม่ใช่ยิง Resend พร้อมกันจนโดน 429
+ */
+const pacer = createPacer({ gapMs: EMAIL_GAP_MS });
+
 export type SendResult = { sent: boolean; reason?: string };
 
 export async function sendEmail(input: {
@@ -53,23 +61,38 @@ export async function sendEmail(input: {
 }): Promise<SendResult> {
   const resend = getClient();
   if (!resend) return { sent: false, reason: "no_api_key" };
+  // ผู้ใช้ทดสอบในฐานข้อมูลจริง (`@commi.local`) — ส่งไปก็ bounce และทำให้โดเมนผู้ส่งเสียชื่อ ดู address.ts
+  if (isUndeliverableAddress(input.to)) return { sent: false, reason: "undeliverable_address" };
 
-  try {
-    const { error } = await resend.emails.send({
-      from: from(),
-      to: input.to,
-      subject: input.subject,
-      html: input.html,
-      text: input.text,
-    });
-    if (error) {
+  for (let attempt = 0; ; attempt++) {
+    // ต่อคิวทุกการยิงในเครื่องนี้ รวมถึงการลองซ้ำ — ดู pace.ts
+    await pacer.wait();
+    try {
+      const { error, headers } = await resend.emails.send({
+        from: from(),
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+        text: input.text,
+      });
+      if (!error) return { sent: true };
+      /**
+       * 429 = Resend ยังไม่ได้รับฉบับนี้ ลองใหม่ได้โดยไม่เสี่ยงส่งซ้ำ
+       * ⚠️ error อื่น (และ throw ข้างล่าง) ห้ามลองซ้ำ — บางแบบ Resend อาจรับไปแล้ว ลูกค้าจะได้สองฉบับ
+       */
+      if (error.name === "rate_limit_exceeded") {
+        const wait = rateLimitDelayMs(attempt + 1, headers?.["retry-after"]);
+        if (wait !== null) {
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+      }
       console.error("[email] Resend ปฏิเสธ", error.name, error.message);
       return { sent: false, reason: error.name };
+    } catch (err) {
+      console.error("[email] ส่งไม่สำเร็จ", err);
+      return { sent: false, reason: "threw" };
     }
-    return { sent: true };
-  } catch (err) {
-    console.error("[email] ส่งไม่สำเร็จ", err);
-    return { sent: false, reason: "threw" };
   }
 }
 
