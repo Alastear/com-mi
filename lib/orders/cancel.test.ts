@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { moneyAckFrom, moneyMoved, needsMoneyConfirm } from "./cancel";
 import { paymentMode } from "./release";
-import { closedText } from "./labels";
+import { closedText, completedByOf } from "./labels";
 import { isTerminal } from "./state-machine";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { ORDER_STATUSES } from "@/lib/types";
@@ -114,5 +114,55 @@ describe("ข้อความของออเดอร์ที่จบแ�
     for (const t of dicts) {
       assert.notEqual(closedText(t, "cancelled")?.body, t.payment.awaitingApprovalBody);
     }
+  });
+
+  it("ระบบปิดงานให้ ต้องไม่ขึ้นว่ายืนยันรับงานแล้ว — ลูกค้าไม่ได้กดอะไร", () => {
+    for (const t of dicts) {
+      const auto = closedText(t, "completed", "system");
+      assert.equal(auto?.body, t.orderClosed.completedAutoBody);
+      assert.notEqual(auto?.body, t.orderClosed.completedBody);
+      assert.equal(auto?.title, t.orderClosed.completed);
+      // ลูกค้ากดเอง / ไม่รู้ว่าใคร = ข้อความเดิม
+      assert.equal(closedText(t, "completed", "client")?.body, t.orderClosed.completedBody);
+      assert.equal(closedText(t, "completed", null)?.body, t.orderClosed.completedBody);
+      assert.equal(closedText(t, "completed")?.body, t.orderClosed.completedBody);
+      // actor มีผลกับ completed เท่านั้น
+      assert.equal(closedText(t, "expired", "system")?.body, t.orderClosed.expiredBody);
+    }
+  });
+});
+
+describe("ใครปิดงาน (completedByOf)", () => {
+  const ev = (eventType: string | null, eventData: Record<string, string | number> | null, isSystemEvent = true) => ({
+    isSystemEvent,
+    eventType,
+    eventData,
+  });
+
+  it("อ่าน actor จาก event status_changed → completed", () => {
+    const msgs = [
+      ev("order_created", null),
+      ev("status_changed", { from: "in_progress", to: "delivered", actor: "creator" }),
+      ev("auto_complete_warned", { actor: "system", days: 2 }),
+      ev("status_changed", { from: "delivered", to: "completed", actor: "system" }),
+    ];
+    assert.equal(completedByOf(msgs), "system");
+    msgs[3] = ev("status_changed", { from: "delivered", to: "completed", actor: "client" });
+    assert.equal(completedByOf(msgs), "client");
+  });
+
+  it("ไม่มี event ปิดงาน / ไม่มี actor / เป็นข้อความแชท = null ไม่เดา", () => {
+    assert.equal(completedByOf([]), null);
+    assert.equal(completedByOf([ev("status_changed", { to: "delivered", actor: "system" })]), null);
+    assert.equal(completedByOf([ev("status_changed", { to: "completed" })]), null);
+    assert.equal(completedByOf([ev(null, { to: "completed", actor: "system" }, false)]), null);
+  });
+
+  it("event เงินที่มี actor system หลังปิดงานไม่ทำให้สับสน", () => {
+    const msgs = [
+      ev("status_changed", { from: "delivered", to: "completed", actor: "client" }),
+      ev("payment_voided", { actor: "system", amount: 100 }),
+    ];
+    assert.equal(completedByOf(msgs), "client");
   });
 });

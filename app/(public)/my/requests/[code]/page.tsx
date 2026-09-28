@@ -11,7 +11,7 @@ import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { paymentMode } from "@/lib/orders/release";
-import { closedText, dueLabel } from "@/lib/orders/labels";
+import { closedText, completedByOf, dueLabel } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
@@ -62,7 +62,7 @@ export default async function ClientRequestPage({ params }: Props) {
   const amountDue = dueNowCents(order);
   const status = order.status as OrderStatus;
   const mode = paymentMode(status);
-  const closed = closedText(t, status);
+  const closed = closedText(t, status, completedByOf(order.messages));
   const payments = toPaymentRows(order.payments);
   /**
    * หัวการ์ดบอกว่าออเดอร์อยู่ตรงไหน ไม่ใช่ "ส่งคำขอแล้ว" ตลอดกาล

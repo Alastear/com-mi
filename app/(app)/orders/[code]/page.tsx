@@ -23,7 +23,7 @@ import { toOrderReviewView } from "@/lib/reputation/view";
 import { readDelivery } from "@/lib/delivery/read";
 import { canRelease, paymentMode } from "@/lib/orders/release";
 import { depositPercentOf } from "@/lib/orders/pricing";
-import { closedText, dueLabel } from "@/lib/orders/labels";
+import { closedText, completedByOf, dueLabel } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
@@ -61,7 +61,7 @@ export default async function OrderPage({ params }: Props) {
   const remaining = order.totalCents - order.amountPaidCents;
   const status = order.status as OrderStatus;
   const mode = paymentMode(status);
-  const closed = closedText(t, status);
+  const closed = closedText(t, status, completedByOf(order.messages));
   const payments = toPaymentRows(order.payments);
 
   /**

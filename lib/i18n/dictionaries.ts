@@ -1040,6 +1040,7 @@ const th = {
     expiredBody: "คำขอปิดไปก่อนเริ่มงาน ไม่มียอดที่ต้องชำระ",
     completed: "งานนี้เสร็จสมบูรณ์แล้ว",
     completedBody: "ยืนยันรับงานแล้ว ออเดอร์นี้ปิดแล้ว",
+    completedAutoBody: "ระบบปิดงานให้อัตโนมัติ เพราะส่งงานครบแล้วและไม่มีการขอแก้ไขภายในเวลาที่กำหนด",
   },
 
   /** ข้อความบน timeline — DB เก็บเป็น key ไม่ใช่ข้อความ จะได้แปลตามภาษาของคนอ่าน */
@@ -2253,6 +2254,7 @@ const en: Dictionary = {
     expiredBody: "It closed before any work started. There is nothing to pay.",
     completed: "This order is complete",
     completedBody: "Delivery was confirmed and this order is closed.",
+    completedAutoBody: "Closed automatically: the work was delivered and no revision was requested in time.",
   },
 
   invite: {

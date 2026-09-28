@@ -73,6 +73,12 @@ export function isPrimaryAction(to: OrderStatus): boolean {
 export function closedText(
   t: Dictionary,
   status: OrderStatus,
+  /**
+   * ใครปิดงาน (`completed`) — จาก `completedByOf()` ไม่รู้ = ใช้ข้อความเดิม
+   * ⚠️ ระบบปิดให้ (cron หลังส่งงาน 7 วัน) ห้ามขึ้นว่า "ยืนยันรับงานแล้ว" — ลูกค้าไม่ได้กดอะไรเลย
+   * ข้อความนี้อยู่บนหน้าของทั้งสองฝ่าย ถ้าเถียงกันทีหลังว่าลูกค้ารับงานหรือยัง หน้าจอต้องไม่พูดแทนเขา
+   */
+  completedBy?: string | null,
 ): { title: string; body: string } | null {
   const c = t.orderClosed;
   switch (status) {
@@ -83,10 +89,36 @@ export function closedText(
     case "expired":
       return { title: c.expired, body: c.expiredBody };
     case "completed":
-      return { title: c.completed, body: c.completedBody };
+      return {
+        title: c.completed,
+        body: completedBy === "system" ? c.completedAutoBody : c.completedBody,
+      };
     default:
       return null;
   }
+}
+
+/**
+ * ใครเป็นคนปิดงาน — อ่านจาก event `status_changed` → `completed` ตัวล่าสุดบน timeline
+ *
+ * `completed` เป็นสถานะปลายทาง (ย้อนไม่ได้) จึงมี event แบบนี้ได้ตัวเดียว แต่หาตัวล่าสุดไว้ก่อน
+ * ไม่เจอ/ไม่มี actor = null ให้ `closedText` ใช้ข้อความเดิม ไม่เดาว่าระบบปิด
+ */
+export function completedByOf(
+  messages: readonly {
+    isSystemEvent: boolean;
+    eventType: string | null;
+    eventData: Record<string, string | number> | null;
+  }[],
+): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.isSystemEvent && m.eventType === "status_changed" && m.eventData?.to === "completed") {
+      const actor = m.eventData.actor;
+      return typeof actor === "string" ? actor : null;
+    }
+  }
+  return null;
 }
 
 /**
