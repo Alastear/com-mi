@@ -549,7 +549,7 @@ const th = {
     cannotChangeRound: "สถานะงานตอนนี้แก้ไฟล์ส่งมอบไม่ได้",
     notSent: "ไม่ได้ส่งให้ลูกค้า — ลบทิ้งเพื่อคืนพื้นที่ได้",
     releaseLeavesOut:
-      "ยังมี {n} ไฟล์ที่ไม่อยู่ในรอบนี้ และจะไม่ถูกส่งให้ลูกค้า:\n{names}\n\nส่งมอบเฉพาะไฟล์ในรอบนี้ต่อไหม? ถ้าจะส่งไฟล์เหล่านั้นด้วย กดยกเลิก แล้วกด \"เพิ่มเข้ารอบนี้\" ก่อน",
+      "ยังมี {n} ไฟล์ที่ไม่อยู่ในรอบนี้ และจะไม่ถูกส่งให้ลูกค้า:\n{names}\n\nส่งมอบเฉพาะไฟล์ในรอบนี้ต่อไหม? ถ้าจะส่งไฟล์เหล่านั้นด้วย กดยกเลิก แล้วกดปุ่มเพิ่มไฟล์เข้ารอบ (อยู่เหนือปุ่มส่งมอบ) ก่อน",
     andMore: "และอีก {n} ไฟล์",
     addConfirm:
       "เพิ่ม {n} ไฟล์นี้เข้ารอบที่เตรียมไว้?\n{names}\n\nลูกค้าจะเห็นชื่อไฟล์ทันที (ยังดาวน์โหลดไม่ได้จนกว่าจะกดส่งมอบ)",
@@ -1847,7 +1847,7 @@ const en: Dictionary = {
     cannotChangeRound: "Delivery files cannot be changed at this stage",
     notSent: "Never sent to the client — delete to free the space",
     releaseLeavesOut:
-      "{n} file(s) are not in this round and will not be sent to the client:\n{names}\n\nDeliver only the files in this round? To send them too, press Cancel and add them to this round first.",
+      "{n} file(s) are not in this round and will not be sent to the client:\n{names}\n\nDeliver only the files in this round? To send them too, press Cancel and use the button above Deliver that adds them to this round first.",
     andMore: "and {n} more",
     addConfirm:
       "Add these {n} file(s) to the prepared round?\n{names}\n\nThe client sees the file names right away (downloads unlock when you deliver).",
