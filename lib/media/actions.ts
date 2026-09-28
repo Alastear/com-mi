@@ -53,6 +53,14 @@ export type RegisterMediaResult =
  * ⚠️ โควตาเต็ม **คืนค่า** ไม่ใช่โยน — Next ตัดข้อความของ error ที่โยนจาก Server Action
  * ทิ้งใน production ฝั่ง client จึงไม่มีทางรู้ว่าเป็นเรื่องโควตา แล้วบอกแค่ "ลองใหม่"
  * error อื่นที่ยังโยนอยู่ (not_found, not_uploaded) เป็นเรื่องที่ผู้ใช้แก้เองไม่ได้ ข้อความกลางพอ
+ *
+ * ⚠️ เบราว์เซอร์ไม่ลองเรียกซ้ำ (ต่างจาก `registerDeliveryFile`) — **ไม่ใช่** เพราะไม่มีความล้มเหลว
+ * ที่ลองซ้ำแล้วผ่าน: คำขอที่ไปไม่ถึงเซิร์ฟเวอร์ (เน็ตมือถือหลุดหลัง PUT) หรือ Neon ล้มใน
+ * `requireCreator`/`claimIntent` ยังไม่แตะคำขอเลย ลองซ้ำก็ผ่าน (เฉพาะที่ล้มหลัง claim ที่ลองไม่ได้)
+ * ที่ยังไม่ลองซ้ำเพราะ (1) not_found/not_uploaded ถูกโยน และ production ซ่อนข้อความ เบราว์เซอร์
+ * แยก "เน็ตหลุด" ออกจาก "คำขอใช้ไม่ได้" ไม่ได้ (2) ไม่มีทางตอบแถวเดิมเมื่อรอบก่อนสำเร็จแต่คำตอบหาย
+ * ลองซ้ำจะกลายเป็น not_found ทั้งที่บันทึกแล้ว (3) เป็นรูปเล็ก อัปใหม่ได้ในไม่กี่วินาที
+ * จะเพิ่มการลองซ้ำ ต้องแก้ (1) กับ (2) ก่อน — ดูแบบของ `registerDeliveryFile`
  */
 export async function registerMedia(input: RegisterMediaInput): Promise<RegisterMediaResult> {
   const { user } = await requireCreator();
