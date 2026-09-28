@@ -140,7 +140,8 @@ export const uploadIntent = pgTable(
     /** บันทึกลง `media` แล้ว — ใช้ซ้ำไม่ได้ */
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
   },
-  (t) => [index("upload_intent_cleanup_idx").on(t.consumedAt, t.expiresAt)],
+  // งานเก็บกวาดไล่หาคำขอที่เก่ากว่าเวลาผ่อนผัน (lib/media/cleanup.ts)
+  (t) => [index("upload_intent_created_idx").on(t.createdAt)],
 );
 
 /* ── creator_page ──────────────────────────────────────────── */
