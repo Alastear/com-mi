@@ -9,9 +9,17 @@ const MiB = 1024 * 1024;
 
 /**
  * ชิ้นละ 8 MiB — R2 บังคับขั้นต่ำ 5 MiB ต่อชิ้น (ยกเว้นชิ้นสุดท้าย)
- * ชิ้นเล็กแปลว่าเน็ตมือถือหลุดกลางทางแล้วเสียงานน้อย ต้องส่งใหม่แค่ชิ้นเดียว
+ * ชิ้นเล็กแปลว่าเน็ตหลุดกลางทางแล้วเสียงานน้อย: ชิ้นที่ล้มถูกส่งใหม่แค่ชิ้นนั้น
+ * (lib/uploads/client.ts รอเน็ตกลับมาและลองซ้ำได้ราวสองสามนาที)
+ * ⚠️ แต่ถ้าชิ้นเดียวล้มจนหมดโควตาการลองซ้ำ ทั้งไฟล์ต้องเริ่มใหม่ตั้งแต่ชิ้นแรก — ยังไม่มีการอัปต่อจากที่ค้าง
  */
 export const PART_SIZE = 8 * MiB;
+
+/**
+ * อายุ URL ของแต่ละชิ้น (วินาที) — ไฟล์ 2 GB บนเน็ตมือถือใช้เวลาหลายชั่วโมงได้
+ * อายุของคำขออัปโหลดต้องยาวกว่านี้ (lib/uploads/intent.ts) ดูเหตุผลที่นั่น
+ */
+export const PART_URL_TTL_SECONDS = 6 * 60 * 60;
 
 /**
  * เพดานต่อไฟล์ส่งมอบ — มาจาก `media.bytes` ซึ่งเป็น integer 32 บิต (สูงสุด ~2 GiB)
@@ -31,6 +39,34 @@ export function partPlan(bytes: number, partSize: number = PART_SIZE): number[] 
   const sizes: number[] = [];
   for (let left = bytes; left > 0; left -= partSize) sizes.push(Math.min(partSize, left));
   return sizes;
+}
+
+/** ความยาวชื่อไฟล์สูงสุดที่เก็บ (นับแบบ `string.length` เหมือน zod ฝั่งเซิร์ฟเวอร์) */
+export const MAX_FILENAME_LENGTH = 200;
+
+/**
+ * ตัดชื่อไฟล์ให้ไม่เกิน `max` โดย **เก็บนามสกุลไว้**
+ *
+ * ชื่อนี้กลายเป็นชื่อไฟล์ตอนลูกค้าดาวน์โหลด (Content-Disposition)
+ * เดิมตัดจากท้ายตรง ๆ ชื่อไทยยาว ๆ ของไฟล์ `.clip` จึงเหลือแค่ชื่อไม่มีนามสกุล
+ * ลูกค้าดับเบิลคลิกแล้วเครื่องไม่รู้ว่าจะเปิดด้วยอะไร
+ *
+ * ⚠️ ไม่ตัดกลางคู่ surrogate (อีโมจิ) — ครึ่งตัวกลายเป็นอักขระเสียใน header
+ */
+export function clampFilename(name: string, max: number = MAX_FILENAME_LENGTH): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= max) return trimmed;
+  const dot = trimmed.lastIndexOf(".");
+  // นามสกุลจริงสั้นเสมอ — จุดที่อยู่ลึกเข้าไปในชื่อยาว ๆ ไม่ใช่นามสกุล
+  const ext = dot > 0 && trimmed.length - dot <= 16 ? trimmed.slice(dot) : "";
+  return cutUtf16(trimmed.slice(0, trimmed.length - ext.length), max - ext.length).trimEnd() + ext;
+}
+
+function cutUtf16(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const code = s.charCodeAt(n - 1);
+  // ตัวสุดท้ายที่เหลือเป็นครึ่งหน้าของคู่ surrogate — ถอยไปอีกหนึ่ง
+  return s.slice(0, code >= 0xd800 && code <= 0xdbff ? n - 1 : n);
 }
 
 /**

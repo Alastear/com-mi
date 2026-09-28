@@ -1,12 +1,15 @@
 import type { PublicMediaKind } from "@/lib/media/kinds";
-import { partPlan } from "@/lib/storage/keys";
-import { startDeliveryUpload, startMediaUpload } from "./actions";
+import { registerDeliveryFile, type RegisterDeliveryResult } from "@/lib/delivery/register";
+import { clampFilename, partPlan } from "@/lib/storage/keys";
+import { cancelUpload, startDeliveryUpload, startMediaUpload } from "./actions";
+import { isRetryableStatus, MAX_PART_ATTEMPTS, retryDelayMs } from "./errors";
 
 /**
  * ฝั่งเบราว์เซอร์ของการอัปโหลด — ขอ URL จากเซิร์ฟเวอร์ แล้ว PUT ตรงไป R2
  *
  * ความล้มเหลวทุกแบบโยนเป็น `Error(<รหัส>)` รหัสมาจาก `StartUploadError`
- * หรือ `put_<status>` เมื่อ R2 ปฏิเสธ — ผู้เรียกเลือกข้อความให้ผู้ใช้จากรหัสนี้
+ * หรือ `put_<status>` เมื่อ R2 ปฏิเสธ หรือ `empty_file` — ผู้เรียกแปลงด้วย `uploadFailure()`
+ * (lib/uploads/errors.ts) แล้วเลือกข้อความให้ผู้ใช้
  *
  * ⚠️ ห้าม import "server-only" — ไฟล์นี้วิ่งในเบราว์เซอร์
  */
@@ -21,26 +24,51 @@ export async function uploadPublic(
   if (!start.ok) throw new Error(start.error);
 
   // header ต้องตรงกับที่เซ็นไว้ทุกตัว (ชนิดไฟล์ cache-control และห้ามเขียนทับ)
-  const res = await fetch(start.url, { method: "PUT", headers: start.headers, body });
-  if (!res.ok) throw new Error(`put_${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(start.url, { method: "PUT", headers: start.headers, body });
+  } catch (err) {
+    // คืนพื้นที่ที่จองไว้ทันที ไม่ต้องรอคำขอหมดอายุ (best-effort — เน็ตหลุดก็เรียกไม่ถึง)
+    void cancelUpload(start.intentId).catch(() => {});
+    throw err;
+  }
+  if (!res.ok) {
+    void cancelUpload(start.intentId).catch(() => {});
+    throw new Error(`put_${res.status}`);
+  }
   return start.intentId;
 }
+
+export type DeliveryUpload = {
+  intentId: string;
+  parts: Array<{ partNumber: number; etag: string }>;
+};
 
 /**
  * อัปไฟล์ส่งมอบเป็นชิ้น ๆ พร้อมกันทีละ 4 ชิ้น
  *
- * ชิ้นที่ล้มด้วยปัญหาเน็ต (fetch โยน) หรือ R2 ตอบ 5xx ลองใหม่ได้อีกสองครั้ง
+ * ชิ้นที่ล้มด้วยปัญหาเน็ตหรือ R2 ตอบ 5xx ลองใหม่ได้หลายครั้ง (รอเน็ตกลับมาก่อนถ้าออฟไลน์)
  * ส่วน 4xx ไม่ลองซ้ำ — URL หมดอายุหรือขนาดไม่ตรง ลองกี่ครั้งก็ได้ผลเดิม
+ *
+ * ⚠️ ชิ้นแรกที่ล้มจนหมดโควตา = ทั้งไฟล์ล้ม และต้อง **หยุดทุก worker ทันที**
+ * เดิม `Promise.all` reject แล้วแต่ worker อีกสามตัวยังดึงชิ้นถัดไปส่งต่อ (จำลองแล้ว 69 ชิ้น
+ * หลังล้ม) กินเน็ตมือถือของครีเอเตอร์ ส่งเข้า upload ที่จะไม่มีวันถูกบันทึก และเรียก
+ * `onProgress` ทับตัวเลขของการลองใหม่รอบถัดไปจนเปอร์เซ็นต์กระโดดไปมา
+ * ตอนนี้ใช้ `AbortController` ร่วมกัน: ล้มชิ้นเดียว ทุก fetch ที่ค้างถูกยกเลิก ไม่หยิบชิ้นใหม่
+ * ไม่เรียก `onProgress` อีก แล้วค่อยโยน (หลัง worker ทุกตัวหยุดจริงแล้ว)
  */
 export async function uploadDelivery(
   code: string,
   file: File,
   onProgress?: (fraction: number) => void,
-): Promise<{ intentId: string; parts: Array<{ partNumber: number; etag: string }> }> {
+): Promise<DeliveryUpload> {
+  // ไฟล์ 0 ไบต์ประกอบเป็น multipart ไม่ได้ (ต้องมีอย่างน้อยหนึ่งชิ้น) — บอกให้ตรงเรื่องแทน "ลองใหม่"
+  if (file.size === 0) throw new Error("empty_file");
+
   const start = await startDeliveryUpload({
     code,
-    // เซิร์ฟเวอร์รับชื่อไม่เกิน 200 ตัว — ตัดเองดีกว่าให้ทั้งไฟล์ถูกปฏิเสธเพราะชื่อยาว
-    filename: file.name.slice(0, 200),
+    // เซิร์ฟเวอร์รับชื่อไม่เกิน 200 ตัว — ตัดเองโดยเก็บนามสกุลไว้ ลูกค้าจะได้เปิดไฟล์ได้
+    filename: clampFilename(file.name),
     contentType: file.type,
     bytes: file.size,
   });
@@ -48,32 +76,79 @@ export async function uploadDelivery(
 
   // ต้องตัดด้วยกฎเดียวกับฝั่งเซิร์ฟเวอร์ — ขนาดของทุกชิ้นถูกเซ็นลงใน URL ของมัน
   const sizes = partPlan(file.size, start.partSize);
-  if (sizes.length !== start.urls.length) throw new Error("upload_failed");
+  if (sizes.length !== start.urls.length) {
+    void cancelUpload(start.intentId).catch(() => {});
+    throw new Error("upload_failed");
+  }
 
-  const parts: Array<{ partNumber: number; etag: string }> = [];
+  const abort = new AbortController();
+  let failure: unknown = null;
+  const parts: DeliveryUpload["parts"] = [];
   let next = 0;
   let sent = 0;
+
   const worker = async () => {
-    while (next < sizes.length) {
+    while (failure === null && next < sizes.length) {
       const i = next++;
       const from = i * start.partSize;
-      const etag = await putPart(start.urls[i], file.slice(from, from + sizes[i]));
-      parts.push({ partNumber: i + 1, etag });
-      sent += sizes[i];
-      onProgress?.(sent / file.size);
+      try {
+        const etag = await putPart(start.urls[i], file.slice(from, from + sizes[i]), abort.signal);
+        if (failure !== null) return;
+        parts.push({ partNumber: i + 1, etag });
+        sent += sizes[i];
+        onProgress?.(sent / file.size);
+      } catch (err) {
+        if (failure === null) {
+          failure = err;
+          abort.abort();
+        }
+        return;
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, sizes.length) }, worker));
+
+  if (failure !== null) {
+    // คืนพื้นที่ที่จองไว้และทิ้งชิ้นที่ส่งไปแล้ว — ไม่งั้นติดโควตาจนคำขอหมดอายุ
+    void cancelUpload(start.intentId).catch(() => {});
+    throw failure instanceof Error ? failure : new Error("upload_failed");
+  }
   return { intentId: start.intentId, parts };
 }
 
-async function putPart(url: string, chunk: Blob): Promise<string> {
+/**
+ * บันทึกไฟล์ส่งมอบที่อัปครบแล้ว — ลองซ้ำเมื่อเน็ตหลุดหรือเซิร์ฟเวอร์สะดุดชั่วคราว
+ *
+ * ไฟล์ 2 GB อัปเสร็จแล้ว อย่าให้การบันทึกที่ล้มครั้งเดียวทำให้ต้องอัปใหม่ทั้งไฟล์
+ * `registerDeliveryFile` เรียกซ้ำได้ปลอดภัย (ได้แถวเดิม ไม่ได้แถวที่สอง)
+ * ล้มจนหมดรอบ = คืนผลสุดท้ายหรือโยนต่อ แล้วยกเลิกคำขอ (คืนพื้นที่ที่จอง)
+ */
+export async function registerDelivery(up: DeliveryUpload): Promise<RegisterDeliveryResult> {
+  let last: RegisterDeliveryResult | null = null;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      last = await registerDeliveryFile(up);
+      lastErr = null;
+      if (last.ok || last.error !== "retry") return last;
+    } catch (err) {
+      // Server Action เองล้ม (เน็ตหลุดระหว่างทาง หรือ error ที่ถูกซ่อนข้อความ)
+      lastErr = err;
+    }
+    if (attempt < 4) await waitToRetry(attempt);
+  }
+  void cancelUpload(up.intentId).catch(() => {});
+  if (lastErr !== null) throw lastErr;
+  return { ok: false, error: "upload_failed" };
+}
+
+async function putPart(url: string, chunk: Blob, signal: AbortSignal): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     let res: Response | null = null;
     try {
-      res = await fetch(url, { method: "PUT", body: chunk });
+      res = await fetch(url, { method: "PUT", body: chunk, signal });
     } catch (err) {
-      if (attempt >= 3) throw err;
+      if (signal.aborted || attempt >= MAX_PART_ATTEMPTS) throw err;
     }
     if (res?.ok) {
       // อ่านได้เพราะ CORS ของถังตั้ง ExposeHeaders: ETag ไว้ — ไม่มีก็ประกอบไฟล์ไม่ได้
@@ -81,7 +156,44 @@ async function putPart(url: string, chunk: Blob): Promise<string> {
       if (!etag) throw new Error("upload_failed");
       return etag;
     }
-    if (res && (res.status < 500 || attempt >= 3)) throw new Error(`put_${res.status}`);
-    await new Promise((r) => setTimeout(r, 1000 * attempt));
+    if (res && (!isRetryableStatus(res.status) || attempt >= MAX_PART_ATTEMPTS)) {
+      throw new Error(`put_${res.status}`);
+    }
+    await waitToRetry(attempt, signal);
   }
+}
+
+/**
+ * รอก่อนลองใหม่ — ถ้าเบราว์เซอร์รู้ว่าออฟไลน์อยู่ รอจนเน็ตกลับมาก่อน (ไม่เกิน 15 นาที)
+ * ไม่งั้นทุกรอบของการลองซ้ำล้มทันทีตอนเน็ตยังไม่มา แล้วหมดโควตาในไม่กี่วินาที
+ * ⚠️ ถูกยกเลิกได้ — ชิ้นอื่นล้มแล้วต้องไม่มีใครนั่งรอต่อ
+ */
+async function waitToRetry(attempt: number, signal?: AbortSignal): Promise<void> {
+  await sleep(retryDelayMs(attempt), signal);
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    await new Promise<void>((resolve) => {
+      const done = () => {
+        window.removeEventListener("online", done);
+        signal?.removeEventListener("abort", done);
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 15 * 60 * 1000);
+      window.addEventListener("online", done);
+      signal?.addEventListener("abort", done);
+    });
+  }
+  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done);
+  });
 }

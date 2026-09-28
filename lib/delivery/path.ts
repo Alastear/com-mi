@@ -15,3 +15,16 @@ export function deliveryPrefix(code: string): string {
 export function isDeliveryPath(pathname: string, code: string): boolean {
   return pathname.startsWith(deliveryPrefix(code));
 }
+
+/**
+ * สถานะที่ครีเอเตอร์ยังเพิ่มไฟล์ส่งมอบได้ — ใช้ร่วมกันทั้งตอนขออัป ตอนบันทึก และหน้าจอ
+ *
+ * คือสถานะที่งานยัง "ทำอยู่" ปิดออเดอร์แล้วยังเพิ่มไฟล์ได้ = แก้หลักฐานที่ปิดไปแล้ว
+ * ⚠️ ต้องเช็คซ้ำตอนบันทึก ไม่ใช่แค่ตอนขอ — คำขออัปโหลดมีอายุหลายชั่วโมง
+ * ระหว่างนั้นออเดอร์ถูกยกเลิก หมดอายุ หรือปิดงานไปแล้วได้
+ */
+export const DELIVERY_UPLOAD_STATUSES = ["in_progress", "in_review", "revision_requested"] as const;
+
+export function canUploadDelivery(status: string): boolean {
+  return (DELIVERY_UPLOAD_STATUSES as readonly string[]).includes(status);
+}

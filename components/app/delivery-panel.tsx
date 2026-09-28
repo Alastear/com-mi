@@ -11,8 +11,10 @@ import { Separator } from "@/components/ui/separator";
 import { useDict } from "@/lib/i18n/client";
 import { formatBytes } from "@/lib/format";
 import { attachDelivery, deliverAndRelease, requestDeliveryDownload } from "@/lib/delivery/actions";
-import { registerDeliveryFile } from "@/lib/delivery/register";
-import { uploadDelivery } from "@/lib/uploads/client";
+import { canUploadDelivery } from "@/lib/delivery/path";
+import { fill } from "@/lib/i18n/dictionaries";
+import { registerDelivery, uploadDelivery } from "@/lib/uploads/client";
+import { stopsBatch, uploadFailure, type UploadFailure } from "@/lib/uploads/errors";
 import type { DeliveryFileRow, DeliveryRow } from "@/lib/delivery/rows";
 import { cn } from "@/lib/utils";
 
@@ -53,13 +55,17 @@ export function DeliveryPanel({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  /** ความคืบหน้าของไฟล์ที่กำลังอัป 0–100 — ไฟล์ส่งมอบใหญ่ได้ถึง 2 GB ต้องเห็นว่ายังเดินอยู่ */
-  const [progress, setProgress] = useState<number | null>(null);
+  /**
+   * ความคืบหน้า: ไฟล์ที่เท่าไรจากกี่ไฟล์ และเปอร์เซ็นต์ของไฟล์นั้น 0–100
+   * ไฟล์ส่งมอบใหญ่ได้ถึง 2 GB ต้องเห็นว่ายังเดินอยู่ — และอัปหลายไฟล์ต้องรู้ว่าถึงไฟล์ไหนแล้ว
+   * เดิมมีแค่เปอร์เซ็นต์ วิ่ง 0→100% ซ้ำห้ารอบโดยไม่รู้ว่าเป็นไฟล์ไหน
+   */
+  const [progress, setProgress] = useState<{ i: number; n: number; pct: number } | null>(null);
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const uploadable = ["in_progress", "in_review", "revision_requested"].includes(orderStatus);
+  const uploadable = canUploadDelivery(orderStatus);
 
   /**
    * สถานะที่ `deliverAndRelease()` เดินไป `delivered` ได้จริง ตามเครื่องสถานะ
@@ -69,35 +75,63 @@ export function DeliveryPanel({
    */
   const releasable = ["in_progress", "in_review"].includes(orderStatus);
 
+  function failureText(f: UploadFailure): string {
+    switch (f) {
+      case "quota":
+        return t.delivery.quotaFull;
+      case "too_large":
+        return t.delivery.tooLarge;
+      case "rate_limited":
+        return t.delivery.rateLimited;
+      case "invalid_state":
+        return t.delivery.wrongState;
+      case "empty":
+        return t.delivery.emptyFile;
+      default:
+        return t.delivery.failed;
+    }
+  }
+
+  /**
+   * อัปทีละไฟล์ และจับ error **ทีละไฟล์**
+   *
+   * เดิม error ของไฟล์เดียวหลุดออกจากลูปทั้งชุด ไฟล์ที่เหลือไม่ถูกอัปโดยไม่มีข้อความบอก
+   * (เช่นมีไฟล์ว่าง 0 ไบต์ปนมาเป็นไฟล์ที่สอง อีกสามไฟล์หายเงียบ)
+   * ตอนนี้ไฟล์ที่ล้มขึ้นชื่อของมันใน toast แล้วไปต่อไฟล์ถัดไป — ยกเว้นเหตุที่ไฟล์ถัดไป
+   * จะล้มเหมือนกันแน่ (`stopsBatch`: โควตาเต็ม ถี่เกิน สถานะงานเปลี่ยน) หยุดแล้วบอกว่าข้ามกี่ไฟล์
+   */
   async function handleFiles(files: FileList | null) {
     if (!files?.length || busy) return;
     setBusy(true);
+    const list = Array.from(files).slice(0, 20);
     try {
-      for (const file of Array.from(files).slice(0, 20)) {
-        setProgress(0);
-        const up = await uploadDelivery(code, file, (f) => setProgress(Math.floor(f * 100)));
-        const res = await registerDeliveryFile(up);
-        if (!res.ok) {
-          toast.error(res.error === "storage_quota_exceeded" ? t.delivery.quotaFull : t.delivery.failed);
-          break;
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        setProgress({ i: i + 1, n: list.length, pct: 0 });
+        let failure: UploadFailure | null = null;
+        try {
+          const up = await uploadDelivery(code, file, (f) =>
+            setProgress({ i: i + 1, n: list.length, pct: Math.floor(f * 100) }),
+          );
+          const res = await registerDelivery(up);
+          if (!res.ok) failure = uploadFailure(res.error);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "";
+          console.error("[delivery-upload]", msg);
+          failure = uploadFailure(msg);
         }
+        if (failure === null) continue;
+
+        const left = list.length - i - 1;
+        const stop = stopsBatch(failure) && left > 0;
+        toast.error(failureText(failure), {
+          description: stop ? `${file.name} · ${fill(t.delivery.skipped, { n: left })}` : file.name,
+        });
+        if (stopsBatch(failure)) break;
       }
-      router.refresh();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      console.error("[delivery-upload]", msg);
-      toast.error(
-        msg === "storage_quota_exceeded"
-          ? t.delivery.quotaFull
-          : msg === "too_large"
-            ? t.delivery.tooLarge
-            : msg === "invalid_state"
-              ? t.delivery.wrongState
-              : t.delivery.failed,
-      );
+    } finally {
       // ไฟล์ก่อนหน้าในชุดเดียวกันอาจบันทึกไปแล้ว — ต้องให้รายการบนจอตามทัน
       router.refresh();
-    } finally {
       setProgress(null);
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -256,7 +290,11 @@ export function DeliveryPanel({
                 )}
                 <span className="text-sm font-medium">
                   {busy
-                    ? `${t.delivery.uploading}${progress !== null ? ` ${progress}%` : ""}`
+                    ? progress === null
+                      ? t.delivery.uploading
+                      : progress.n > 1
+                        ? fill(t.delivery.uploadingOf, { i: progress.i, n: progress.n, p: progress.pct })
+                        : `${t.delivery.uploading} ${progress.pct}%`
                     : t.delivery.upload}
                 </span>
                 <span className="text-xs text-muted-foreground">{t.delivery.uploadHint}</span>

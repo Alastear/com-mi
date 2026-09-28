@@ -1,7 +1,13 @@
-import { and, eq, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { abortPrivateMultipart, deleteObjects, listObjects } from "@/lib/storage/r2";
-import { GRACE_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
+import {
+  GRACE_MS,
+  INTENT_EXPIRY_MARGIN_MS,
+  intentVerdict,
+  isStray,
+  referencedPaths,
+} from "./cleanup-rules";
 
 /**
  * เก็บกวาดไฟล์ที่ไม่มีใครใช้แล้ว
@@ -129,9 +135,31 @@ export async function cleanupMedia(
 
   /* ── 2. คำขออัปโหลดที่ไม่เคยได้บันทึก ─────────────────────────────── */
 
+  /**
+   * เก่าสุดก่อนเสมอ — เดิมไม่มี orderBy บัญชีเดียวที่กองคำขอไว้เยอะ ๆ เบียด 500 แถวต่อรอบ
+   * จนคำขอเก่าของคนอื่นไม่ถูกเก็บเลย ตอนนี้งานค้างเดินหน้าเสมอ (เก่าสุดถูกเก็บก่อน)
+   *
+   * ดึงสองแบบ (กติกาเต็มอยู่ที่ `intentVerdict`): พ้นเวลาผ่อนผันแล้ว หรือไม่เคยถูกใช้
+   * และหมดอายุเกินระยะเผื่อ — แบบหลังเก็บได้ตั้งแต่วันที่หมดอายุ ไม่ต้องรออีกวัน
+   */
   const intents = await db.query.uploadIntent.findMany({
-    columns: { id: true, bucket: true, key: true, uploadId: true, expiresAt: true, createdAt: true },
-    where: lt(schema.uploadIntent.createdAt, cutoff),
+    columns: {
+      id: true,
+      bucket: true,
+      key: true,
+      uploadId: true,
+      expiresAt: true,
+      createdAt: true,
+      consumedAt: true,
+    },
+    where: or(
+      lt(schema.uploadIntent.createdAt, cutoff),
+      and(
+        isNull(schema.uploadIntent.consumedAt),
+        lt(schema.uploadIntent.expiresAt, new Date(now - INTENT_EXPIRY_MARGIN_MS)),
+      ),
+    ),
+    orderBy: [asc(schema.uploadIntent.createdAt)],
     limit: 500,
   });
 

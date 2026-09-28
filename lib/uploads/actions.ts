@@ -1,11 +1,11 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { deliveryPrefix } from "@/lib/delivery/path";
+import { canUploadDelivery, deliveryPrefix } from "@/lib/delivery/path";
 import { PUBLIC_MEDIA_KINDS } from "@/lib/media/kinds";
 import { MAX_IMAGE_UPLOAD_BYTES } from "@/lib/media/prepare";
 import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/media/video";
@@ -13,17 +13,25 @@ import { isOrderCode } from "@/lib/orders/code";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import {
   MAX_DELIVERY_BYTES,
+  MAX_FILENAME_LENGTH,
   PART_SIZE,
   partPlan,
   publicKey,
   safeContentType,
 } from "@/lib/storage/keys";
-import { presignPublicPut, startPrivateMultipart } from "@/lib/storage/r2";
 import {
+  abortPrivateMultipart,
+  deleteObjects,
+  presignPublicPut,
+  startPrivateMultipart,
+} from "@/lib/storage/r2";
+import {
+  affectedRows,
   DELIVERY_INTENT_TTL_MS,
+  lockStorage,
   MEDIA_INTENT_TTL_MS,
   planLimits,
-  storageUsed,
+  withinQuotaSql,
 } from "./intent";
 
 /**
@@ -96,25 +104,27 @@ export async function startMediaUpload(
   );
   if (!gate.ok) return fail("rate_limited");
 
-  if ((await storageUsed(userId)) + bytes > limits.storage_bytes) {
-    return fail("storage_quota_exceeded");
-  }
-
   const intentId = newId("upl");
   // key สุ่มฝั่งเรา — เบราว์เซอร์ไม่มีสิทธิ์เลือก path เอง
   const key = publicKey(kind, crypto.randomUUID(), contentType);
   try {
     const signed = await presignPublicPut({ key, contentType, bytes });
-    await getDb().insert(schema.uploadIntent).values({
+    const ok = await insertIntentWithinQuota({
       id: intentId,
       userId,
       bucket: "public",
       key,
       kind,
+      orderId: null,
       contentType,
       bytes,
-      expiresAt: new Date(Date.now() + MEDIA_INTENT_TTL_MS),
+      filename: "",
+      uploadId: null,
+      ttlMs: MEDIA_INTENT_TTL_MS,
+      limit: limits.storage_bytes,
     });
+    // แพ้การแข่งกับคำขออื่นของคนเดียวกัน — URL ที่เซ็นไปแล้วไม่ได้ส่งออกไป ทิ้งได้เลย
+    if (!ok) return fail("storage_quota_exceeded");
     return { ok: true, intentId, ...signed };
   } catch (err) {
     console.error("[uploads] start media", err instanceof Error ? err.message : err);
@@ -122,11 +132,84 @@ export async function startMediaUpload(
   }
 }
 
+/**
+ * บันทึกคำขออัปโหลดเฉพาะเมื่อยังไม่เกินโควตา — **ด่านจริงของโควตาตอนขอ**
+ *
+ * เดิมอ่านยอดก่อนแล้วค่อย insert คำขอที่วิ่งพร้อมกันเห็นพื้นที่ว่างเท่ากันหมดแล้วผ่านทั้งคู่
+ * ตรงนี้ล็อกโควตาของคนนี้ก่อน (`lockStorage`) แล้วเช็คกับยอดล่าสุดในคำสั่งเดียวกับ insert
+ * ยอดรวมคำขอที่ยังเปิดอยู่ด้วย (`usedBytesSql`) — ไบต์ที่อนุมัติไปแล้วถูกจองไว้
+ *
+ * `supersede` — คำขอเก่าที่ยังเปิดอยู่ของไฟล์เดียวกัน (ออเดอร์ ชื่อ ขนาดเดียวกัน) ถูกปิดทิ้ง
+ * ในทรานแซกชันเดียวกัน: อัปล้มเพราะเน็ตหลุดหรือปิดแท็บไป คำขอเดิมยังจองพื้นที่อยู่
+ * (เรียก `cancelUpload` ไม่ทันเพราะเน็ตหลุดนั่นแหละ) ถ้าไม่ปิดทิ้ง คนแพ็กฟรี 2 GB
+ * ที่อัปไฟล์ 1.5 GB ไม่ผ่านจะกดลองใหม่ไม่ได้อีกเจ็ดชั่วโมง
+ */
+async function insertIntentWithinQuota(input: {
+  id: string;
+  userId: string;
+  bucket: "public" | "private";
+  key: string;
+  kind: string;
+  orderId: string | null;
+  contentType: string;
+  bytes: number;
+  filename: string;
+  uploadId: string | null;
+  ttlMs: number;
+  limit: number;
+  supersede?: boolean;
+}): Promise<boolean> {
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+  const insert = db.execute(sql`
+    insert into upload_intent
+      (id, user_id, bucket, key, kind, order_id, content_type, bytes, filename, upload_id, expires_at)
+    select ${input.id}::text, ${input.userId}::text, ${input.bucket}::text, ${input.key}::text,
+           ${input.kind}::text, ${input.orderId}::text, ${input.contentType}::text, ${input.bytes}::int,
+           ${input.filename}::text, ${input.uploadId}::text, ${expiresAt}::timestamptz
+    where ${withinQuotaSql(input.userId, input.bytes, input.limit)}
+    returning id
+  `);
+
+  if (input.supersede && input.orderId) {
+    const [, superseded, inserted] = await db.batch([
+      lockStorage(input.userId),
+      db
+        .update(schema.uploadIntent)
+        .set({ consumedAt: sql`now()` })
+        .where(
+          and(
+            eq(schema.uploadIntent.userId, input.userId),
+            eq(schema.uploadIntent.bucket, input.bucket),
+            eq(schema.uploadIntent.orderId, input.orderId),
+            eq(schema.uploadIntent.filename, input.filename),
+            eq(schema.uploadIntent.bytes, input.bytes),
+            isNull(schema.uploadIntent.consumedAt),
+          ),
+        )
+        .returning({ key: schema.uploadIntent.key, uploadId: schema.uploadIntent.uploadId }),
+      insert,
+    ]);
+    /**
+     * ⚠️ ต้องทิ้งชิ้นของคำขอเก่าทันที ไม่ใช่รองานเก็บกวาด — คำขอเก่าเลิกจองพื้นที่ตั้งแต่บรรทัดบน
+     * ถ้าปล่อยชิ้นค้างไว้ "ขอใหม่ไฟล์เดิม" ซ้ำ ๆ จะกลายเป็นทางอัปเกินโควตาได้ไม่จำกัดอีกทาง
+     * (ส่งทุกชิ้นแล้วขอใหม่ วนไป) ยกเลิกแล้วชิ้นที่ยังส่งอยู่จากแท็บเก่าก็ล้มไปเอง
+     */
+    for (const old of superseded) {
+      if (old.uploadId) await abortPrivateMultipart(old.key, old.uploadId).catch(() => {});
+    }
+    return affectedRows(inserted) > 0;
+  }
+
+  const [, inserted] = await db.batch([lockStorage(input.userId), insert]);
+  return affectedRows(inserted) > 0;
+}
+
 /* ── ไฟล์ส่งมอบ: ถังส่วนตัว อัปเป็นชิ้น ─────────────────────────── */
 
 const DeliverySchema = z.object({
   code: z.string().refine(isOrderCode),
-  filename: z.string().trim().max(200),
+  filename: z.string().trim().max(MAX_FILENAME_LENGTH),
   contentType: z.string().max(200),
   bytes: z.number().int().positive(),
 });
@@ -164,13 +247,10 @@ export async function startDeliveryUpload(
   if (!order || order.page.userId !== userId) return fail("forbidden");
 
   /**
-   * อัปโหลดได้เฉพาะช่วงที่ยัง "ทำงานอยู่"
-   * สถานะเหล่านี้คือทั้งหมดที่ครีเอเตอร์เดินไป `delivered` ได้จาก state machine
-   * ปิดออเดอร์แล้วยังอัปไฟล์เข้าไปได้ = เพิ่มของเข้าหลักฐานที่ปิดไปแล้ว
+   * อัปโหลดได้เฉพาะช่วงที่ยัง "ทำงานอยู่" — ปิดออเดอร์แล้วยังอัปไฟล์เข้าไปได้
+   * = เพิ่มของเข้าหลักฐานที่ปิดไปแล้ว (`registerDeliveryFile` เช็คซ้ำตอนบันทึก)
    */
-  if (!["in_progress", "in_review", "revision_requested"].includes(order.status)) {
-    return fail("invalid_state");
-  }
+  if (!canUploadDelivery(order.status)) return fail("invalid_state");
 
   const gate = await rateLimit(
     `delivery:${userId}`,
@@ -179,21 +259,21 @@ export async function startDeliveryUpload(
   );
   if (!gate.ok) return fail("rate_limited");
 
-  if ((await storageUsed(userId)) + v.bytes > planLimits(session.user.plan).storage_bytes) {
-    return fail("storage_quota_exceeded");
-  }
-
+  /**
+   * ⚠️ ไม่อ่านโควตาล่วงหน้าแบบรูป — คำขอค้างของไฟล์เดียวกันจะถูกนับทั้งที่กำลังจะถูกปิดทิ้ง
+   * ใน insert ด้านล่าง คนที่กดลองใหม่หลังอัปล้มจึงโดนบอกว่าเต็มทั้งที่ไม่เต็ม
+   * ด่านเดียวคือ insert แบบมีเงื่อนไข (แลกกับการเปิด multipart ทิ้งเปล่าเมื่อเต็มจริง)
+   */
+  const limit = planLimits(session.user.plan).storage_bytes;
   const intentId = newId("upl");
   // กฎ path อยู่ที่ lib/delivery/path.ts — ไฟล์ของออเดอร์เดียวกันอยู่ใต้ prefix เดียวกัน
   const key = `${deliveryPrefix(v.code)}${crypto.randomUUID()}`;
   const contentType = safeContentType(v.contentType);
+  let uploadId: string | null = null;
   try {
-    const { uploadId, urls } = await startPrivateMultipart({
-      key,
-      contentType,
-      sizes: partPlan(v.bytes),
-    });
-    await getDb().insert(schema.uploadIntent).values({
+    const started = await startPrivateMultipart({ key, contentType, sizes: partPlan(v.bytes) });
+    uploadId = started.uploadId;
+    const ok = await insertIntentWithinQuota({
       id: intentId,
       userId,
       bucket: "private",
@@ -204,11 +284,71 @@ export async function startDeliveryUpload(
       bytes: v.bytes,
       filename: v.filename,
       uploadId,
-      expiresAt: new Date(Date.now() + DELIVERY_INTENT_TTL_MS),
+      ttlMs: DELIVERY_INTENT_TTL_MS,
+      limit,
+      supersede: true,
     });
-    return { ok: true, intentId, partSize: PART_SIZE, urls };
+    if (!ok) {
+      await abortPrivateMultipart(key, uploadId).catch(() => {});
+      return fail("storage_quota_exceeded");
+    }
+    return { ok: true, intentId, partSize: PART_SIZE, urls: started.urls };
   } catch (err) {
     console.error("[uploads] start delivery", err instanceof Error ? err.message : err);
+    // เปิด multipart ได้แต่บันทึกคำขอไม่ได้ = ไม่มีแถวให้งานเก็บกวาดตามเจอ ต้องยกเลิกเอง
+    if (uploadId) await abortPrivateMultipart(key, uploadId).catch(() => {});
     return fail("upload_failed");
+  }
+}
+
+/**
+ * ยกเลิกคำขออัปโหลดที่อัปไม่สำเร็จ — คืนพื้นที่ที่จองไว้ทันที ไม่ต้องรอหมดอายุ
+ * และทิ้งชิ้นที่ส่งไปแล้ว (multipart ที่ค้างกินพื้นที่ถังจนกว่าจะถูกยกเลิก)
+ *
+ * เรียกแบบ best-effort จากเบราว์เซอร์ — เน็ตหลุดจนเรียกไม่ถึงก็ไม่เป็นไร
+ * คำขอหมดอายุเองและงานเก็บกวาดตามลบให้ (lib/media/cleanup.ts)
+ *
+ * ⚠️ ปิดคำขอด้วย compare-and-set ก่อนลบไฟล์เสมอ — หลังจากนี้ `registerMedia` /
+ * `registerDeliveryFile` claim คำขอนี้ไม่ได้แล้ว ไฟล์ที่กำลังจะลบจึงไม่มีทางถูกบันทึกทีหลัง
+ * และถ้ามีแถว `media` ชี้ key นี้อยู่แล้ว (บันทึกสำเร็จแต่คำตอบหาย) ห้ามแตะไฟล์
+ */
+export async function cancelUpload(intentId: string): Promise<void> {
+  const session = await getSession();
+  if (!session || typeof intentId !== "string" || intentId.length > 64) return;
+  const db = getDb();
+
+  const [row] = await db
+    .update(schema.uploadIntent)
+    .set({ consumedAt: sql`now()` })
+    .where(
+      and(
+        eq(schema.uploadIntent.id, intentId),
+        eq(schema.uploadIntent.userId, session.user.id),
+        isNull(schema.uploadIntent.consumedAt),
+      ),
+    )
+    .returning({
+      bucket: schema.uploadIntent.bucket,
+      key: schema.uploadIntent.key,
+      uploadId: schema.uploadIntent.uploadId,
+    });
+  if (!row) return;
+
+  const used = await db.query.media.findFirst({
+    columns: { id: true },
+    where: eq(schema.media.pathname, row.key),
+  });
+  if (used) return;
+
+  try {
+    if (row.bucket === "private") {
+      if (row.uploadId) await abortPrivateMultipart(row.key, row.uploadId);
+      await deleteObjects("private", [row.key]);
+    } else {
+      await deleteObjects("public", [row.key]);
+    }
+  } catch (err) {
+    // ไม่เป็นไร — คำขอถูกปิดแล้ว งานเก็บกวาดตามลบไฟล์ให้ทีหลัง
+    console.error("[uploads] cancel", err instanceof Error ? err.message : err);
   }
 }

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { GRACE_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
+import { GRACE_MS, INTENT_EXPIRY_MARGIN_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
 
 /**
  * เทสต์ของงานที่ "ลบไฟล์ทิ้ง" ต้องเน้นฝั่งที่ห้ามลบเป็นหลัก
@@ -74,36 +74,65 @@ describe("คำขออัปโหลดที่ค้าง", () => {
   const now = 1_800_000_000_000;
   const old = new Date(now - GRACE_MS - 1000);
   const expired = new Date(now - 1000);
+  const longExpired = new Date(now - INTENT_EXPIRY_MARGIN_MS - 1000);
+  const used = new Date(now - GRACE_MS);
 
   it("บันทึกสำเร็จแล้ว (มีแถวชี้ถึง key) ลบแค่แถวคำขอ ห้ามแตะไฟล์", () => {
     // ไฟล์ส่งมอบที่ลูกค้าจ่ายแล้วอยู่ในกรณีนี้ — ลบผิดคือของที่ซื้อไปแล้วหายถาวร
     const ref = new Set(["deliveries/ABCD2345/x"]);
     assert.equal(
-      intentVerdict({ key: "deliveries/ABCD2345/x", createdAt: old, expiresAt: expired }, ref, now),
+      intentVerdict({ key: "deliveries/ABCD2345/x", createdAt: old, expiresAt: expired, consumedAt: used }, ref, now),
       "drop_row",
     );
   });
 
   it("ไม่มีใครชี้ถึงและหมดอายุแล้ว ลบไฟล์ได้", () => {
     assert.equal(
-      intentVerdict({ key: "portfolio/y.webp", createdAt: old, expiresAt: expired }, new Set(), now),
+      intentVerdict({ key: "portfolio/y.webp", createdAt: old, expiresAt: expired, consumedAt: used }, new Set(), now),
       "purge",
     );
   });
 
   it("ยังไม่หมดอายุห้ามลบ แม้จะเก่ากว่าเวลาผ่อนผัน — อาจกำลังบันทึกอยู่", () => {
     const later = new Date(now + 60_000);
+    for (const consumedAt of [null, used]) {
+      assert.equal(
+        intentVerdict({ key: "portfolio/z.webp", createdAt: old, expiresAt: later, consumedAt }, new Set(), now),
+        "keep",
+      );
+    }
+  });
+
+  it("ถูกใช้แล้วแต่เพิ่งขอไป ยังไม่ลบแม้จะหมดอายุแล้ว — claim ก่อนหมดอายุแล้วยัง insert อยู่ได้", () => {
+    const fresh = new Date(now - 1000);
     assert.equal(
-      intentVerdict({ key: "portfolio/z.webp", createdAt: old, expiresAt: later }, new Set(), now),
+      intentVerdict({ key: "portfolio/w.webp", createdAt: fresh, expiresAt: expired, consumedAt: fresh }, new Set(), now),
       "keep",
     );
   });
 
-  it("เพิ่งขอไปยังไม่ลบ แม้จะหมดอายุแล้ว", () => {
-    const fresh = new Date(now - 1000);
+  it("ไม่เคยถูกใช้และหมดอายุเกินระยะเผื่อ ลบได้โดยไม่ต้องรอ 24 ชม.", () => {
+    // ไม่มีใคร claim ได้อีกแล้ว และไม่ได้จองโควตาแล้ว — ปล่อยไว้คือที่ซ่อนไฟล์นอกโควตา
+    const fresh = new Date(now - 8 * 60 * 60 * 1000);
     assert.equal(
-      intentVerdict({ key: "portfolio/w.webp", createdAt: fresh, expiresAt: expired }, new Set(), now),
+      intentVerdict({ key: "deliveries/ABCD2345/q", createdAt: fresh, expiresAt: longExpired, consumedAt: null }, new Set(), now),
+      "purge",
+    );
+  });
+
+  it("ไม่เคยถูกใช้แต่เพิ่งหมดอายุ (ยังอยู่ในระยะเผื่อนาฬิกา) ยังไม่ลบ", () => {
+    const fresh = new Date(now - 8 * 60 * 60 * 1000);
+    assert.equal(
+      intentVerdict({ key: "deliveries/ABCD2345/r", createdAt: fresh, expiresAt: expired, consumedAt: null }, new Set(), now),
       "keep",
+    );
+  });
+
+  it("ไม่เคยถูกใช้แต่มีแถวชี้ถึง key (คืนสิทธิ์หลัง insert commit ไปแล้ว) ห้ามแตะไฟล์", () => {
+    const ref = new Set(["deliveries/ABCD2345/s"]);
+    assert.equal(
+      intentVerdict({ key: "deliveries/ABCD2345/s", createdAt: old, expiresAt: longExpired, consumedAt: null }, ref, now),
+      "drop_row",
     );
   });
 });

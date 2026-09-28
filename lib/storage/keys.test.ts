@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   attachmentDisposition,
+  clampFilename,
+  MAX_FILENAME_LENGTH,
   MAX_DELIVERY_BYTES,
   PART_SIZE,
   partPlan,
@@ -84,5 +86,38 @@ describe("ชื่อไฟล์ตอนดาวน์โหลด", () => {
 
   it("ชื่อว่างใช้ค่ากลาง", () => {
     assert.match(attachmentDisposition("  "), /filename="download"/);
+  });
+});
+
+describe("ตัดชื่อไฟล์ส่งมอบ", () => {
+  it("ชื่อสั้นไม่ถูกแตะ (นอกจากตัดช่องว่างหัวท้าย)", () => {
+    assert.equal(clampFilename("  งานชิ้นที่ 1.psd "), "งานชิ้นที่ 1.psd");
+  });
+
+  it("ชื่อยาวเกินถูกตัดตรงกลาง แต่นามสกุลยังอยู่ — ไม่งั้นลูกค้าเปิดไฟล์ไม่ได้", () => {
+    const name = `${"ภาพประกอบ".repeat(40)}.clip`;
+    const out = clampFilename(name);
+    assert.ok(out.length <= MAX_FILENAME_LENGTH);
+    assert.ok(out.endsWith(".clip"));
+    assert.ok(out.startsWith("ภาพประกอบ"));
+  });
+
+  it("ยาวเท่าเพดานพอดีไม่ถูกตัด", () => {
+    const name = `${"a".repeat(MAX_FILENAME_LENGTH - 4)}.zip`;
+    assert.equal(clampFilename(name), name);
+  });
+
+  it("จุดที่อยู่ลึกในชื่อยาว ๆ ไม่ใช่นามสกุล — ตัดตรง ๆ", () => {
+    const name = `v1.${"x".repeat(300)}`;
+    assert.equal(clampFilename(name), name.slice(0, MAX_FILENAME_LENGTH));
+  });
+
+  it("ไม่ตัดกลางอีโมจิ (คู่ surrogate)", () => {
+    const name = `${"a".repeat(MAX_FILENAME_LENGTH - 5)}😀😀😀.psd`;
+    const out = clampFilename(name);
+    assert.ok(out.length <= MAX_FILENAME_LENGTH);
+    assert.ok(out.endsWith(".psd"));
+    // ไม่มีครึ่งตัวของคู่ surrogate หลงเหลือ — encodeURIComponent โยนถ้ามี
+    assert.doesNotThrow(() => encodeURIComponent(out));
   });
 });

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
@@ -9,7 +9,13 @@ import { requireCreator } from "@/lib/auth-guard";
 import { parseEmbed, serializeEmbed } from "@/lib/media/embed";
 import { isPublicKind } from "@/lib/media/kinds";
 import { deleteObjects, headObject, publicUrl } from "@/lib/storage/r2";
-import { claimIntent, planLimits, storageUsed } from "@/lib/uploads/intent";
+import {
+  affectedRows,
+  claimIntent,
+  lockStorage,
+  planLimits,
+  withinQuotaSql,
+} from "@/lib/uploads/intent";
 
 const IntentId = z.string().min(1).max(64);
 
@@ -26,6 +32,10 @@ const RegisterSchema = z.object({
 
 export type RegisterMediaInput = z.infer<typeof RegisterSchema>;
 
+export type RegisterMediaResult =
+  | { ok: true; id: string }
+  | { ok: false; error: "storage_quota_exceeded" };
+
 /**
  * บันทึกไฟล์ที่เพิ่งอัปโหลดลงตาราง media
  *
@@ -38,8 +48,12 @@ export type RegisterMediaInput = z.infer<typeof RegisterSchema>;
  *
  * ขนาดตรวจกับไฟล์จริงในถังอีกรอบ — URL ที่เซ็นบังคับขนาดไว้แล้ว ถ้าไม่ตรงแปลว่า
  * ไฟล์ไม่เคยขึ้นไปถึง ไม่ใช่ว่าขึ้นไปผิดขนาด
+ *
+ * ⚠️ โควตาเต็ม **คืนค่า** ไม่ใช่โยน — Next ตัดข้อความของ error ที่โยนจาก Server Action
+ * ทิ้งใน production ฝั่ง client จึงไม่มีทางรู้ว่าเป็นเรื่องโควตา แล้วบอกแค่ "ลองใหม่"
+ * error อื่นที่ยังโยนอยู่ (not_found, not_uploaded) เป็นเรื่องที่ผู้ใช้แก้เองไม่ได้ ข้อความกลางพอ
  */
-export async function registerMedia(input: RegisterMediaInput): Promise<{ id: string }> {
+export async function registerMedia(input: RegisterMediaInput): Promise<RegisterMediaResult> {
   const { user } = await requireCreator();
   const v = RegisterSchema.parse(input);
 
@@ -60,35 +74,34 @@ export async function registerMedia(input: RegisterMediaInput): Promise<{ id: st
   if (poster && (!posterMeta || posterMeta.bytes !== poster.bytes)) throw new Error("not_uploaded");
 
   /**
-   * ตรวจโควตาซ้ำ — ตอนขอ URL ตรวจไปแล้ว แต่ขอพร้อมกันหลายไฟล์ ทุกคำขอเห็นพื้นที่
-   * ที่ยังไม่ถูกกินเท่ากันหมด ไฟล์ที่ทำให้เกินต้องถูกลบ ไม่ใช่ถูกบันทึก
+   * ตรวจโควตาซ้ำใต้ lock ในคำสั่งเดียวกับ insert — ตอนขอ URL จองพื้นที่ไว้แล้ว
+   * แต่คำขอถูกใช้ไปตั้งแต่ `claimIntent` (เลิกจอง) ระหว่างนั้นคำขออื่นของคนเดียวกันแทรกได้
+   * เดิมอ่านยอดแล้วค่อย insert สองแท็บบันทึกพร้อมกันผ่านทั้งคู่ได้
    */
-  if ((await storageUsed(user.id)) + file.bytes > planLimits(user.plan).storage_bytes) {
-    await deleteObjects("public", poster ? [file.key, poster.key] : [file.key]);
-    throw new Error("storage_quota_exceeded");
-  }
-
   const id = newId("med");
-  await getDb().insert(schema.media).values({
-    id,
-    ownerUserId: user.id,
-    pathname: file.key,
-    url: publicUrl(file.key),
-    access: "public",
-    kind: file.kind,
-    contentType: file.contentType,
-    bytes: file.bytes,
-    width: v.width,
-    height: v.height,
-    thumbhash: v.thumbhash,
-    posterUrl: poster ? publicUrl(poster.key) : null,
-    posterPathname: poster?.key ?? null,
-    durationSeconds: v.durationSeconds ?? null,
-    // ยัง orphan จนกว่าจะถูกผูกกับ record จริง — cron เก็บกวาดตัวที่ค้างเกิน 24 ชม.
-    status: "orphan",
-  });
+  const posterUrl = poster ? publicUrl(poster.key) : null;
+  const [, inserted] = await getDb().batch([
+    lockStorage(user.id),
+    getDb().execute(sql`
+      insert into media
+        (id, owner_user_id, pathname, url, access, kind, content_type, bytes, width, height,
+         thumbhash, poster_url, poster_pathname, duration_seconds, status)
+      select ${id}::text, ${user.id}::text, ${file.key}::text, ${publicUrl(file.key)}::text,
+             'public'::text, ${file.kind}::text, ${file.contentType}::text, ${file.bytes}::int,
+             ${v.width}::int, ${v.height}::int, ${v.thumbhash}::text, ${posterUrl}::text,
+             ${poster?.key ?? null}::text, ${v.durationSeconds ?? null}::int, 'orphan'::text
+      where ${withinQuotaSql(user.id, file.bytes, planLimits(user.plan).storage_bytes)}
+      returning id
+    `),
+  ]);
+  // ยัง orphan จนกว่าจะถูกผูกกับ record จริง — cron เก็บกวาดตัวที่ค้างเกิน 24 ชม.
 
-  return { id };
+  if (affectedRows(inserted) === 0) {
+    // ไฟล์ที่ทำให้เกินต้องถูกลบ ไม่ใช่ถูกบันทึก — ไม่มีแถวไหนชี้ถึง (key สุ่มใหม่ต่อคำขอ)
+    await deleteObjects("public", poster ? [file.key, poster.key] : [file.key]).catch(() => {});
+    return { ok: false, error: "storage_quota_exceeded" };
+  }
+  return { ok: true, id };
 }
 
 /** ผูกรูปเป็นแบนเนอร์หรืออวาตาร์ของหน้าร้าน */

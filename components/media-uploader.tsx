@@ -11,6 +11,7 @@ import {
 } from "@/lib/media/prepare";
 import { registerMedia } from "@/lib/media/actions";
 import { uploadPublic } from "@/lib/uploads/client";
+import { uploadFailure } from "@/lib/uploads/errors";
 import { ImageCropper, type CropTarget } from "@/components/image-cropper";
 import type { PublicMediaKind } from "@/lib/media/kinds";
 import { formatBytes } from "@/lib/format";
@@ -48,6 +49,26 @@ export function MediaUploader({
   const [pendingCrop, setPendingCrop] = useState<File | null>(null);
   const [, startTransition] = useTransition();
 
+  /**
+   * ข้อความเดียวกันทั้งทางปกติและทางครอป — เดิมทางครอป (แบนเนอร์ รูปโปรไฟล์) บอก
+   * "ลองใหม่" ทุกกรณี คนที่พื้นที่เต็มจึงกดลองซ้ำไปเรื่อย ๆ โดยไม่รู้ว่าเต็ม
+   */
+  function showFailure(err: unknown) {
+    const msg = err instanceof Error ? err.message : "";
+    // toast บอกผู้ใช้แบบสั้น ส่วนสาเหตุจริงต้องอ่านออกตอน debug
+    console.error("[upload]", msg);
+    const f = uploadFailure(msg);
+    toast.error(
+      f === "quota"
+        ? t.media.quotaFull
+        : f === "too_large"
+          ? t.media.tooBig
+          : f === "rate_limited"
+            ? t.media.rateLimited
+            : t.media.failed,
+    );
+  }
+
   async function handleFiles(files: FileList | null) {
     if (!files?.length || busy) return;
     setBusy(true);
@@ -73,24 +94,21 @@ export function MediaUploader({
 
         const intentId = await uploadPublic(kind, prepared.blob, "image/webp");
 
-        const { id } = await registerMedia({
+        const res = await registerMedia({
           intentId,
           width: prepared.width,
           height: prepared.height,
           thumbhash: prepared.thumbhash,
         });
+        if (!res.ok) throw new Error(res.error);
 
+        const { id } = res;
         startTransition(() => {
           void onUploaded(id);
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      // toast บอกผู้ใช้แบบสั้น ส่วนสาเหตุจริงต้องอ่านออกตอน debug
-      console.error("[upload]", msg);
-      toast.error(
-        msg.includes("storage_quota_exceeded") ? t.media.quotaFull : t.media.failed,
-      );
+      showFailure(err);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -104,7 +122,7 @@ export function MediaUploader({
     try {
       const intentId = await uploadPublic(kind, blob, "image/webp");
       const outW = crop?.outputWidth ?? 0;
-      const { id } = await registerMedia({
+      const res = await registerMedia({
         intentId,
         width: outW,
         height: crop ? Math.round(outW / crop.ratio) : 0,
@@ -112,12 +130,13 @@ export function MediaUploader({
         // ที่แบนเนอร์กับรูปโปรไฟล์แทบไม่ได้ประโยชน์ เพราะโหลดเร็วอยู่แล้วและมี gradient รองอยู่
         thumbhash: "",
       });
+      if (!res.ok) throw new Error(res.error);
+      const { id } = res;
       startTransition(() => {
         void onUploaded(id);
       });
     } catch (err) {
-      console.error("[upload]", err);
-      toast.error(t.media.failed);
+      showFailure(err);
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";

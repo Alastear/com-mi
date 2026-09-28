@@ -14,7 +14,7 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { attachmentDisposition, publicUrlFor } from "./keys";
+import { attachmentDisposition, PART_URL_TTL_SECONDS, publicUrlFor } from "./keys";
 
 /**
  * ทางเดียวที่ได้รับอนุญาตให้คุยกับ R2
@@ -143,7 +143,7 @@ export async function startPrivateMultipart(input: {
           PartNumber: i + 1,
           ContentLength: size,
         }),
-        { expiresIn: 6 * 60 * 60, signableHeaders: new Set(["content-length"]) },
+        { expiresIn: PART_URL_TTL_SECONDS, signableHeaders: new Set(["content-length"]) },
       ),
     ),
   );
@@ -248,6 +248,17 @@ export async function presignPrivateGet(input: {
     }),
     { expiresIn: input.expiresInSeconds },
   );
+}
+
+/**
+ * R2 ปฏิเสธเพราะคำขอผิดเอง (4xx) — ลองซ้ำกี่ครั้งก็ได้ผลเดิม
+ * เช่น ETag ไม่ตรง ชิ้นขาด หรือ upload ถูกยกเลิกไปแล้ว
+ * ที่เหลือ (5xx, เน็ต, timeout) ถือว่าชั่วคราว ลองใหม่ได้
+ */
+export function isClientError(err: unknown): boolean {
+  if (!(err instanceof S3ServiceException)) return false;
+  const status = err.$metadata.httpStatusCode ?? 0;
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
 function isNotFound(err: unknown): boolean {

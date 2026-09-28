@@ -44,21 +44,42 @@ export function referencedPaths(
 }
 
 /**
+ * คำขอที่ไม่เคยถูกใช้ ต้องหมดอายุไปนานเท่านี้ก่อนจะถือว่า "ไม่มีใครบันทึกได้อีกแล้ว"
+ *
+ * กันนาฬิกาของเครื่องที่รัน cron เดินเร็วกว่า Postgres — `claimIntent` ตัดสินหมดอายุด้วย
+ * `now()` ของ DB ถ้าเราเห็นว่าหมดอายุก่อน DB เห็น อาจลบไฟล์ที่กำลังถูกบันทึกอยู่พอดี
+ */
+export const INTENT_EXPIRY_MARGIN_MS = 10 * 60 * 1000;
+
+/**
  * คำขออัปโหลดหนึ่งแถวควรทำอะไร — ฟังก์ชันล้วน เทสต์ได้โดยไม่ต้องต่อเน็ต
  *
  *   keep     — ยังไม่หมดอายุหรือยังไม่พ้นเวลาผ่อนผัน อาจกำลังอัปหรือกำลังบันทึกอยู่
  *   drop_row — มีแถว `media` ชี้ถึง key แล้ว (บันทึกสำเร็จ) ลบแค่แถวคำขอ ห้ามแตะไฟล์
  *   purge    — ไม่มีใครชี้ถึงและบันทึกไม่ได้อีกแล้ว ลบไฟล์ (และ multipart ที่ค้าง) กับแถวคำขอ
  *
+ * สองกรณีของ "บันทึกไม่ได้อีกแล้ว":
+ *   ไม่เคยถูกใช้ (`consumedAt` ว่าง) และหมดอายุเกิน `INTENT_EXPIRY_MARGIN_MS`
+ *     — `claimIntent` ต้องการคำขอที่ยังไม่หมดอายุ จึงไม่มีใครเริ่มบันทึกได้อีก
+ *     ไม่ต้องรอเวลาผ่อนผัน 24 ชม.: คำขอเลิกจองโควตาตั้งแต่หมดอายุ ยิ่งปล่อยชิ้นค้างไว้นาน
+ *     ยิ่งเป็นช่องให้กองไฟล์ไว้ในถังโดยไม่ติดโควตา
+ *   ถูกใช้แล้ว — ต้องพ้นเวลาผ่อนผันด้วย ถูก claim ก่อนหมดอายุไม่กี่วินาทีก็ยังประกอบไฟล์และ
+ *     insert อยู่ได้หลังหมดอายุ ลบตอนนั้นคือแถว `media` ชี้ไฟล์ที่ไม่มีอยู่
+ *
  * เขียนแบบ "ต้องจริงทั้งหมดถึงจะลบ" เหมือน `isStray` — กรณีที่ไม่ได้คิดไว้ตกไปฝั่งไม่ลบ
+ * และทุกทางที่ลบต้องผ่าน `referenced` ก่อนเสมอ
  */
 export function intentVerdict(
-  intent: { key: string; createdAt: Date; expiresAt: Date },
+  intent: { key: string; createdAt: Date; expiresAt: Date; consumedAt: Date | null },
   referenced: ReadonlySet<string>,
   now: number,
   graceMs: number = GRACE_MS,
 ): "keep" | "drop_row" | "purge" {
-  if (now - intent.createdAt.getTime() <= graceMs) return "keep";
   if (intent.expiresAt.getTime() >= now) return "keep";
+  if (intent.consumedAt === null) {
+    if (now - intent.expiresAt.getTime() <= INTENT_EXPIRY_MARGIN_MS) return "keep";
+  } else if (now - intent.createdAt.getTime() <= graceMs) {
+    return "keep";
+  }
   return referenced.has(intent.key) ? "drop_row" : "purge";
 }

@@ -12,6 +12,7 @@ import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_SECONDS, prepareVideo } from "@/lib/med
 import { parseEmbed } from "@/lib/media/embed";
 import { addPortfolioEmbed, addPortfolioItem, registerMedia } from "@/lib/media/actions";
 import { uploadPublic } from "@/lib/uploads/client";
+import { stopsBatch, uploadFailure } from "@/lib/uploads/errors";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -46,11 +47,18 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
         } catch (err) {
           const msg = err instanceof Error ? err.message : "";
           console.error("[upload]", msg);
-          if (msg === "storage_quota_exceeded") {
-            toast.error(t.media.quotaFull);
-            break;
-          }
-          toast.error(msg === "too_large" ? t.media.tooBig : t.media.failed);
+          const f = uploadFailure(msg);
+          toast.error(
+            f === "quota"
+              ? t.media.quotaFull
+              : f === "too_large"
+                ? t.media.tooBig
+                : f === "rate_limited"
+                  ? t.media.rateLimited
+                  : t.media.failed,
+          );
+          // เต็มหรือถี่เกิน — ไฟล์ที่เหลือล้มเหมือนกันหมด ไม่ต้องขึ้น toast ซ้ำอีกสิบไฟล์
+          if (stopsBatch(f)) break;
         }
       }
       onDone();
@@ -67,13 +75,15 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
     }
     const prepared = await prepareImage(file);
     const intentId = await uploadPublic("portfolio", prepared.blob, "image/webp");
-    const { id } = await registerMedia({
+    const res = await registerMedia({
       intentId,
       width: prepared.width,
       height: prepared.height,
       thumbhash: prepared.thumbhash,
     });
-    await addPortfolioItem(id);
+    // โควตาเต็มมาเป็นค่าที่คืน ไม่ใช่ error ที่โยน (ข้อความของ error ถูกซ่อนใน production)
+    if (!res.ok) throw new Error(res.error);
+    await addPortfolioItem(res.id);
   }
 
   async function uploadVideo(file: File) {
@@ -94,7 +104,7 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
     const posterIntentId = await uploadPublic("portfolio", v.poster, "image/webp");
     const intentId = await uploadPublic("portfolio", v.file, v.file.type);
 
-    const { id } = await registerMedia({
+    const res = await registerMedia({
       intentId,
       width: v.width,
       height: v.height,
@@ -102,7 +112,8 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
       posterIntentId,
       durationSeconds: v.durationSeconds,
     });
-    await addPortfolioItem(id);
+    if (!res.ok) throw new Error(res.error);
+    await addPortfolioItem(res.id);
   }
 
   async function addEmbed() {

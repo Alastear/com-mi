@@ -1,19 +1,31 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
+import { canUploadDelivery, DELIVERY_UPLOAD_STATUSES } from "@/lib/delivery/path";
+import { lockOrder } from "@/lib/orders/lock";
 import { isOrderCode } from "@/lib/orders/code";
-import { partPlan } from "@/lib/storage/keys";
+import { MAX_FILENAME_LENGTH, partPlan } from "@/lib/storage/keys";
 import {
   abortPrivateMultipart,
   completePrivateMultipart,
   deleteObjects,
   headObject,
+  isClientError,
 } from "@/lib/storage/r2";
-import { claimIntent, planLimits, storageUsed } from "@/lib/uploads/intent";
+import {
+  affectedRows,
+  claimIntent,
+  lockStorage,
+  planLimits,
+  registeredMediaId,
+  releaseIntent,
+  withinQuotaSql,
+  type UploadIntent,
+} from "@/lib/uploads/intent";
 
 /**
  * บันทึกไฟล์ส่งมอบที่เพิ่งอัปโหลดลงตาราง media
@@ -24,6 +36,11 @@ import { claimIntent, planLimits, storageUsed } from "@/lib/uploads/intent";
  *
  * ออเดอร์ ชื่อไฟล์ ขนาด และ key มาจากคำขออัปโหลดที่ `startDeliveryUpload` บันทึกไว้
  * client ส่งมาแค่ id ของคำขอกับ ETag ของแต่ละชิ้น ซึ่ง R2 ต้องใช้ประกอบไฟล์
+ *
+ * เรียกซ้ำได้อย่างปลอดภัย (lib/uploads/client.ts ลองซ้ำเมื่อเน็ตหลุด):
+ *   - รอบก่อนสำเร็จแต่คำตอบหาย → ได้ `mediaId` เดิมคืน ไม่ได้แถวที่สอง
+ *   - รอบก่อนล้มเพราะเรื่องชั่วคราว → คำขอถูกคืนสิทธิ์ (`releaseIntent`) บันทึกต่อได้
+ *     โดยไม่ต้องอัปไฟล์ 2 GB ใหม่ — ชิ้นที่ส่งไปแล้วยังอยู่ ไม่ถูกยกเลิกทิ้ง
  */
 
 const Schema = z.object({
@@ -36,7 +53,11 @@ const Schema = z.object({
 
 export type RegisterDeliveryResult =
   | { ok: true; mediaId: string }
-  | { ok: false; error: "forbidden" | "invalid" | "storage_quota_exceeded" | "upload_failed" };
+  | {
+      ok: false;
+      /** `retry` = ล้มเพราะเรื่องชั่วคราว คำขอยังใช้ได้ เรียกซ้ำด้วยค่าเดิมได้เลย */
+      error: "forbidden" | "invalid" | "invalid_state" | "storage_quota_exceeded" | "upload_failed" | "retry";
+    };
 
 export async function registerDeliveryFile(
   input: z.input<typeof Schema>,
@@ -50,18 +71,78 @@ export async function registerDeliveryFile(
   const userId = session.user.id;
 
   const intent = await claimIntent(v.intentId, userId, "private");
-  if (!intent || intent.kind !== "final" || !intent.orderId || !intent.uploadId) {
+  if (!intent) {
+    // ถูกใช้ไปแล้ว — ถ้าเป็นเพราะรอบก่อนบันทึกสำเร็จ ตอบแถวเดิม
+    const done = await registeredMediaId(v.intentId, userId);
+    return done ? { ok: true, mediaId: done } : { ok: false, error: "forbidden" };
+  }
+  if (intent.kind !== "final" || !intent.orderId || !intent.uploadId) {
     return { ok: false, error: "forbidden" };
   }
-  const { key, uploadId } = intent;
 
+  try {
+    return await registerClaimed(intent as ClaimedIntent, v.parts, userId, session.user.plan);
+  } catch (err) {
+    /**
+     * ล้มกลางทางด้วยเหตุที่ไม่ได้ตั้งใจ (Neon/R2 สะดุด เน็ตของ function หลุด) — คืนสิทธิ์คำขอ
+     * ให้เบราว์เซอร์ลองใหม่ได้ ถ้าคืนไม่ได้ (DB ยังล่ม) คำขอค้างเป็นใช้แล้ว ต้องอัปใหม่
+     * ปลอดภัยแม้ insert อาจ commit ไปแล้ว — ดู `releaseIntent`
+     */
+    console.error("[delivery-register]", err instanceof Error ? err.message : err);
+    await releaseIntent(intent.id, userId).catch(() => {});
+    return { ok: false, error: "retry" };
+  }
+}
+
+type ClaimedIntent = UploadIntent & { orderId: string; uploadId: string };
+
+async function registerClaimed(
+  intent: ClaimedIntent,
+  rawParts: Array<{ partNumber: number; etag: string }>,
+  userId: string,
+  plan: string | null | undefined,
+): Promise<RegisterDeliveryResult> {
+  const { key, uploadId } = intent;
   const db = getDb();
+
+  /**
+   * รอบก่อน insert commit ไปแล้วแต่คำตอบหาย (แล้วคำขอถูกคืนสิทธิ์) — ตอบแถวเดิมก่อนทำอะไรทั้งนั้น
+   * ⚠️ ต้องมาก่อนทุกทางที่ทิ้งไฟล์ด้านล่าง ไม่งั้นลองซ้ำตอนออเดอร์เพิ่งปิดจะลบไฟล์ที่บันทึกไปแล้ว
+   * หลังบรรทัดนี้ไม่มีใครสร้างแถวให้ key นี้ได้อีก นอกจากการเรียกครั้งนี้ (เราถือคำขอไว้)
+   */
+  const existing = await db.query.media.findFirst({
+    columns: { id: true, ownerUserId: true },
+    where: eq(schema.media.pathname, key),
+  });
+  if (existing) {
+    return existing.ownerUserId === userId ? { ok: true, mediaId: existing.id } : { ok: false, error: "forbidden" };
+  }
+
+  /** ทิ้งทั้ง multipart ที่ค้างและไฟล์ที่อาจประกอบเสร็จแล้ว (กรณีลองซ้ำหลังประกอบสำเร็จ) */
+  const discard = async () => {
+    await abortPrivateMultipart(key, uploadId).catch(() => {});
+    await deleteObjects("private", [key]).catch(() => {});
+  };
+
   const order = await db.query.order.findFirst({
     where: eq(schema.order.id, intent.orderId),
-    columns: { id: true },
+    columns: { id: true, status: true },
     with: { page: { columns: { userId: true } } },
   });
-  if (!order || order.page.userId !== userId) return { ok: false, error: "forbidden" };
+  if (!order || order.page.userId !== userId) {
+    await discard();
+    return { ok: false, error: "forbidden" };
+  }
+  /**
+   * ⚠️ เช็คสถานะซ้ำตอนบันทึก — คำขอมีอายุหลายชั่วโมง ระหว่างนั้นลูกค้าอาจกดรับงาน
+   * ออเดอร์ถูกยกเลิก หรือหมดอายุไปแล้ว ไฟล์ที่ขึ้นมาหลังปิดคือการแก้หลักฐานที่ปิดไปแล้ว
+   * (และเป็นไฟล์ที่ไม่มีทางถูกส่งมอบหรือถูกลบ กินโควตาตลอดไป)
+   * นี่คือคำตอบให้ตรงเรื่อง ด่านจริงอยู่ใน insert ใต้ lock ด้านล่าง
+   */
+  if (!canUploadDelivery(order.status)) {
+    await discard();
+    return { ok: false, error: "invalid_state" };
+  }
 
   /**
    * ต้องครบทุกชิ้นตามที่วางแผนไว้ตอนขอ เรียงเลข 1..n ไม่ขาดไม่ซ้ำ
@@ -69,18 +150,31 @@ export async function registerDeliveryFile(
    * จะได้ไฟล์ที่ขาดท่อนแต่บันทึกผ่าน — ลูกค้าจ่ายเงินแล้วได้ไฟล์เสีย
    */
   const expected = partPlan(intent.bytes).length;
-  const parts = [...v.parts].sort((a, b) => a.partNumber - b.partNumber);
+  const parts = [...rawParts].sort((a, b) => a.partNumber - b.partNumber);
   if (parts.length !== expected || parts.some((p, i) => p.partNumber !== i + 1)) {
-    await abortPrivateMultipart(key, uploadId).catch(() => {});
+    await discard();
     return { ok: false, error: "invalid" };
   }
 
   try {
     await completePrivateMultipart({ key, uploadId, parts });
   } catch (err) {
-    console.error("[delivery-register] complete", err instanceof Error ? err.message : err);
-    await abortPrivateMultipart(key, uploadId).catch(() => {});
-    return { ok: false, error: "upload_failed" };
+    /**
+     * ประกอบไฟล์ไม่ผ่าน — แยกให้ออกก่อนว่าไฟล์ขึ้นแล้วหรือยัง
+     * รอบก่อนประกอบสำเร็จแต่ล้มทีหลัง (หรือคำตอบของ R2 หาย) ลองซ้ำจะได้ NoSuchUpload
+     * ทั้งที่ไฟล์อยู่ครบในถังแล้ว — กรณีนั้นเดินต่อได้เลย
+     */
+    const meta = await headObject("private", key);
+    if (!meta || meta.bytes !== intent.bytes) {
+      // 4xx = ETag ไม่ตรง ชิ้นขาด หรือ upload ถูกยกเลิกไปแล้ว ลองกี่ครั้งก็ไม่ผ่าน
+      if (isClientError(err)) {
+        console.error("[delivery-register] complete", err instanceof Error ? err.message : err);
+        await discard();
+        return { ok: false, error: "upload_failed" };
+      }
+      // 5xx / เน็ต — ห้ามยกเลิก ชิ้นทั้งหมดยังใช้ได้ ให้ด้านนอกคืนสิทธิ์แล้วลองใหม่
+      throw err;
+    }
   }
 
   // ขนาดทุกชิ้นถูกเซ็นไว้ ไฟล์ที่ประกอบแล้วต้องเท่าที่ขอไว้เป๊ะ — ไม่เท่าคือมีอะไรผิดปกติ
@@ -91,35 +185,61 @@ export async function registerDeliveryFile(
   }
 
   /**
-   * ตรวจโควตาซ้ำ — ตอนขอตรวจไปแล้ว แต่อัปหลายไฟล์พร้อมกันทุกคำขอเห็นพื้นที่ว่างเท่ากัน
-   * ไบต์ถูกเขียนไปแล้ว ต้องเก็บกวาดเอง ไม่งั้นเหลือไฟล์ค้างที่ไม่มีแถวชี้ถึง
+   * insert แบบมีเงื่อนไข ใต้ lock ของออเดอร์และของโควตา — ด่านจริงของทั้งสามเรื่อง
+   *
+   *   ออเดอร์ยังอยู่ในสถานะที่รับไฟล์ — เช็คด้านบนเป็นแค่คำตอบให้ตรงเรื่อง ออเดอร์อาจถูกปิด
+   *     ระหว่างที่ R2 ประกอบไฟล์อยู่ ใต้ `lockOrder` การปิดต้องรอจนเราจบ
+   *   ไม่เกินโควตา — เดิมอ่านยอดแล้วค่อย insert สองแท็บ (หรือสคริปต์) บันทึกพร้อมกัน
+   *     ต่างเห็นยอดเดิมและผ่านทั้งหมด ได้ N เท่าของโควตาถาวร
+   *   ยังไม่มีแถวไหนชี้ key นี้ — การลองซ้ำหลังคำตอบหายต้องไม่ได้แถวที่สอง
+   *
+   * ลำดับล็อก: ออเดอร์ก่อน แล้วค่อยโควตา (กติกาใน lib/orders/lock.ts)
+   *
+   * `url` ว่าง — ถังส่วนตัวไม่มีโดเมน ทุกการโหลดต้องผ่าน URL ที่เซ็นทีละครั้ง
+   * (requestDeliveryDownload) ค่าว่างกันไม่ให้ใครเผลอเอาไปใส่ `<a href>` แล้วคิดว่าใช้ได้
+   * ไม่คำนวณ thumbhash ให้ไฟล์ส่งมอบ — ภาพย่อของงานที่ยังไม่จ่ายก็คือการรั่ว
    */
-  if ((await storageUsed(userId)) + intent.bytes > planLimits(session.user.plan).storage_bytes) {
-    await deleteObjects("private", [key]);
-    return { ok: false, error: "storage_quota_exceeded" };
-  }
-
   const mediaId = newId("med");
-  await db.insert(schema.media).values({
-    id: mediaId,
-    ownerUserId: userId,
-    orderId: order.id,
-    pathname: key,
-    /**
-     * ไม่มี URL ที่เปิดได้ — ถังส่วนตัวไม่มีโดเมน ทุกการโหลดต้องผ่าน URL ที่เซ็นทีละครั้ง
-     * (requestDeliveryDownload) ค่าว่างกันไม่ให้ใครเผลอเอาไปใส่ `<a href>` แล้วคิดว่าใช้ได้
-     */
-    url: "",
-    access: "private",
-    kind: "final",
-    contentType: intent.contentType,
-    bytes: intent.bytes,
-    filename: intent.filename.slice(0, 200),
-    // ไม่คำนวณ thumbhash ให้ไฟล์ส่งมอบ — ภาพย่อของงานที่ยังไม่จ่ายก็คือการรั่ว
-    status: "orphan",
-  });
+  const statuses = sql.join(
+    DELIVERY_UPLOAD_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  const [, , inserted] = await db.batch([
+    lockOrder(intent.orderId),
+    lockStorage(userId),
+    db.execute(sql`
+      insert into media
+        (id, owner_user_id, order_id, pathname, url, access, kind, content_type, bytes, filename, status)
+      select ${mediaId}::text, ${userId}::text, ${intent.orderId}::text, ${key}::text,
+             ''::text, 'private'::text, 'final'::text, ${intent.contentType}::text,
+             ${intent.bytes}::int, ${intent.filename.slice(0, MAX_FILENAME_LENGTH)}::text, 'orphan'::text
+      where exists (select 1 from "order" o where o.id = ${intent.orderId} and o.status in (${statuses}))
+        and not exists (select 1 from media m where m.pathname = ${key})
+        and ${withinQuotaSql(userId, intent.bytes, planLimits(plan).storage_bytes)}
+      returning id
+    `),
+  ]);
+  if (affectedRows(inserted) > 0) return { ok: true, mediaId };
 
-  return { ok: true, mediaId };
+  /**
+   * ไม่ผ่าน — ดูของจริงอีกรอบแล้วตอบให้ตรงเรื่อง
+   * ⚠️ เช็คแถวที่ชี้ key นี้ซ้ำก่อนลบไฟล์ — ไม่ควรมีได้ (เราถือคำขอไว้) แต่ถ้ามี
+   * การลบคือไฟล์ส่งมอบที่บันทึกแล้วหายถาวร ถูกกว่ามากที่จะเช็คอีกหนึ่ง query
+   */
+  const raced = await db.query.media.findFirst({
+    columns: { id: true, ownerUserId: true },
+    where: eq(schema.media.pathname, key),
+  });
+  if (raced) {
+    return raced.ownerUserId === userId ? { ok: true, mediaId: raced.id } : { ok: false, error: "forbidden" };
+  }
+  // ไบต์ถูกเขียนไปแล้ว ต้องเก็บกวาดเอง ไม่งั้นเหลือไฟล์ค้างที่ไม่มีแถวชี้ถึง
+  await deleteObjects("private", [key]).catch(() => {});
+  const fresh = await db.query.order.findFirst({
+    where: eq(schema.order.id, intent.orderId),
+    columns: { status: true },
+  });
+  return { ok: false, error: fresh && canUploadDelivery(fresh.status) ? "storage_quota_exceeded" : "invalid_state" };
 }
 
 /** ไฟล์ส่งมอบของออเดอร์นี้ที่ครีเอเตอร์อัปไว้แล้ว (ยังไม่ผูกกับ delivery) */
