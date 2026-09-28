@@ -72,7 +72,7 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 - [x] `/shop` แก้ชื่อ/คำโปรย/about/สถานะ/TOS + ปุ่มเผยแพร่
 - [x] `<ArtImage>` รองรับทั้งรูปจริงและ gradient placeholder · OG image อ่านจาก DB
 - [x] `<MediaUploader>`: client upload ไป Blob + ย่อ/WebP ในเบราว์เซอร์ + thumbhash
-      Blob store `blob-com-mi` (public, sin1) — ตรวจด้วย `pnpm blob:check`
+      (เดิม Blob store `blob-com-mi` — ย้ายไป Cloudflare R2 แล้ว 2026-09 ตรวจด้วย `pnpm r2:check`)
 - [x] Service editor (CRUD): `/services` + `/services/[id]` พร้อม tier/option, soft delete, slug ภาษาไทย
 - [x] Portfolio manager อ่าน/เขียนจาก DB จริง
 - [ ] `use cache` + `cacheTag` + `updateTag` ตอน save (รอเปิด `cacheComponents`)

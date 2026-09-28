@@ -7,6 +7,8 @@
  * ข้อที่พังเงียบถ้าตั้งผิด (เห็นจากหน้าจอไม่ได้เลย):
  *   - กุญแจถังสาธารณะเปิดถังส่วนตัวได้ → ไฟล์ส่งมอบหลุดถ้ากุญแจหลุด
  *   - ถังส่วนตัวเปิดตรงได้โดยไม่เซ็น → ไฟล์ส่งมอบหลุดทันที
+ *     ⚠️ ข้อนี้ตรวจได้แค่ S3 endpoint (ซึ่งปฏิเสธคำขอไม่เซ็นเสมอ) — **จับ r2.dev ที่ถูกเปิดไม่ได้**
+ *     r2.dev กับ lifecycle ต้องดูเองใน dashboard (docs/01-architecture.md §5)
  *   - CORS ไม่ส่ง ETag ออกมา → อัปไฟล์ส่งมอบแบบเป็นชิ้นไม่ได้ทั้งระบบ
  *   - CORS ยอมทุกโดเมน → เว็บอื่นใช้ URL ที่เซ็นไว้ของเราได้
  */
@@ -147,7 +149,8 @@ try {
     (await status(priv.client.send(new HeadObjectCommand({ Bucket: pub.bucket, Key: pubKey })))) === 403,
   );
   const anon = await fetch(`${endpoint}/${priv.bucket}/${privKey}`);
-  check("isolation: private bucket refuses unsigned GET", anon.status >= 400, `${anon.status}`);
+  // ⚠️ ไม่ได้พิสูจน์ว่า r2.dev ของถังส่วนตัวปิดอยู่ — ดูหัวไฟล์
+  check("isolation: S3 endpoint refuses unsigned GET (r2.dev not checked)", anon.status >= 400, `${anon.status}`);
 
   /* ── CORS ── */
   for (const [label, bucket, key] of [
@@ -173,5 +176,9 @@ try {
   await priv.client.send(new DeleteObjectsCommand({ Bucket: priv.bucket, Delete: { Objects: [{ Key: privKey }] } }));
 }
 
-console.log(failed === 0 ? "\nall checks passed" : `\n${failed} check(s) FAILED`);
+console.log(
+  failed === 0
+    ? "\nall checks passed — r2.dev off on the private bucket and the lifecycle rule are NOT checked here, see docs/01-architecture.md §5"
+    : `\n${failed} check(s) FAILED`,
+);
 process.exitCode = failed === 0 ? 0 : 1;
