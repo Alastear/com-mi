@@ -17,14 +17,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLocale } from "@/lib/i18n/client";
-import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
+import type { Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
-import { daysUntil, formatMoney, formatRelative } from "@/lib/format";
+import { formatMoney, formatRelative } from "@/lib/format";
 import { BOARD_COLUMNS, type BoardColumn, type OrderStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { orderHref } from "@/lib/routes";
 import { boardDropTarget, boardMenuTargets, columnOf } from "@/lib/orders/board";
 import { transitionOrder } from "@/lib/orders/actions";
+import type { DueLabel } from "@/lib/orders/labels";
 
 /**
  * ข้อมูลการ์ดที่หน้า /orders แบนมาให้ — ไม่ใช่แถวดิบจาก Drizzle
@@ -41,6 +42,13 @@ export type BoardOrder = {
   totalCents: number;
   amountPaidCents: number;
   dueAt: string | null;
+  /**
+   * ป้ายกำหนดส่งที่คิดเสร็จแล้วฝั่ง server (`dueLabel`) — null = ไม่ต้องแสดง (ส่งงาน/จบแล้ว)
+   *
+   * คิดที่ server ไม่ใช่ตอน render ฝั่ง client: ขึ้นกับเวลาปัจจุบัน ถ้าคิดสองฝั่ง
+   * HTML จากเซิร์ฟเวอร์กับจากเบราว์เซอร์จะไม่ตรงกันตรงเส้นกำหนดส่งพอดี (เหตุผลเดียวกับ `getLiveQuote`)
+   */
+  due: DueLabel | null;
   createdAt: string;
 };
 
@@ -207,7 +215,8 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
         <Card className="mt-5 gap-0 overflow-hidden p-0">
           <ul className="divide-y">
             {items.map((o) => {
-              const overdue = o.dueAt !== null && daysUntil(o.dueAt) < 0;
+              // ตัวเดียวกับการ์ดและหน้างาน — งานที่ส่งแล้ว/รอมัดจำไม่ขึ้นแดง
+              const due = o.due;
               return (
                 <li key={o.code}>
                   <Link
@@ -228,10 +237,13 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
                     <span
                       className={cn(
                         "tabular hidden w-24 text-right text-xs md:block",
-                        overdue ? "text-destructive" : "text-muted-foreground",
+                        due?.tone === "overdue" ? "text-destructive" : "text-muted-foreground",
                       )}
                     >
-                      {o.dueAt ? formatRelative(o.dueAt, locale) : "—"}
+                      {/* ยังไม่ถึงกำหนด = วันที่แบบสัมพัทธ์เหมือนเดิม · เลย/รอมัดจำ = ข้อความของป้าย */}
+                      {due?.kind === "running" && o.dueAt
+                        ? formatRelative(o.dueAt, locale)
+                        : (due?.text ?? "—")}
                     </span>
                     <span className="tabular w-20 shrink-0 text-right text-sm">
                       {o.totalCents > 0
@@ -266,9 +278,12 @@ function OrderCard({
   onMove: (to: OrderStatus) => void;
   dragging: boolean;
 }) {
-  const days = order.dueAt !== null ? daysUntil(order.dueAt) : null;
-  const urgency =
-    days === null ? null : days < 0 ? "overdue" : days <= 2 ? "soon" : "ok";
+  /**
+   * ป้ายกำหนดส่งมาจาก `dueLabel` ตัวเดียวกับหน้างาน — null = ไม่ต้องนับแล้ว (ส่งงาน/จบแล้ว)
+   * เดิมคิด `daysUntil < 0` เอง การ์ดในคอลัมน์ "ส่งแล้ว" จึงขึ้นแดงว่าเลยกำหนดทั้งที่ส่งไปแล้ว
+   */
+  const due = order.due;
+  const urgency = due === null ? null : due.tone === "normal" ? "ok" : due.tone;
 
   return (
     <div
@@ -321,12 +336,12 @@ function OrderCard({
             </span>
           )}
 
-          {days !== null && (
+          {due !== null && (
             <span
               className={cn(
                 "tabular inline-flex items-center gap-1",
                 urgency === "overdue"
-                  ? "text-destructive"
+                  ? "font-medium text-destructive"
                   : urgency === "soon"
                     ? "text-warning"
                     : "text-muted-foreground",
@@ -337,7 +352,7 @@ function OrderCard({
               ) : (
                 <Clock className="size-3" />
               )}
-              {fill(days < 0 ? t.order.daysLate : t.order.daysLeft, { n: Math.abs(days) })}
+              {due.text}
             </span>
           )}
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2, CircleSlash } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CircleSlash } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -11,7 +11,7 @@ import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { paymentMode } from "@/lib/orders/release";
-import { closedText } from "@/lib/orders/labels";
+import { closedText, dueLabel } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
@@ -23,7 +23,7 @@ import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
 import { QuoteCard } from "@/components/app/quote-card";
-import { formatLineAmount, formatMoney } from "@/lib/format";
+import { formatDate, formatLineAmount, formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { shopHref } from "@/lib/routes";
@@ -70,6 +70,12 @@ export default async function ClientRequestPage({ params }: Props) {
   const header = closed
     ? { title: closed.title, hint: closed.body, done: status === "completed" }
     : { title: t.order.sent, hint: t.order.sentHint, done: true };
+  /**
+   * กำหนดส่งฝั่งลูกค้า — ตัวเดียวกับบอร์ดของครีเอเตอร์ (`dueLabel`) สองฝั่งจึงเห็นตรงกันเสมอ
+   * ว่างานเลยกำหนดหรือยัง ถ้าฝั่งหนึ่งขึ้นแดงอีกฝั่งไม่ขึ้น จะเถียงกันจากหน้าจอคนละแบบ
+   * รอมัดจำอยู่ = บอกเป็นจำนวนวันหลังได้มัดจำ ไม่ใช่วันที่ (วันที่ยังเลื่อนได้)
+   */
+  const due = dueLabel(t, { ...order, status });
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -110,6 +116,28 @@ export default async function ClientRequestPage({ params }: Props) {
 
           <dt className="text-muted-foreground">{t.order.creator}</dt>
           <dd>{order.page.displayName}</dd>
+
+          {due ? (
+            <>
+              <dt className="text-muted-foreground">{t.order.dueDate}</dt>
+              <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {/* รอมัดจำ = วันที่ยังเลื่อนได้ บอกแค่จำนวนวันหลังได้มัดจำ */}
+                {due.kind !== "after_deposit" && order.dueAt ? (
+                  <span className="tabular">{formatDate(order.dueAt, locale)}</span>
+                ) : null}
+                <span
+                  className={
+                    due.tone === "overdue"
+                      ? "inline-flex items-center gap-1 font-medium text-destructive"
+                      : "text-muted-foreground"
+                  }
+                >
+                  {due.tone === "overdue" ? <AlertTriangle className="size-3.5" /> : null}
+                  {due.text}
+                </span>
+              </dd>
+            </>
+          ) : null}
         </dl>
       </Card>
 

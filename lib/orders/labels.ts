@@ -1,8 +1,9 @@
 import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
-import { formatMoney } from "@/lib/format";
+import { daysUntil, formatDate, formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import type { Actor } from "./state-machine";
+import { dueState, type DueOrder } from "./lifecycle";
 
 /**
  * ปุ่มบน action bar มาจาก `allowedNext()` เสมอ ไม่ใช่รายการที่เขียนตายไว้
@@ -119,6 +120,22 @@ export function eventText(
   if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;
   if (eventType === "quote_withdrawn") return t.orderEvent.quote_withdrawn;
   if (eventType === "invite_confirmed") return t.orderEvent.invite_confirmed;
+  if (eventType === "deposit_met") {
+    /**
+     * กำหนดส่งใหม่ถูกเก็บไว้ใน event ตอนเขียน (`recomputePaid`) — ไม่ใช่อ่าน `order.dueAt` ปัจจุบัน
+     * เพราะ event คือหลักฐานว่า "ตอนนั้นนาฬิกาเริ่มที่ไหน" วันที่ไม่มี/อ่านไม่ออกก็ไม่ใส่ ไม่เดา
+     */
+    const due = typeof data?.due === "string" ? new Date(data.due) : null;
+    const base = t.orderEvent.deposit_met;
+    if (!due || Number.isNaN(due.getTime())) return base;
+    return `${base} · ${fill(t.orderEvent.dueOn, { date: formatDate(due, locale) })}`;
+  }
+  if (eventType === "auto_complete_warned") {
+    const days = Number(data?.days);
+    // ไม่มีจำนวนวัน = ไม่แสดง ดีกว่าขึ้น "ในอีก  วัน" ในเธรดที่เป็นหลักฐาน
+    if (!Number.isInteger(days) || days <= 0) return null;
+    return fill(t.orderEvent.auto_complete_warned, { days });
+  }
   if (eventType === "status_changed") {
     const to = String(data?.to ?? "") as OrderStatus;
     const label = t.orderStatus[to] ?? to;
@@ -142,4 +159,51 @@ export function actorText(t: Dictionary, actor: string | undefined): string {
   if (actor === "creator") return t.orderEvent.byCreator;
   if (actor === "client") return t.orderEvent.byClient;
   return t.orderEvent.bySystem;
+}
+
+/**
+ * ป้ายกำหนดส่ง — บอร์ด หน้างานฝั่งครีเอเตอร์ และหน้างานฝั่งลูกค้าใช้ตัวนี้ตัวเดียว
+ *
+ * เดิมแต่ละหน้าคิด `daysUntil(dueAt) < 0` เอง จึงขึ้น "เลย N วัน" สีแดงบนงานที่ส่งไปแล้ว
+ * งานที่เสร็จ/ยกเลิกไปแล้ว และงานที่ยังรอลูกค้าโอนมัดจำ (ซึ่งครีเอเตอร์เริ่มไม่ได้)
+ * ตัดสินว่าเลยกำหนดไหมที่ `dueState()` ส่วนตรงนี้แค่แปลงเป็นข้อความ
+ *
+ * คืน null = ไม่ต้องแสดงอะไร (ไม่มีกำหนด / ส่งแล้ว / จบแล้ว)
+ * จำนวนวันนับแบบวันปฏิทินด้วย `daysUntil` เหมือนเดิม — เลยมาไม่กี่ชั่วโมงในวันเดียวกันขึ้นแค่ "เลยกำหนด"
+ */
+export type DueLabel = {
+  /** รอมัดจำอยู่ = `dueAt` เป็นตัวเลขชั่วคราว ห้ามโชว์เป็นวันที่ */
+  kind: "after_deposit" | "overdue" | "running";
+  text: string;
+  tone: "overdue" | "soon" | "normal";
+};
+
+export function dueLabel(t: Dictionary, o: DueOrder, now: Date = new Date()): DueLabel | null {
+  const state = dueState(o, now);
+  switch (state.kind) {
+    case "none":
+      return null;
+    case "after_deposit":
+      return {
+        kind: state.kind,
+        text: fill(t.order.dueAfterDeposit, { n: state.days }),
+        tone: "normal",
+      };
+    case "overdue": {
+      const late = -daysUntil(o.dueAt!, now);
+      return {
+        kind: state.kind,
+        text: late > 0 ? fill(t.order.overdueDays, { n: late }) : t.order.overdue,
+        tone: "overdue",
+      };
+    }
+    case "running": {
+      const left = daysUntil(o.dueAt!, now);
+      return {
+        kind: state.kind,
+        text: left <= 0 ? t.order.dueToday : fill(t.order.daysLeft, { n: left }),
+        tone: left <= 2 ? "soon" : "normal",
+      };
+    }
+  }
 }

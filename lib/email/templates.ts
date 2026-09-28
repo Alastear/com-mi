@@ -33,6 +33,7 @@ export const EMAIL_KINDS = [
   "payment_confirmed",
   "payment_rejected",
   "payment_voided",
+  "auto_complete_soon",
 ] as const;
 
 export type EmailKind = (typeof EMAIL_KINDS)[number];
@@ -60,6 +61,7 @@ const AUDIENCE: Record<EmailKind, EmailRole | "either"> = {
   payment_confirmed: "client",
   payment_rejected: "client",
   payment_voided: "client",
+  auto_complete_soon: "client",
 };
 
 /** สถานะที่อีกฝ่ายต้องรู้ทันที — ที่เหลือดูในเว็บพอ */
@@ -98,6 +100,11 @@ const KIND_OF: { [T in NotificationType]: KindRule<T> } = {
   quote_issued: "quote_issued",
   quote_accepted: "quote_accepted",
   delivery_released: "delivery_released",
+  /**
+   * ต้องเป็นอีเมล ไม่ใช่แค่กระดิ่ง — ลูกค้าที่ได้ไฟล์ไปแล้วมักไม่กลับมาเปิดเว็บ
+   * ถ้ารู้ตัวหลังงานถูกปิดไปแล้วว่าไฟล์ผิด ปุ่มขอแก้ไขก็หายไปแล้ว
+   */
+  order_auto_complete_soon: "auto_complete_soon",
 };
 
 export function emailKindFor<T extends NotificationType>(
@@ -355,6 +362,20 @@ export function renderEmail(input: {
       return finish(e.paymentRejectedSubject, [e.paymentRejectedBody], vars, e.payNow, path);
     case "payment_voided":
       return finish(e.paymentVoidedSubject, [e.paymentVoidedBody], vars, e.viewOrder, path);
+
+    case "auto_complete_soon": {
+      // จำนวนวันมาจาก cron (ค่าคงที่ของกติกา) — ไม่มี = ไม่ส่ง ดีกว่า "จะปิดในอีก  วัน"
+      const days = typeof input.data.days === "number" ? input.data.days : "";
+      // ชื่อปุ่มเอาจากปุ่มจริงบนหน้างาน — พิมพ์ซ้ำในอีเมลแล้ววันหนึ่งปุ่มเปลี่ยนชื่อ ลูกค้าจะหาไม่เจอ
+      const button = getDictionary(locale).orderAction.requestRevision;
+      return finish(
+        e.autoCompleteSoonSubject,
+        [e.autoCompleteSoonBody, e.autoCompleteSoonHow],
+        { ...vars, days, button },
+        e.viewOrder,
+        path,
+      );
+    }
   }
 }
 

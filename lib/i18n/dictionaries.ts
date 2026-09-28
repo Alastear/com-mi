@@ -453,6 +453,9 @@ const th = {
     paymentRejectedBody: "{shop} แจ้งว่ายังไม่ได้รับเงิน {amount} ที่คุณแจ้งโอนไว้\n\nเช็คสลิปกับบัญชีปลายทางอีกครั้ง แล้วดูเหตุผลหรือแจ้งใหม่ได้ที่หน้างาน",
     paymentVoidedSubject: "ครีเอเตอร์ยกเลิกการยืนยันรับเงินงาน #{code}",
     paymentVoidedBody: "{shop} ยกเลิกการยืนยันยอด {amount} ยอดนี้จึงไม่นับว่าชำระแล้ว\n\nดูเหตุผลได้ที่หน้างาน ถ้าคุณโอนไปจริง ทักครีเอเตอร์ในหน้างานได้ทันที",
+    autoCompleteSoonSubject: "งาน #{code} จะปิดอัตโนมัติในอีก {days} วัน",
+    autoCompleteSoonBody: "{shop} ส่งงาน \"{service}\" ให้คุณแล้ว ถ้าไฟล์ถูกต้องครบถ้วน ไม่ต้องทำอะไร ระบบจะปิดงานให้เองในอีกประมาณ {days} วัน",
+    autoCompleteSoonHow: "ถ้ามีอะไรต้องแก้ กด \"{button}\" ที่หน้างาน หรือถ้าสิทธิ์แก้หมดแล้ว ทักครีเอเตอร์ในแชทของงาน — ข้อความที่คุณส่งจะเลื่อนการปิดอัตโนมัติออกไป และระบบจะแจ้งคุณอีกครั้งก่อนปิด",
 
     // ── ใช้ร่วมกัน ──
     /** เงื่อนไขการชำระของใบเสนอราคา — ประโยคเต็ม ต่อท้ายด้วยเนื้อความหลัก */
@@ -862,6 +865,11 @@ const th = {
     moveTo: "ย้ายไป…",
     daysLate: "เลย {n} วัน",
     daysLeft: "อีก {n} วัน",
+    /** ป้ายเลยกำหนดพร้อมจำนวนวัน — ไม่ถึงวัน (เลยมาไม่กี่ชั่วโมง) ใช้ `overdue` เฉย ๆ */
+    overdueDays: "เลยกำหนด {n} วัน",
+    /** รอมัดจำอยู่ กำหนดส่งยังไม่เริ่มนับ — ตัวเลขคือระยะเวลาทำงานที่ตกลงกันไว้ */
+    dueAfterDeposit: "ส่งงานภายใน {n} วันหลังได้รับมัดจำ",
+    dueDate: "กำหนดส่ง",
     sent: "ส่งคำขอแล้ว",
     sentHint: "ครีเอเตอร์จะได้รับแจ้งเตือนและติดต่อกลับ",
     viewOrder: "ดูงานนี้",
@@ -1062,6 +1070,9 @@ const th = {
     payment_confirmed: "ยืนยันว่าได้รับเงิน {amount}",
     payment_rejected: "แจ้งว่ายังไม่ได้รับเงิน {amount}",
     payment_voided: "ยกเลิกการยืนยันรับเงิน {amount}",
+    deposit_met: "ได้รับมัดจำครบ เริ่มนับวันส่งงาน",
+    dueOn: "กำหนดส่ง {date}",
+    auto_complete_warned: "แจ้งลูกค้าว่าจะปิดงานอัตโนมัติในอีก {days} วัน",
     byCreator: "โดยครีเอเตอร์",
     byClient: "โดยลูกค้า",
     bySystem: "โดยระบบ",
@@ -1188,6 +1199,7 @@ const th = {
     quote_issued: "ครีเอเตอร์ส่งใบเสนอราคางาน #{code} มาแล้ว",
     quote_accepted: "ลูกค้ายอมรับใบเสนอราคางาน #{code} แล้ว",
     delivery_released: "ไฟล์งาน #{code} พร้อมให้ดาวน์โหลดแล้ว",
+    order_auto_complete_soon: "งาน #{code} จะปิดอัตโนมัติในอีก {days} วัน — มีอะไรต้องแก้ กดขอแก้ไขหรือทักครีเอเตอร์ก่อน",
     empty: "ยังไม่มีการแจ้งเตือน",
   },
 
@@ -1623,6 +1635,9 @@ const en: Dictionary = {
     paymentRejectedBody: "{shop} says the {amount} you reported has not arrived\n\nCheck the slip and the receiving account, then see their reason or report it again on the order page",
     paymentVoidedSubject: "The creator undid a payment confirmation on order #{code}",
     paymentVoidedBody: "{shop} undid their confirmation of {amount}, so it no longer counts as paid\n\nSee the reason on the order page. If you really sent it, message them there",
+    autoCompleteSoonSubject: "Order #{code} will close automatically in {days} days",
+    autoCompleteSoonBody: "{shop} delivered \"{service}\". If the files are right, you do not need to do anything — the order will be marked complete in about {days} days",
+    autoCompleteSoonHow: "If something needs fixing, press \"{button}\" on the order page, or message the creator in the order chat if you have no revisions left. A message from you pushes the automatic close back, and you will be told again before it happens",
 
     termUpfront: "Full payment of {deposit} before work starts",
     termDeposit: "A {deposit} deposit before work starts, the rest before you receive the files",
@@ -2005,6 +2020,9 @@ const en: Dictionary = {
     moveTo: "Move to…",
     daysLate: "{n}d late",
     daysLeft: "{n}d left",
+    overdueDays: "Overdue {n}d",
+    dueAfterDeposit: "Due {n} days after the deposit arrives",
+    dueDate: "Due",
     sent: "Request sent",
     sentHint: "The creator will be notified and will get back to you",
     viewOrder: "View this order",
@@ -2200,6 +2218,9 @@ const en: Dictionary = {
     payment_confirmed: "Confirmed receiving {amount}",
     payment_rejected: "Marked {amount} as not received",
     payment_voided: "Undid the confirmation of {amount}",
+    deposit_met: "Deposit received — delivery clock started",
+    dueOn: "due {date}",
+    auto_complete_warned: "Told the client the order closes automatically in {days} days",
     byCreator: "by the creator",
     byClient: "by the client",
     bySystem: "automatically",
@@ -2324,6 +2345,7 @@ const en: Dictionary = {
     quote_issued: "The creator sent a quote for order #{code}",
     quote_accepted: "The client accepted your quote for order #{code}",
     delivery_released: "Files for order #{code} are ready to download",
+    order_auto_complete_soon: "Order #{code} closes automatically in {days} days — request a revision or message the creator first if something is wrong",
     empty: "No notifications yet",
   },
 

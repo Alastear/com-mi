@@ -2,13 +2,17 @@ import { OrderBoard } from "@/components/app/order-board";
 import { requireCreator } from "@/lib/auth-guard";
 import { listOrdersForBoard } from "@/lib/queries/orders";
 import { ensureShop } from "@/lib/shop/ensure";
+import { dueLabel } from "@/lib/orders/labels";
+import { getLocale } from "@/lib/i18n/server";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 import type { OrderStatus } from "@/lib/types";
 
 export default async function OrdersPage() {
   const { user } = await requireCreator();
   await ensureShop(user.id, user.name);
 
-  const rows = await listOrdersForBoard(user.id);
+  const [rows, locale] = await Promise.all([listOrdersForBoard(user.id), getLocale()]);
+  const t = getDictionary(locale);
 
   /**
    * แบนเป็น DTO แบน ๆ ก่อนส่งข้ามไปฝั่ง client
@@ -30,6 +34,8 @@ export default async function OrdersPage() {
     totalCents: o.totalCents,
     amountPaidCents: o.amountPaidCents,
     dueAt: o.dueAt ? o.dueAt.toISOString() : null,
+    // คิดที่นี่ ไม่ใช่ตอน render ฝั่ง client — ดู `BoardOrder.due`
+    due: dueLabel(t, { ...o, status: o.status as OrderStatus }),
     createdAt: o.createdAt.toISOString(),
   }));
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { OrderStatusPill } from "@/components/status-pill";
 import { OrderActions } from "@/components/app/order-actions";
 import { OrderThread } from "@/components/app/order-thread";
@@ -20,11 +20,11 @@ import { QuoteBuilder } from "@/components/app/quote-builder";
 import { readDelivery } from "@/lib/delivery/read";
 import { canRelease, paymentMode } from "@/lib/orders/release";
 import { depositPercentOf } from "@/lib/orders/pricing";
-import { closedText } from "@/lib/orders/labels";
+import { closedText, dueLabel } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
-import { daysUntil, formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
+import { formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
-import { fill, getDictionary } from "@/lib/i18n/dictionaries";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 import type { OrderStatus } from "@/lib/types";
 
 type Props = { params: Promise<{ code: string }> };
@@ -47,7 +47,8 @@ export default async function OrderPage({ params }: Props) {
 
   const locale = await getLocale();
   const t = getDictionary(locale);
-  const days = order.dueAt ? daysUntil(order.dueAt) : null;
+  // ตัวเดียวกับบอร์ดและหน้าลูกค้า — งานที่ส่งแล้ว/จบแล้วไม่ขึ้น และรอมัดจำอยู่ไม่นับว่าเลย
+  const due = dueLabel(t, { ...order, status: order.status as OrderStatus });
   const {
     open: openRound,
     released: releasedRound,
@@ -80,15 +81,16 @@ export default async function OrderPage({ params }: Props) {
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <h1 className="tabular font-mono text-lg font-semibold">#{order.code}</h1>
         <OrderStatusPill status={order.status as OrderStatus} />
-        {days !== null ? (
+        {due ? (
           <span
-            className={`tabular text-sm ${days < 0 ? "text-destructive" : "text-muted-foreground"}`}
+            className={
+              due.tone === "overdue"
+                ? "tabular inline-flex items-center gap-1 text-sm font-medium text-destructive"
+                : "tabular text-sm text-muted-foreground"
+            }
           >
-            {days < 0
-              ? fill(t.order.daysLate, { n: Math.abs(days) })
-              : days === 0
-                ? t.order.dueToday
-                : fill(t.order.daysLeft, { n: days })}
+            {due.tone === "overdue" ? <AlertTriangle className="size-3.5" /> : null}
+            {due.text}
           </span>
         ) : null}
       </div>

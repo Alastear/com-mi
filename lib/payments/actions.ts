@@ -36,6 +36,7 @@ import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedS
  * **ทุกการเขียนเงินอยู่ใน `db.batch()` เดียว** (neon-http ไม่มี interactive transaction)
  * ลำดับในทุก batch เหมือนกัน: ล็อกแถวออเดอร์ → เขียนแบบ compare-and-set →
  * บันทึก event ถ้าเขียนสำเร็จ → คิด amountPaidCents ใหม่จากแถวจริง
+ * (→ event "มัดจำครบ" ถ้าการคิดยอดเพิ่งเลื่อนกำหนดส่ง — เฉพาะทางที่ยอดเพิ่มได้)
  * ล็อกแถวออเดอร์ก่อนทำให้สอง request ของออเดอร์เดียวกันต่อคิวกัน คำสั่งถัดไปของ
  * อันที่มาทีหลังจึงเห็นผลของอันแรกแล้ว (READ COMMITTED ถ่าย snapshot ใหม่ทุกคำสั่ง)
  * ไม่งั้นสองคนกดพร้อมกันจะผ่านเงื่อนไข "ยังไม่เกินยอด" ทั้งคู่
@@ -193,18 +194,58 @@ function lockOrder(orderId: string) {
  * กับแถวเงินจะไม่ตรงกันค้างไว้จนกว่าจะมีคนกดอะไรสักอย่างอีกครั้ง
  *
  * `is distinct from` ทำให้กดซ้ำแล้วไม่เขียนอะไรเลย (updatedAt ไม่ขยับเปล่า ๆ)
+ *
+ * **มัดจำเพิ่งครบในคำสั่งนี้ = เริ่มนับกำหนดส่งใหม่จากตอนนี้** (ครั้งเดียวต่อออเดอร์)
+ * `dueAt` ตั้งไว้ตั้งแต่ลูกค้ากดสั่ง แต่ครีเอเตอร์ลงมือไม่ได้จนกว่ามัดจำจะเข้า (ด่าน `depositSatisfied`)
+ * ถ้าไม่เลื่อน ลูกค้าที่โอนมัดจำช้าไปหนึ่งสัปดาห์จะทำให้งานขึ้น "เลยกำหนด" ทั้งที่ครีเอเตอร์เพิ่งได้เริ่ม
+ * อยู่ใน UPDATE เดียวกับยอดเงิน — ใน SET ทุกคอลัมน์อ่านค่า **ก่อน** เขียน
+ * `amount_paid_cents` ในเงื่อนไขจึงเป็นยอดเดิม ส่วน `paid` คือยอดใหม่ = ตรวจ "ข้ามเส้น" ได้ในคำสั่งเดียว
+ * ⚠️ ต้องตรงกับ `depositJustMet()` / `dueAfterDeposit()` ใน lib/orders/lifecycle.ts ทุกเงื่อนไข
  */
 function recomputePaid(orderId: string, now: Date) {
   const db = getDb();
+  const o = schema.order;
+  const paid = sql`(${verifiedSumSql(orderId)})`;
+  const at = sql`${now.toISOString()}::timestamptz`;
+  /**
+   * ดูที่ "ข้ามเส้น" ไม่ใช่แค่ "ถึงแล้ว" — ออเดอร์ที่มัดจำครบไปก่อนมีคอลัมน์ `deposit_met_at`
+   * (ค่าเป็น null) ต้องไม่ถูกเลื่อนกำหนดส่งตอนลูกค้าโอนงวดสุดท้าย
+   * `deposit_met_at is null` คือด่าน "ครั้งเดียว": ยกเลิกการยืนยันแล้วยืนยันใหม่ไม่เลื่อนซ้ำ
+   */
+  const justMet = sql`(${o.depositMetAt} is null and ${o.depositCents} > 0
+    and ${o.amountPaidCents} < ${o.depositCents} and ${paid} >= ${o.depositCents})`;
   return db
-    .update(schema.order)
-    .set({ amountPaidCents: sql`(${verifiedSumSql(orderId)})`, updatedAt: now })
-    .where(
-      and(
-        eq(schema.order.id, orderId),
-        sql`${schema.order.amountPaidCents} is distinct from (${verifiedSumSql(orderId)})`,
-      ),
-    );
+    .update(o)
+    .set({
+      amountPaidCents: paid,
+      updatedAt: now,
+      depositMetAt: sql`case when ${justMet} then ${at} else ${o.depositMetAt} end`,
+      /**
+       * ระยะเวลาทำงานเอาจากตัวออเดอร์ (`due_at - created_at`) ไม่ใช่ `service.delivery_days` ปัจจุบัน
+       * — เหตุผลอยู่ที่ `dueAfterDeposit()` (ครีเอเตอร์แก้เมนูได้ตลอด ออเดอร์คือหลักฐาน)
+       */
+      dueAt: sql`case when ${justMet} and ${o.dueAt} is not null
+        then ${at} + (${o.dueAt} - ${o.createdAt}) else ${o.dueAt} end`,
+    })
+    .where(and(eq(o.id, orderId), sql`${o.amountPaidCents} is distinct from ${paid}`));
+}
+
+/**
+ * event "มัดจำครบ เริ่มนับวันส่งงาน" — เขียนเฉพาะเมื่อ `recomputePaid` ใน batch นี้เพิ่งตั้ง `deposit_met_at`
+ *
+ * ต้องวางหลัง `recomputePaid` ใน batch เสมอ (อ่านค่าที่มันเพิ่งเขียน) และเก็บกำหนดส่งใหม่ลงใน event
+ * ด้วย — เธรดคือหลักฐานของทั้งสองฝ่ายว่านาฬิกาเริ่มเมื่อไร ถึงวันหนึ่ง `due_at` จะถูกแก้ต่อก็ตาม
+ * ไม่มีคนกด (ระบบเลื่อนให้เอง) จึงไม่มี sender และ actor เป็น system
+ */
+function insertDepositMetEvent(orderId: string, now: Date) {
+  const at = now.toISOString();
+  return getDb().execute(sql`
+    insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
+    select ${newId("msg")}::text, o.id, null, true, 'deposit_met'::text,
+           jsonb_build_object('actor', 'system', 'due', o.due_at), ${at}::timestamptz
+    from "order" o
+    where o.id = ${orderId} and o.deposit_met_at = ${at}::timestamptz
+  `);
 }
 
 /**
@@ -361,6 +402,8 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
       guard: sql`select 1 from payment_record p where p.id = ${id} and p.created_at = ${at}::timestamptz`,
     }),
     recomputePaid(order.id, now),
+    // ครีเอเตอร์บันทึกเอง = นับทันที ยอดอาจเพิ่งถึงมัดจำตรงนี้ (ลูกค้าแจ้งเฉย ๆ ยังไม่นับ guard จึงไม่ติด)
+    insertDepositMetEvent(order.id, now),
   ]);
 
   if (affected(inserted) === 0) {
@@ -480,6 +523,11 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
       guard: sql`select 1 from payment_record p where p.id = ${row.id} and p.verified_at = ${at}::timestamptz`,
     }),
     recomputePaid(order.id, now),
+    /**
+     * ยืนยันแล้วยอดอาจเพิ่งถึงมัดจำ — ปฏิเสธ/ยกเลิกการยืนยันไม่ต้องมี เพราะยอดไม่มีทางเพิ่มขึ้นได้
+     * (`recomputePaid` เลื่อนกำหนดส่งเฉพาะตอนยอดข้ามเส้นขึ้นไป)
+     */
+    insertDepositMetEvent(order.id, now),
   ]);
 
   if (updated.length === 0) {

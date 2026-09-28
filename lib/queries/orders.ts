@@ -42,6 +42,8 @@ export async function getOrderForClient(code: string, clientUserId: string) {
       tosSnapshot: true,
       acceptedTosAt: true,
       dueAt: true,
+      // ไม่ใช่ข้อมูลลับ — ใช้ตัดสินว่ากำหนดส่งเริ่มนับแล้วหรือยัง (ป้ายเลยกำหนดฝั่งลูกค้า)
+      depositMetAt: true,
       quoteExpiresAt: true,
       isPublicInQueue: true,
       createdAt: true,
@@ -130,6 +132,8 @@ export async function listOrdersForBoard(creatorUserId: string) {
       revisionsUsed: true,
       revisionsAllowed: true,
       dueAt: true,
+      // ป้ายเลยกำหนดต้องรู้ว่ามัดจำเคยครบหรือยัง — ยังไม่ครบ = กำหนดส่งยังไม่เริ่มนับ (`dueState`)
+      depositMetAt: true,
       createdAt: true,
       completedAt: true,
     },

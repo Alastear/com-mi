@@ -14,6 +14,7 @@ import { getCreatorStats, getSetupProgress } from "@/lib/queries/setup";
 import { ensureShop } from "@/lib/shop/ensure";
 import { SetupChecklist } from "@/components/app/setup-checklist";
 import { ACTIVE_STATUSES, type OrderStatus } from "@/lib/types";
+import { dueState } from "@/lib/orders/lifecycle";
 import { daysUntil, formatBytes, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { fill, getDictionary } from "@/lib/i18n/dictionaries";
@@ -40,7 +41,15 @@ export default async function DashboardPage() {
   const active = allOrders.filter((o) => ACTIVE_STATUSES.includes(o.status as OrderStatus));
   const newRequests = active.filter((o) => o.status === "requested");
   const inProgress = active.filter((o) => o.status === "in_progress");
-  const dueSoon = active.filter((o) => o.dueAt && daysUntil(o.dueAt) <= 3);
+  /**
+   * เลยกำหนด/ใกล้กำหนด ใช้ `dueState` ตัวเดียวกับบอร์ดและหน้างาน — งานที่ยังรอมัดจำ
+   * ไม่นับทั้งสองอย่าง เพราะกำหนดส่งจะเริ่มนับใหม่ตอนมัดจำเข้า (ครีเอเตอร์ยังเริ่มไม่ได้)
+   */
+  const dueOf = (o: (typeof active)[number]) => dueState({ ...o, status: o.status as OrderStatus });
+  const dueSoon = active.filter((o) => {
+    const kind = dueOf(o).kind;
+    return (kind === "running" || kind === "overdue") && o.dueAt !== null && daysUntil(o.dueAt) <= 3;
+  });
 
   /**
    * รายได้นับจาก "เงินที่ยืนยันแล้วว่าเข้าจริง" ไม่ใช่ยอดรวมของออเดอร์
@@ -51,7 +60,7 @@ export default async function DashboardPage() {
 
   // งานที่ต้องจัดการ: คำขอใหม่ + เลยกำหนด
   const needsAttention = active
-    .filter((o) => o.status === "requested" || (o.dueAt !== null && daysUntil(o.dueAt) < 0))
+    .filter((o) => o.status === "requested" || dueOf(o).kind === "overdue")
     .slice(0, 5);
 
   const storageUsed = usage.storageBytes;
@@ -144,7 +153,7 @@ export default async function DashboardPage() {
           ) : (
             <ul className="mt-3 space-y-2">
               {needsAttention.map((o) => {
-                const overdue = o.dueAt !== null && daysUntil(o.dueAt) < 0;
+                const overdue = dueOf(o).kind === "overdue";
                 return (
                   <li key={o.code}>
                     <Link href={orderHref(o.code)}>

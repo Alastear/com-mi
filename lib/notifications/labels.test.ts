@@ -11,7 +11,7 @@ describe("ข้อความแจ้งเตือน", () => {
   it("ทุกชนิดต้องมีข้อความครบทั้งสองภาษา", () => {
     for (const type of NOTIFICATION_TYPES) {
       for (const [name, t] of [["th", th], ["en", en]] as const) {
-        const text = notificationText(t, type, { code: "K7M2QX4P", status: "in_progress" });
+        const text = notificationText(t, type, { code: "K7M2QX4P", status: "in_progress", days: 2 });
         assert.ok(text, `${type} ขาดข้อความภาษา ${name}`);
         assert.equal(/\{\w+\}/.test(text!), false, `${type} (${name}) เหลือ placeholder ที่ไม่ถูกแทน`);
       }

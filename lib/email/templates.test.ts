@@ -47,6 +47,7 @@ const CALLER_DATA: { [T in NotificationType]: NotificationData[T] } = {
   quote_issued: { code: CODE },
   quote_accepted: { code: CODE },
   delivery_released: { code: CODE },
+  order_auto_complete_soon: { code: CODE, days: 2 },
 };
 
 /** ออเดอร์ตัวอย่าง — ชื่อเป็น ASCII เพื่อเช็คได้ว่าอีเมลภาษาอังกฤษไม่มีภาษาไทยหลุดมา */
@@ -96,6 +97,7 @@ const ROLES: Record<EmailKind, EmailRole[]> = {
   payment_confirmed: ["client"],
   payment_rejected: ["client"],
   payment_voided: ["client"],
+  auto_complete_soon: ["client"],
 };
 
 /** ออเดอร์หลายหน้าตาที่เจอได้จริง — ไม่มีมัดจำ / มัดจำบางส่วน / เต็มจำนวน / จ่ายแล้วบางส่วน / จ่ายครบ */
@@ -212,8 +214,15 @@ describe("ส่งเมื่อไร", () => {
       "payment_reported",
       "payment_confirmed",
       "payment_rejected",
+      "order_auto_complete_soon",
     ] as const) {
       assert.ok(emailKindFor(type, CALLER_DATA[type] as never), type);
+    }
+  });
+
+  it("ปิดงาน/หมดอายุโดยระบบ ไม่ส่งอีเมลเปลี่ยนสถานะ — อีเมลที่ลูกค้าต้องได้คือคำเตือนก่อนปิด", () => {
+    for (const to of ["completed", "expired"] as const) {
+      assert.equal(emailKindFor("order_status_changed", { code: CODE, from: "delivered", to }), null, to);
     }
   });
 });
@@ -334,6 +343,35 @@ describe("เนื้อความถูกเรื่อง", () => {
     assert.match(r.email.body, /mali@example\.com/);
     assert.ok(r.email.body.includes(formatMoney(250_000, "THB", "en")));
     assert.equal(r.email.path, "/invites");
+  });
+
+  it("เตือนปิดงานอัตโนมัติ: บอกจำนวนวัน ชื่องาน และวิธีขอแก้ — ขาดจำนวนวันไม่ส่ง", () => {
+    for (const locale of LOCALES) {
+      const m = render("auto_complete_soon", client(order({ paidCents: 110_000 })), locale, {
+        code: CODE,
+        days: 2,
+      });
+      assert.match(m.subject, /2/);
+      assert.match(m.subject, new RegExp(CODE));
+      assert.match(m.body, /Bust sketch/);
+      assert.ok(m.body.includes(getDictionary(locale).orderAction.requestRevision), m.body);
+      assert.equal(m.path, `/my/requests/${CODE}`);
+    }
+    const noDays = renderEmail({
+      kind: "auto_complete_soon",
+      data: { code: CODE },
+      facts: client(order()),
+      locale: "th",
+    });
+    assert.equal(!noDays.ok && noDays.detail, "days");
+    // ครีเอเตอร์ไม่ใช่ผู้รับของอีเมลนี้
+    const toCreator = renderEmail({
+      kind: "auto_complete_soon",
+      data: { code: CODE, days: 2 },
+      facts: creator(order()),
+      locale: "th",
+    });
+    assert.equal(!toCreator.ok && toCreator.reason, "wrong_audience");
   });
 
   it("ภาษาของอีเมลเปลี่ยนตาม locale จริง", () => {
