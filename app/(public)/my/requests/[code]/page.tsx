@@ -22,6 +22,7 @@ import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
+import { orderVersion } from "@/lib/orders/version";
 import { QuoteCard } from "@/components/app/quote-card";
 import { ClientReviewCard } from "@/components/app/order-review";
 import { getReviewForOrder } from "@/lib/queries/reputation";
@@ -329,6 +330,7 @@ export default async function ClientRequestPage({ params }: Props) {
         <OrderActions
           code={order.code}
           status={status}
+          version={orderVersion(order.updatedAt)}
           actor="client"
           money={moneyMoved(order.amountPaidCents, payments)}
           currency={order.currency}

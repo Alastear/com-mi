@@ -50,6 +50,8 @@ export type BoardOrder = {
    */
   due: DueLabel | null;
   createdAt: string;
+  /** `orderVersion(updatedAt)` ตอนวาดบอร์ด — ส่งคู่กับสถานะให้ `transitionOrder` จับการ์ดค้าง */
+  version: number;
 };
 
 /**
@@ -98,11 +100,12 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
      * สถานะที่การ์ดใบนี้วาดอยู่ — มาจาก `orders` (ข้อมูลจาก server) ไม่ใช่ `items` ที่ถูกขยับล่วงหน้าแล้ว
      * server ปฏิเสธเป็น `stale` ถ้าของจริงเปลี่ยนไปจากที่บอร์ดนี้เห็น ดู `from` ใน transitionOrder
      */
-    const from = orders.find((o) => o.code === code)?.status;
-    if (!from) return;
+    const seen = orders.find((o) => o.code === code);
+    if (!seen) return;
+    const { status: from, version } = seen;
     startMove(async () => {
       moveOptimistic({ code, to });
-      const res = await transitionOrder({ code, from, to });
+      const res = await transitionOrder({ code, from, version, to });
       if (res.ok) {
         toast.success(`#${code} → ${t.orderStatus[to]}`);
       } else {

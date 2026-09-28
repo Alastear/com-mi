@@ -9,6 +9,8 @@ import { getSession } from "@/lib/auth-guard";
 import { canPay, PAYABLE_STATUSES } from "@/lib/orders/release";
 import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
+// ทุก batch ที่แตะเงินของออเดอร์ต้องเริ่มด้วยตัวนี้ — ตัวเดียวกับที่ `transitionOrder` ใช้
+import { lockOrder } from "@/lib/orders/lock";
 import { notify } from "@/lib/notifications/create";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedSum } from "./money";
@@ -170,19 +172,6 @@ async function orderClosedNow(orderId: string): Promise<boolean> {
     columns: { status: true },
   });
   return !fresh || !canPay(fresh.status as OrderStatus);
-}
-
-/**
- * ล็อกแถวออเดอร์ไว้จนจบ batch — ทุก batch ที่แตะเงินของออเดอร์นี้ต้องเริ่มด้วยคำสั่งนี้
- * ให้ลำดับการล็อกเหมือนกันทุกที่ (ออเดอร์ก่อน แล้วค่อยแถวเงิน) จะได้ไม่ deadlock กันเอง
- */
-function lockOrder(orderId: string) {
-  const db = getDb();
-  return db
-    .select({ id: schema.order.id })
-    .from(schema.order)
-    .where(eq(schema.order.id, orderId))
-    .for("update");
 }
 
 /**

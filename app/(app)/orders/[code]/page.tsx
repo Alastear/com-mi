@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { OrderStatusPill } from "@/components/status-pill";
 import { OrderActions } from "@/components/app/order-actions";
+import { orderVersion } from "@/lib/orders/version";
 import { OrderThread } from "@/components/app/order-thread";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -323,6 +324,7 @@ export default async function OrderPage({ params }: Props) {
         <OrderActions
           code={order.code}
           status={status}
+          version={orderVersion(order.updatedAt)}
           actor="creator"
           money={moneyMoved(order.amountPaidCents, payments)}
           currency={order.currency}

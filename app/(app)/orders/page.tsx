@@ -3,6 +3,7 @@ import { requireCreator } from "@/lib/auth-guard";
 import { listOrdersForBoard } from "@/lib/queries/orders";
 import { ensureShop } from "@/lib/shop/ensure";
 import { dueLabel } from "@/lib/orders/labels";
+import { orderVersion } from "@/lib/orders/version";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import type { OrderStatus } from "@/lib/types";
@@ -37,6 +38,7 @@ export default async function OrdersPage() {
     // คิดที่นี่ ไม่ใช่ตอน render ฝั่ง client — ดู `BoardOrder.due`
     due: dueLabel(t, { ...o, status: o.status as OrderStatus }),
     createdAt: o.createdAt.toISOString(),
+    version: orderVersion(o.updatedAt),
   }));
 
   return (

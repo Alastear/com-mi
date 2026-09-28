@@ -13,6 +13,8 @@ import { assertTransition, requiresAction, TransitionError, type Actor } from ".
 import { moneyBlock } from "./release";
 import { moneyGateSql } from "./release-sql";
 import { consumesRevision, revisionQuota } from "./revisions";
+import { lockOrder } from "./lock";
+import { orderVersion, versionIso } from "./version";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
 /**
@@ -36,9 +38,19 @@ const Schema = z.object({
    * เสียสิทธิ์แก้ไปกับรอบที่ไม่เคยเห็น ส่งค่านี้มาแล้วไม่ตรงของจริง = `stale` ให้รีเฟรชก่อน
    *
    * ⚠️ จับได้เฉพาะตอนสถานะต่างกัน ถ้าออเดอร์วนกลับมาสถานะเดิม (in_review รอบ 1 → … →
-   * in_review รอบ 2) ระหว่างที่แท็บเปิดค้าง ค่านี้จะตรงกันและยังผ่าน — ยังไม่มีเลขรอบให้เทียบ
+   * in_review รอบ 2) ระหว่างที่แท็บเปิดค้าง ค่านี้จะตรงกันและยังผ่าน — `version` ข้างล่างปิดช่องนี้
    */
   from: z.enum(ORDER_STATUSES),
+  /**
+   * `order.updatedAt` (มิลลิวินาที) ที่หน้าจอของคนกดวาดอยู่ — ดู lib/orders/version.ts
+   *
+   * ⚠️ `from` อย่างเดียวไม่พอตั้งแต่ครีเอเตอร์ถอยจาก in_review กลับไปทำต่อเองได้: ครีเอเตอร์กด
+   * "กลับไปทำต่อ" แล้วส่ง WIP ใหม่ = in_review เหมือนเดิมแต่เป็นรอบที่ลูกค้าไม่เคยเห็น ลูกค้ากด
+   * "ขอแก้ไข" จากแท็บเก่า → `from` ตรง → เสียสิทธิ์แก้ไปกับรอบใหม่ ทุกการเปลี่ยนสถานะขยับ
+   * `updatedAt` จึงจับรอบที่วนกลับมาได้ ไม่ตรง = `stale`
+   * บังคับส่งทุกครั้ง (ไม่ optional) — ด่านที่ข้ามได้ด้วยการไม่ส่งคือด่านที่ถูกลืมส่งสักวัน
+   */
+  version: z.number().int().min(0),
   to: z.enum(ORDER_STATUSES),
   /** สิ่งที่คนกดยกเลิกเห็นเรื่องเงิน ตอนกด — ดู `MoneyAck` ใน lib/orders/cancel.ts */
   moneyAck: z
@@ -72,6 +84,8 @@ export type TransitionResult =
 export async function transitionOrder(input: {
   code: string;
   from: OrderStatus;
+  /** `orderVersion(order.updatedAt)` ของหน้าที่วาดปุ่มนี้ */
+  version: number;
   to: OrderStatus;
   moneyAck?: { rows: number; paidCents: number };
 }): Promise<TransitionResult> {
@@ -80,7 +94,7 @@ export async function transitionOrder(input: {
 
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { code, from, to, moneyAck } = parsed.data;
+  const { code, from, version, to, moneyAck } = parsed.data;
 
   const db = getDb();
 
@@ -96,6 +110,7 @@ export async function transitionOrder(input: {
       totalCents: true,
       revisionsUsed: true,
       revisionsAllowed: true,
+      updatedAt: true,
     },
     with: { page: { columns: { userId: true } } },
   });
@@ -227,24 +242,45 @@ export async function transitionOrder(input: {
       and ${schema.order.amountPaidCents} = ${ack.paidCents}`;
   }
 
-  const updated = await db
-    .update(schema.order)
-    .set({
-      status: to,
-      updatedAt: now,
-      ...(to === "completed" ? { completedAt: now } : null),
-      ...(consuming ? { revisionsUsed: sql`${schema.order.revisionsUsed} + 1` } : null),
-    })
-    .where(
-      and(
-        eq(schema.order.id, order.id),
-        eq(schema.order.status, from),
-        consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
-        moneyGateSql(to),
-        moneyCas,
-      ),
-    )
-    .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed });
+  /**
+   * สถานะตรงแต่คนละรุ่น = ออเดอร์วนกลับมาสถานะเดิมระหว่างที่หน้าจอค้าง (ดู `version` ใน Schema)
+   * เช็คหลังด่านที่บอกเหตุผลเฉพาะ (เงิน/โควตา) เพื่อให้ error ที่ตอบบอกเรื่องได้ตรงที่สุดก่อน
+   * ด่านจริงอยู่ใน WHERE ข้างล่าง ตรงนี้แค่ไม่ต้องยิง UPDATE ที่รู้อยู่แล้วว่าไม่ผ่าน
+   */
+  if (orderVersion(order.updatedAt) !== version) return { ok: false, error: "stale" };
+
+  /**
+   * ⚠️ ล็อกแถวออเดอร์ก่อน UPDATE ใน batch เดียวกัน — ไม่ใช่ UPDATE เดี่ยว ๆ
+   *
+   * UPDATE เดี่ยวถ่าย snapshot ตอนเริ่มคำสั่งแล้วค่อยไปรอ lock ถ้า batch แจ้งโอนของลูกค้าถือแถวออเดอร์อยู่
+   * `moneyCas` จะนับ payment_record จาก snapshot ก่อนแถวใหม่ commit แล้วผ่าน (แจ้งโอนที่ยังไม่ยืนยัน
+   * ไม่เขียนแถวออเดอร์ Postgres จึงไม่เช็ค WHERE ซ้ำ) → ยกเลิกทับรายการแจ้งโอนที่ตอบไม่ได้อีกเลย
+   * ล็อกก่อน = UPDATE เริ่มหลัง batch นั้น commit แล้ว เห็นแถวใหม่ แล้วตอบ `money_changed`
+   * (เหตุผลเต็มอยู่ที่ lib/orders/lock.ts) ใช้กับทุกปลายทาง ไม่ใช่แค่ยกเลิก — ลำดับล็อกเดียวกับ batch เงิน
+   */
+  const [, updated] = await db.batch([
+    lockOrder(order.id),
+    db
+      .update(schema.order)
+      .set({
+        status: to,
+        updatedAt: now,
+        ...(to === "completed" ? { completedAt: now } : null),
+        ...(consuming ? { revisionsUsed: sql`${schema.order.revisionsUsed} + 1` } : null),
+      })
+      .where(
+        and(
+          eq(schema.order.id, order.id),
+          eq(schema.order.status, from),
+          // ตัดที่มิลลิวินาทีให้ตรงกับ `Date` ของ JS — เหตุผลอยู่ที่ lib/orders/version.ts
+          sql`date_trunc('milliseconds', ${schema.order.updatedAt}) = ${versionIso(version)}::timestamptz`,
+          consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
+          moneyGateSql(to),
+          moneyCas,
+        ),
+      )
+      .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed }),
+  ]);
 
   /**
    * ไม่มีแถวไหนถูกเขียน = มีคนเปลี่ยนออเดอร์ไปก่อนแล้ว ตอบ `stale` ให้รีเฟรช

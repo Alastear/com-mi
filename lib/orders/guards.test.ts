@@ -46,9 +46,23 @@ describe("แท็บที่เปิดค้าง (lib/orders/actions.ts)"
     assert.match(src, /if \(order\.status !== from\) return \{ ok: false, error: "stale" \}/);
   });
 
-  it("ทั้งแถบปุ่มและบอร์ดส่งสถานะที่วาดอยู่ไปด้วย", () => {
-    assert.match(read("components/app/order-actions.tsx"), /from: status/);
-    assert.match(read("components/app/order-board.tsx"), /transitionOrder\(\{ code, from, to \}\)/);
+  it("ทั้งแถบปุ่มและบอร์ดส่งสถานะและรุ่นที่วาดอยู่ไปด้วย", () => {
+    assert.match(read("components/app/order-actions.tsx"), /from: status, version/);
+    assert.match(
+      read("components/app/order-board.tsx"),
+      /transitionOrder\(\{ code, from, version, to \}\)/,
+    );
+  });
+
+  it("รุ่น (updatedAt) บังคับส่ง และอยู่ใน WHERE ตัดที่มิลลิวินาที — จับออเดอร์ที่วนกลับมาสถานะเดิม", () => {
+    assert.match(src, /version: z\.number\(\)\.int\(\)\.min\(0\),/);
+    assert.doesNotMatch(src, /version: z\.number\(\)[^,]*\.optional\(\)/);
+    assert.match(src, /date_trunc\('milliseconds', \$\{schema\.order\.updatedAt\}\) = \$\{versionIso\(version\)\}::timestamptz/);
+  });
+
+  it("UPDATE สถานะอยู่ใน batch หลัง lockOrder — subquery นับแถวเงินต้องเห็นแถวที่เพิ่ง commit", () => {
+    const at = src.indexOf("await db.batch([\n    lockOrder(order.id),\n    db\n      .update(schema.order)");
+    assert.ok(at > 0, "ต้องล็อกออเดอร์ก่อน UPDATE ใน batch เดียวกัน");
   });
 });
 

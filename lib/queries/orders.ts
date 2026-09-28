@@ -48,6 +48,8 @@ export async function getOrderForClient(code: string, clientUserId: string) {
       isPublicInQueue: true,
       createdAt: true,
       completedAt: true,
+      // รุ่นของหน้า — ปุ่มเปลี่ยนสถานะส่งกลับไปให้ `transitionOrder` จับแท็บค้าง (lib/orders/version.ts)
+      updatedAt: true,
     },
     with: {
       items: { orderBy: [asc(schema.orderItem.sortOrder)] },
@@ -136,6 +138,8 @@ export async function listOrdersForBoard(creatorUserId: string) {
       depositMetAt: true,
       createdAt: true,
       completedAt: true,
+      // รุ่นของการ์ด — ส่งกลับมากับการลากให้ `transitionOrder` จับการ์ดค้าง (lib/orders/version.ts)
+      updatedAt: true,
     },
     with: {
       // ชื่อที่แช่ไว้ตอนสั่ง — บรรทัด base คือชื่อเมนู ณ ตอนนั้น

@@ -44,6 +44,7 @@ import type { OrderStatus } from "@/lib/types";
 export function OrderActions({
   code,
   status,
+  version,
   actor,
   money = null,
   currency = "THB",
@@ -51,6 +52,8 @@ export function OrderActions({
 }: {
   code: string;
   status: OrderStatus;
+  /** `orderVersion(order.updatedAt)` ตอนวาดหน้านี้ — ส่งคู่กับ `status` ให้ server จับแท็บค้าง */
+  version: number;
   actor: Actor;
   /** เงินที่ขยับไปแล้ว — มาจาก `moneyMoved()` ฝั่ง server */
   money?: MoneyMoved | null;
@@ -80,14 +83,15 @@ export function OrderActions({
   function move(to: OrderStatus) {
     start(async () => {
       /**
-       * ส่งสถานะที่หน้านี้วาดอยู่ไปด้วยเสมอ — server ปฏิเสธ (`stale`) ถ้าของจริงเปลี่ยนไปแล้ว
+       * ส่งสถานะและรุ่นที่หน้านี้วาดอยู่ไปด้วยเสมอ — server ปฏิเสธ (`stale`) ถ้าของจริงเปลี่ยนไปแล้ว
        * ไม่งั้นแท็บที่เปิดค้างจะกดขอแก้ไขกับรอบงานที่ลูกค้าไม่เคยเห็น แล้วเสียสิทธิ์ไปฟรี ๆ
+       * (สถานะอย่างเดียวไม่พอ: in_review รอบใหม่ก็ชื่อ in_review — ดู `version` ใน transitionOrder)
        * ยกเลิกต้องบอก server ด้วยว่าเห็นเงินเท่าไร — ถ้าไม่ตรงของจริง server ปฏิเสธ (money_changed)
        */
       const res = await transitionOrder(
         to === "cancelled"
-          ? { code, from: status, to, moneyAck: moneyAckFrom(money) }
-          : { code, from: status, to },
+          ? { code, from: status, version, to, moneyAck: moneyAckFrom(money) }
+          : { code, from: status, version, to },
       );
       // ปิด dialog ทั้งตอนสำเร็จและล้มเหลว — ล้มเหลวแล้ว toast บอกเหตุผลอยู่แล้ว
       // ค้าง dialog ไว้จะทำให้คนกดยืนยันซ้ำกับสถานะที่เปลี่ยนไปแล้ว
