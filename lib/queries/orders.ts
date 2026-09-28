@@ -146,6 +146,17 @@ export async function listOrdersForBoard(creatorUserId: string) {
       items: { where: eq(schema.orderItem.kind, "base"), limit: 1, columns: { label: true } },
       service: { columns: { title: true } },
       client: { columns: { name: true, image: true } },
+      /**
+       * มัดจำของใบที่ยังเปิดอยู่ — ป้ายกำหนดส่งของ `quoted` ต้องดูตัวนี้ ไม่ใช่มัดจำเมนูบนแถว
+       * (เหตุผลที่ `withOpenQuoteDeposit`) เงื่อนไขเดียวกับ `getLiveQuote` เอาแค่คอลัมน์เดียว
+       * ออเดอร์ที่ตอบรับแล้วไม่มีใบเปิด (ใบถูกยอมรับ) จึงไม่ได้แถวเกินมา
+       */
+      quotes: {
+        where: and(isNull(schema.orderQuote.supersededAt), isNull(schema.orderQuote.acceptedAt)),
+        orderBy: [desc(schema.orderQuote.createdAt)],
+        limit: 1,
+        columns: { depositCents: true },
+      },
     },
   });
 }

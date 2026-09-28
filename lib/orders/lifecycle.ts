@@ -344,3 +344,24 @@ export function dueState(o: DueOrder, now: Date = new Date(), viewer: DueViewer 
 export function isOverdue(o: DueOrder, now: Date = new Date(), viewer: DueViewer = "creator"): boolean {
   return dueState(o, now, viewer).kind === "overdue";
 }
+
+/**
+ * ออเดอร์ `quoted` ที่ป้ายกำหนดส่งต้องเห็น — มัดจำ **ของใบที่เปิดอยู่** แทนมัดจำบนแถวออเดอร์
+ *
+ * ระหว่าง `quoted` แถวออเดอร์ยังพกมัดจำจากเมนูตอนสั่ง (`issueQuote` เขียนมัดจำไว้ที่ใบเท่านั้น)
+ * แต่ตอนลูกค้ากดยอมรับ `acceptQuote` ใช้มัดจำของใบ — ทั้งในการเขียนราคาและในการตัดสินว่านาฬิกา
+ * เริ่มตอนตอบรับหรือตอนมัดจำครบ (`startClockOnAcceptSet`) ป้ายจึงต้องดูตัวเดียวกัน
+ * ไม่งั้นเมนูไม่มีมัดจำ + ใบมีมัดจำ ฿300 ขึ้น "หลังตอบรับงาน" อยู่ข้างการ์ดใบที่บอกว่าต้องโอนมัดจำ
+ * ลูกค้าตัดสินใจกดยอมรับจากข้อมูลที่ผิด
+ *
+ * ไม่มีใบเปิดอยู่ (null/undefined) หรือไม่ใช่ `quoted` = คืนตัวเดิม — สถานะอื่นยังไม่มีใบ
+ * หรือใบถูกยอมรับไปแล้ว (มัดจำของใบอยู่บนแถวแล้ว)
+ * ⚠️ ใบที่หมดอายุก็ยังใช้มัดจำของใบ — หน้าจอยังโชว์ใบนั้นอยู่ และเป็นเงื่อนไขที่ใกล้ความจริงที่สุด
+ */
+export function withOpenQuoteDeposit<T extends Pick<DueOrder, "status" | "depositCents">>(
+  o: T,
+  openQuoteDepositCents: number | null | undefined,
+): T {
+  if (o.status !== "quoted" || openQuoteDepositCents == null) return o;
+  return { ...o, depositCents: openQuoteDepositCents };
+}

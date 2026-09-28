@@ -12,6 +12,7 @@ import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { paymentMode } from "@/lib/orders/release";
 import { closedText, completedByOf, dueHasDate, dueLabel } from "@/lib/orders/labels";
+import { withOpenQuoteDeposit } from "@/lib/orders/lifecycle";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
@@ -81,8 +82,14 @@ export default async function ClientRequestPage({ params }: Props) {
    * รอมัดจำ/รอตอบรับ = บอกเป็นจำนวนวัน ไม่ใช่วันที่ (วันที่ยังเลื่อนได้)
    * ⚠️ `"client"` — งานรอลูกค้าตรวจพรีวิว (`in_review`) ขึ้นข้อความรอเฉย ๆ ไม่ขึ้นเลยกำหนดแดงใส่ลูกค้า
    * ต่างจากครีเอเตอร์โดยตั้งใจแค่จุดนี้ (เหตุผลอยู่ที่ `dueState`)
+   * ⚠️ `quoted` ต้องดูมัดจำของใบที่การ์ดข้างล่างโชว์ ไม่ใช่มัดจำเมนูบนแถว (`withOpenQuoteDeposit`)
    */
-  const due = dueLabel(t, { ...order, status }, new Date(), "client");
+  const due = dueLabel(
+    t,
+    withOpenQuoteDeposit({ ...order, status }, liveQuote?.depositCents),
+    new Date(),
+    "client",
+  );
   /**
    * รีวิวมีได้เฉพาะงานที่ `completed` (สถานะปลายทาง ย้อนไม่ได้) — สถานะอื่นไม่ต้องเสีย query
    * ฟอร์มเขียนใหม่โชว์เมื่อมีสิทธิ์ตามกติกาเดียวกับ server (`reviewEligibility`) ส่วนรีวิวที่มีแล้ว

@@ -25,6 +25,7 @@ import { readDelivery } from "@/lib/delivery/read";
 import { canRelease, paymentMode } from "@/lib/orders/release";
 import { depositPercentOf } from "@/lib/orders/pricing";
 import { closedText, completedByOf, dueLabel } from "@/lib/orders/labels";
+import { withOpenQuoteDeposit } from "@/lib/orders/lifecycle";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { formatLineAmount, formatMoney, formatRelative } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
@@ -51,8 +52,6 @@ export default async function OrderPage({ params }: Props) {
 
   const locale = await getLocale();
   const t = getDictionary(locale);
-  // ตัวเดียวกับบอร์ดและหน้าลูกค้า — งานที่ส่งแล้ว/จบแล้วไม่ขึ้น และรอมัดจำอยู่ไม่นับว่าเลย
-  const due = dueLabel(t, { ...order, status: order.status as OrderStatus });
   const {
     open: openRound,
     released: releasedRound,
@@ -71,6 +70,11 @@ export default async function OrderPage({ params }: Props) {
    */
   const quotable = ["requested", "reviewing", "quoted"].includes(order.status);
   const liveQuote = quotable ? await getLiveQuote(order.id) : null;
+  /**
+   * ตัวเดียวกับบอร์ดและหน้าลูกค้า — งานที่ส่งแล้ว/จบแล้วไม่ขึ้น และรอมัดจำอยู่ไม่นับว่าเลย
+   * ⚠️ `quoted` ใช้มัดจำของใบที่เปิดอยู่ (`withOpenQuoteDeposit`) — ต้องคิดหลังโหลดใบแล้ว
+   */
+  const due = dueLabel(t, withOpenQuoteDeposit({ ...order, status }, liveQuote?.depositCents));
   // รีวิวมีได้เฉพาะงานที่ `completed` — สถานะอื่นไม่ต้องเสีย query
   const reviewRow = status === "completed" ? await getReviewForOrder(order.id) : null;
 

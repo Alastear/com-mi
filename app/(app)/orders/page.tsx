@@ -3,6 +3,7 @@ import { requireCreator } from "@/lib/auth-guard";
 import { listOrdersForBoard } from "@/lib/queries/orders";
 import { ensureShop } from "@/lib/shop/ensure";
 import { dueLabel } from "@/lib/orders/labels";
+import { withOpenQuoteDeposit } from "@/lib/orders/lifecycle";
 import { orderVersion } from "@/lib/orders/version";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -36,7 +37,8 @@ export default async function OrdersPage() {
     amountPaidCents: o.amountPaidCents,
     dueAt: o.dueAt ? o.dueAt.toISOString() : null,
     // คิดที่นี่ ไม่ใช่ตอน render ฝั่ง client — ดู `BoardOrder.due`
-    due: dueLabel(t, { ...o, status: o.status as OrderStatus }),
+    // `quoted` ใช้มัดจำของใบที่เปิดอยู่ ตรงกับหน้างานทั้งสองฝั่ง (`withOpenQuoteDeposit`)
+    due: dueLabel(t, withOpenQuoteDeposit({ ...o, status: o.status as OrderStatus }, o.quotes[0]?.depositCents)),
     createdAt: o.createdAt.toISOString(),
     version: orderVersion(o.updatedAt),
   }));

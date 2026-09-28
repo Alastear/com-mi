@@ -19,6 +19,7 @@ import {
   dueAfterDeposit,
   dueState,
   isOverdue,
+  withOpenQuoteDeposit,
   type DueOrder,
   type LifecycleDecision,
   type LifecycleOrder,
@@ -496,6 +497,24 @@ describe("เลยกำหนด (คำนวณตอนแสดง)", () =
       kind: "after_deposit",
       days: 7,
     });
+  });
+
+  it("quoted: ป้ายใช้มัดจำของใบที่เปิดอยู่ ไม่ใช่มัดจำเมนูบนแถว — ตรงกับที่ acceptQuote จะเขียน", () => {
+    // เมนูไม่มีมัดจำ ใบมีมัดจำ ฿300 → นาฬิกาจะเริ่มตอนมัดจำครบ ไม่ใช่ตอนตอบรับ
+    const menuNoDeposit = due({ status: "quoted", depositCents: 0 });
+    assert.equal(dueState(menuNoDeposit, now).kind, "after_accept", "แถวดิบ = ป้ายผิดแบบเดิม");
+    assert.deepEqual(dueState(withOpenQuoteDeposit(menuNoDeposit, 30_000), now), { kind: "after_deposit", days: 7 });
+    // กลับกัน: เมนูมีมัดจำ ใบไม่มี → เริ่มนับตอนตอบรับ
+    const menuDeposit = due({ status: "quoted", depositCents: 50_000 });
+    assert.deepEqual(dueState(withOpenQuoteDeposit(menuDeposit, 0), now), { kind: "after_accept", days: 7 });
+    // ไม่มีใบเปิด = ใช้แถวตามเดิม
+    assert.equal(withOpenQuoteDeposit(menuDeposit, null), menuDeposit);
+    assert.equal(withOpenQuoteDeposit(menuDeposit, undefined), menuDeposit);
+    // สถานะอื่นไม่ถูกแตะ — หลังตอบรับ มัดจำของใบอยู่บนแถวแล้ว
+    for (const status of ["requested", "reviewing", "accepted", "in_progress"] as const) {
+      const o = due({ status, depositCents: 50_000 });
+      assert.equal(withOpenQuoteDeposit(o, 0), o, status);
+    }
   });
 
   it("รอลูกค้าตรวจพรีวิว: ลูกค้าเห็นข้อความรอ ครีเอเตอร์ยังเห็นเลยกำหนดตามจริง", () => {
