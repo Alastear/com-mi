@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { cleanupMedia, type CleanupReport } from "@/lib/media/cleanup";
 import { runLifecycle, type LifecycleReport } from "@/lib/orders/lifecycle-run";
 import { isOrderCode } from "@/lib/orders/code";
+import { planStages, type Stage } from "@/lib/cron/stages";
 
 /**
  * งานรายวัน — Vercel Cron เป็นคนเรียก (ตั้งเวลาไว้ใน `vercel.json`)
@@ -23,6 +24,7 @@ import { isOrderCode } from "@/lib/orders/code";
  *   ?dry=1           ดูว่าจะทำอะไร โดยไม่เขียนอะไรเลย
  *   ?only=lifecycle  รันเฉพาะขั้นนั้น (media | lifecycle)
  *   ?code=XXXXXXXX   (ซ้ำได้) ขั้น lifecycle ดูเฉพาะออเดอร์เหล่านี้ — และข้ามขั้น media
+ *                    (`&only=media` คู่กับ code = 400 ไม่ใช่รัน media ทั้งระบบ ดู lib/cron/stages.ts)
  *                    ⚠️ มีไว้ตรวจบนเครื่องกับข้อมูลทดสอบ เครื่อง dev ต่อ DB ตัวเดียวกับ production
  *                    รันจริงโดยไม่จำกัดจะไปปิดออเดอร์ของผู้ใช้จริง ลบไฟล์จริง และส่งอีเมลหาคนจริง
  */
@@ -30,11 +32,10 @@ import { isOrderCode } from "@/lib/orders/code";
 /**
  * ขั้น lifecycle ทำงานได้สูงสุด 50 ใบต่อกติกาต่อรอบ แต่ละใบคือหนึ่ง round-trip ไป Neon
  * — ให้เวลาพอโดยไม่ต้องพึ่งค่าตั้งต้นของแพลตฟอร์ม (อีเมลที่ตามมาอยู่ใน `after()` ซึ่งใช้เวลาของ route นี้ด้วย)
+ * ⚠️ อีเมลถูกเว้นระยะ 600 ms ต่อฉบับ (lib/email/pace.ts) — เตือนครบ 50 ใบ ≈ 30 วินาทีหลังตอบ
+ * ถ้าวันหนึ่งเพิ่ม LIFECYCLE_LIMIT หรือมีขั้นที่ส่งอีเมลเพิ่ม ต้องคิดเวลาตรงนี้ใหม่
  */
 export const maxDuration = 60;
-
-type Stage = "media" | "lifecycle";
-const STAGES: readonly Stage[] = ["media", "lifecycle"];
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -56,15 +57,10 @@ export async function GET(request: Request) {
   }
   const codes = rawCodes.length > 0 ? rawCodes : null;
 
-  const only = query.get("only");
-  if (only !== null && !STAGES.includes(only as Stage)) {
-    return Response.json({ error: "bad_stage" }, { status: 400 });
-  }
-  const run = (stage: Stage) => {
-    if (only) return only === stage;
-    // จำกัดออเดอร์แล้ว = ตั้งใจทดสอบเฉพาะจุด ขั้น media ไม่มีขอบเขตแบบนั้น จึงไม่รัน
-    return !(codes && stage === "media");
-  };
+  // จำกัดออเดอร์แล้ว = ตั้งใจทดสอบเฉพาะจุด ขั้น media ไม่มีขอบเขตแบบนั้น — กติกาอยู่ใน planStages
+  const plan = planStages(query.get("only"), codes !== null);
+  if (!plan.ok) return Response.json({ error: plan.error }, { status: 400 });
+  const run = (stage: Stage) => plan.stages.includes(stage);
 
   const report: {
     dryRun: boolean;
