@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { acceptQuoteFailure, eventText } from "./labels";
+import { acceptQuoteFailure, eventText, issueQuoteFailure } from "./labels";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 
 const th = getDictionary("th");
@@ -54,5 +54,25 @@ describe("กดยอมรับใบเสนอราคาไม่ผ่�
     assert.equal(acceptQuoteFailure(th, "not_found").refresh, true);
     assert.equal(acceptQuoteFailure(th, "invalid").refresh, false);
     assert.equal(acceptQuoteFailure(th, "unauthenticated").refresh, false);
+  });
+});
+
+describe("ออกใบเสนอราคาไม่ผ่าน", () => {
+  it("ออเดอร์ย้ายไปแล้ว (wrong_status) บอกว่าเปลี่ยนจากที่อื่นแล้วรีเฟรช ทั้งสองภาษา", () => {
+    for (const t of [th, en]) {
+      const r = issueQuoteFailure(t, "wrong_status");
+      assert.equal(r.refresh, true);
+      assert.equal(r.message, t.order.moveStale);
+    }
+  });
+
+  it("ฟอร์มกรอกผิดไม่รีเฟรช — รีเฟรชไม่ช่วย และข้อความเฉพาะเรื่องยังอยู่", () => {
+    assert.deepEqual(issueQuoteFailure(th, "empty"), { message: th.quote.errorEmpty, refresh: false });
+    assert.deepEqual(issueQuoteFailure(en, "too_large"), { message: en.quote.errorTooLarge, refresh: false });
+    assert.equal(issueQuoteFailure(th, "rate_limited").refresh, false);
+    assert.equal(issueQuoteFailure(th, "shop_suspended").message, th.quote.errorSuspended);
+    assert.equal(issueQuoteFailure(th, "invalid").refresh, false);
+    assert.equal(issueQuoteFailure(th, "unauthenticated").refresh, false);
+    assert.equal(issueQuoteFailure(th, "conflict").refresh, true);
   });
 });

@@ -84,8 +84,24 @@ describe("ยอมรับใบเสนอราคาที่แพ้ก�
 
   it("ออกใบใหม่ล็อกออเดอร์ก่อนแตะแถวใบ ทั้งสองเส้น", () => {
     const issue = src.slice(src.indexOf("export async function issueQuote"), src.indexOf("/* ── ยอมรับใบ"));
-    assert.match(issue, /\? \[\n\s+lock,\n\s+supersede,/);
-    assert.match(issue, /: \[lock, supersede, insert, event\]/);
+    assert.match(issue, /db\.batch\(\[lock, supersede, insert, promote, event, check\]\)\)\[5\]/);
+    assert.match(issue, /db\.batch\(\[lock, supersede, insert, event, check\]\)\)\[4\]/);
+  });
+
+  it("ออกใบที่แพ้การแข่ง (ถอนใบ/ยกเลิกระหว่างทาง) ไม่เขียนอะไรเลย และไม่แจ้งเตือน", () => {
+    const issue = src.slice(src.indexOf("export async function issueQuote"), src.indexOf("/* ── ยอมรับใบ"));
+    // ด่านคือสถานะที่อ่านมา ไม่ใช่แค่ "ยัง quoted" — สองแท็บออกจาก reviewing พร้อมกันต้องแพ้หนึ่ง
+    assert.match(issue, /o\.status = \$\{from\}\)`/);
+    // ปิดใบเก่า + เพิ่มใบใหม่ ผูกกับสถานะ, เปลี่ยนสถานะ + event ผูกกับใบที่ batch นี้เพิ่ม
+    assert.match(issue, /isNull\(schema\.orderQuote\.acceptedAt\),\n\s+stillFrom,/);
+    assert.match(issue, /insert into order_quote[\s\S]*where \$\{stillFrom\}/);
+    assert.match(issue, /eq\(schema\.order\.status, from\), issuedHere\)/);
+    assert.match(issue, /'quote_issued'::text[\s\S]*where \$\{issuedHere\}/);
+    assert.doesNotMatch(issue, /db\.insert\(schema\.(orderQuote|message)\)\.values/);
+    const bail = issue.indexOf('if (issued.length === 0) return { ok: false, error: "wrong_status" }');
+    const notifyAt = issue.indexOf("await notify(");
+    assert.ok(bail > 0, "ต้องเช็คผลของ batch");
+    assert.ok(notifyAt > bail, "notify ต้องอยู่หลังด่าน");
   });
 
   it("ถอนใบที่แพ้การแข่ง ไม่เขียน event ถอนใบลงเธรด และไม่ตอบ ok", () => {

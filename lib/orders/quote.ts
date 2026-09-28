@@ -154,9 +154,26 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
   const depositCents = depositFor(quote.totalCents, depositPercent);
 
   const now = new Date();
+  const at = now.toISOString();
   const quoteId = newId("quo");
   const expiresAt =
     expiresInDays > 0 ? new Date(now.getTime() + expiresInDays * 86_400_000) : null;
+
+  /**
+   * ⚠️ batch ไม่มี if — ทุกการเขียนข้างล่างต้องผูกกับ "ออเดอร์ยังอยู่ในสถานะที่เราอ่านมา" เอง
+   *
+   * ระหว่างที่เราอ่าน `from` ข้างบนกับตอน batch รัน ครีเอเตอร์อาจกดถอนใบจากอีกแท็บ (quoted → reviewing)
+   * หรือลูกค้ากดยกเลิก (→ cancelled) ได้ ล็อกข้างล่างแค่ทำให้เรารอจนอีกฝั่ง commit — ไม่ได้หยุดเรา
+   * เดิม batch ไม่มีเงื่อนไขสถานะเลย: ใบเปิดใบใหม่ + event "ออกใบเสนอราคา" ไปโผล่บนออเดอร์ที่ reviewing/cancelled
+   * แล้วลูกค้ายังได้แจ้งเตือน/อีเมล "มีใบเสนอราคาใหม่" ที่กดยอมรับไม่ได้ (ลองจริงกับ DB แล้ว)
+   *
+   * ล็อกออเดอร์ก่อนแล้ว สถานะจึงไม่เปลี่ยนจนจบ batch — เช็ค `status = from` ในแต่ละคำสั่งได้ผลตรงกันทุกตัว
+   * ⚠️ ห้ามใช้ "ออเดอร์เป็น quoted" แทน `status = from`: สองแท็บออกใบจาก reviewing พร้อมกัน
+   * ตัวที่สองจะเห็น quoted ของตัวแรกแล้วเขียนทับไปเงียบ ๆ ทั้งที่หน้าจอของมันไม่เคยเห็นใบนั้น
+   */
+  const stillFrom = sql`exists (select 1 from "order" o where o.id = ${order.id} and o.status = ${from})`;
+  /** แถวใบ id นี้มีอยู่ = batch นี้เป็นคนเพิ่มจริง (id เพิ่งสุ่มมา ไม่มีใครอื่นรู้) */
+  const issuedHere = sql`exists (select 1 from order_quote q where q.id = ${quoteId})`;
 
   /**
    * ออกใบใหม่ = ปิดใบเก่าก่อน ไม่ใช่เขียนทับ
@@ -172,46 +189,59 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
         eq(schema.orderQuote.orderId, order.id),
         isNull(schema.orderQuote.supersededAt),
         isNull(schema.orderQuote.acceptedAt),
+        stillFrom,
       ),
     );
 
-  const insert = db.insert(schema.orderQuote).values({
-    id: quoteId,
-    orderId: order.id,
-    createdByUserId: session.user.id,
-    lines: quote.lines.map((l) => ({ label: l.label, amountCents: l.unitPriceCents })),
-    subtotalCents: quote.subtotalCents,
-    addonsCents: quote.addonsCents,
-    totalCents: quote.totalCents,
-    depositCents,
-    note,
-    expiresAt,
-    createdAt: now,
-  });
-
-  const event = db.insert(schema.message).values({
-    id: newId("msg"),
-    orderId: order.id,
-    senderUserId: session.user.id,
-    isSystemEvent: true,
-    eventType: "quote_issued",
-    // ต้องบอกว่าใครทำ ไม่งั้น timeline ขึ้นว่า "โดยระบบ" ทั้งที่ครีเอเตอร์เป็นคนกด
-    eventData: { actor: "creator" },
-    createdAt: now,
-  });
+  /**
+   * `insert ... select ... where` แทน `insert().values()` เพื่อให้มีเงื่อนไขได้ — แบบเดียวกับ `acceptQuote`
+   * ทุกพารามิเตอร์มี cast เพราะใน select list Postgres เดาชนิดไม่ได้
+   */
+  const storedLines = quote.lines.map((l) => ({ label: l.label, amountCents: l.unitPriceCents }));
+  const insert = db.execute(sql`
+    insert into order_quote (id, order_id, created_by_user_id, lines, subtotal_cents, addons_cents,
+                             total_cents, deposit_cents, note, expires_at, created_at)
+    select ${quoteId}::text, ${order.id}::text, ${session.user.id}::text, ${JSON.stringify(storedLines)}::jsonb,
+           ${quote.subtotalCents}::int, ${quote.addonsCents}::int, ${quote.totalCents}::int,
+           ${depositCents}::int, ${note}::text, ${expiresAt ? expiresAt.toISOString() : null}::timestamptz,
+           ${at}::timestamptz
+    where ${stillFrom}
+  `);
 
   /**
    * ไม่เรียก `assertTransition` — เครื่องสถานะไม่มีเส้นไหนเข้าสู่ `quoted` เลย
    * โดยตั้งใจ (เหตุผลอยู่ที่ `lib/orders/state-machine.ts`) ที่นี่จึงเป็นทางเดียว
    * ที่เขียนสถานะนี้ได้ และเขียนพร้อมแถวใบเสมอ ด่านคือ `QUOTABLE` ข้างบน
-   * กับเงื่อนไข `where status = from` ที่ผูกไว้กับคำสั่ง update ข้างล่าง
+   * กับเงื่อนไข `status = from` + ใบที่เพิ่งเพิ่มใน batch นี้ ที่ผูกไว้กับคำสั่ง update ข้างล่าง
    */
+  const promote = db
+    .update(schema.order)
+    .set({ status: "quoted", updatedAt: now })
+    .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from), issuedHere));
+
+  /**
+   * event ลงเธรดเฉพาะเมื่อใบนี้ถูกเพิ่มจริง — เธรดเป็นหลักฐานของทั้งสองฝั่ง ห้ามมี event ที่ไม่ได้เกิดขึ้น
+   * ต้องบอกว่าใครทำ (actor) ไม่งั้น timeline ขึ้นว่า "โดยระบบ" ทั้งที่ครีเอเตอร์เป็นคนกด
+   */
+  const event = db.execute(sql`
+    insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
+    select ${newId("msg")}::text, ${order.id}::text, ${session.user.id}::text, true,
+           'quote_issued'::text, ${JSON.stringify({ actor: "creator" })}::jsonb, ${at}::timestamptz
+    where ${issuedHere}
+  `);
+
+  /** อ่านกลับใน batch เดียวกัน (เห็นสิ่งที่ batch นี้เขียน) — ว่างเปล่า = แพ้การแข่ง */
+  const check = db
+    .select({ id: schema.orderQuote.id })
+    .from(schema.orderQuote)
+    .where(eq(schema.orderQuote.id, quoteId));
 
   /**
    * ล็อกออเดอร์ก่อนแตะแถวใบ — ลำดับเดียวกับ `acceptQuote`/`withdrawQuote` (ดู `lockOrderForQuote`)
    * ไม่มีบรรทัดนี้: ถอนใบพร้อมออกใบใหม่จากอีกแท็บ ฝั่งถอนรอแถวใบเก่าแล้วปิดได้แค่ใบเก่า
    * (ใบใหม่ไม่อยู่ใน snapshot ของมัน) → ออเดอร์กลับไป reviewing พร้อมใบใหม่ที่ยังเปิดค้าง
    * = สภาพที่ `withdrawQuote` มีไว้กันไม่ให้เกิด (ลองจริงบน Postgres 18 แล้ว) มีบรรทัดนี้แล้วสองฝั่งเข้าคิวกัน
+   * และทำให้ `status = from` ที่ทุกคำสั่งเช็คคงที่ตลอด batch
    */
   const lock = lockOrderForQuote(order.id);
 
@@ -222,40 +252,23 @@ export async function issueQuote(input: z.input<typeof IssueSchema>): Promise<Is
    * ปุ่มบนหน้าจอกันคลิกซ้ำอยู่แล้วด้วย `useTransition` เส้นทางนี้จึงเหลือแค่
    * คนที่ยิง action ตรง ๆ — แต่ 500 ที่อธิบายไม่ได้ก็ยังเป็น 500 อยู่ดี
    */
+  let issued: { id: string }[];
   try {
-    await db.batch(
+    issued =
       from !== "quoted"
-        ? [
-            lock,
-            supersede,
-            insert,
-            db
-              .update(schema.order)
-              .set({ status: "quoted", updatedAt: now })
-              /**
-       * เงื่อนไขนี้คือด่านกันกดซ้ำ **และ** กันการยอมรับใบที่เพิ่งถูกแทนที่ไป
-       *
-       * ระหว่างที่เราอ่านใบมาแล้วกำลังจะเขียน ครีเอเตอร์อาจออกใบใหม่ทับพอดี
-       * การอ่านแล้วค่อยเขียนโดยไม่ผูกเงื่อนไขกลับไปที่แถวใบ จะเขียนราคาของใบที่ตายแล้ว
-       */
-      .where(
-        and(
-          eq(schema.order.id, order.id),
-          eq(schema.order.status, from),
-          sql`exists (
-            select 1 from ${schema.orderQuote} q
-            where q.id = ${quoteId} and q.accepted_at is null and q.superseded_at is null
-          )`,
-        ),
-      ),
-            event,
-          ]
-        : [lock, supersede, insert, event],
-    );
+        ? (await db.batch([lock, supersede, insert, promote, event, check]))[5]
+        : (await db.batch([lock, supersede, insert, event, check]))[4];
   } catch (err) {
     if (isUniqueViolation(err, "order_quote_live_idx")) return { ok: false, error: "conflict" };
     throw err;
   }
+
+  /**
+   * แพ้การแข่ง — ออเดอร์ย้ายไปจากสถานะที่เราอ่านมาแล้ว ไม่มีอะไรถูกเขียน
+   * ⚠️ ห้ามแจ้งเตือน: ลูกค้าจะได้อีเมล "ใบเสนอราคาใหม่" ที่เปิดมาแล้วไม่มีใบให้กด
+   * หน้าจอครีเอเตอร์ขึ้นข้อความ "ออเดอร์เปลี่ยนไปแล้ว" แล้วรีเฟรช (ดู `issueQuoteFailure`)
+   */
+  if (issued.length === 0) return { ok: false, error: "wrong_status" };
 
   if (order.clientUserId) {
     await notify({

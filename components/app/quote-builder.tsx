@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n/client";
 import { formatMoney } from "@/lib/format";
 import { depositFor } from "@/lib/orders/pricing";
+import { issueQuoteFailure } from "@/lib/orders/labels";
 import { issueQuote, withdrawQuote } from "@/lib/orders/quote";
 import { cn } from "@/lib/utils";
 
@@ -105,21 +106,10 @@ export function QuoteBuilder({
         toast.success(t.quote.sent);
         return;
       }
-      toast.error(
-        res.error === "empty"
-          ? t.quote.errorEmpty
-          : res.error === "too_large"
-            ? t.quote.errorTooLarge
-            : res.error === "wrong_status"
-              ? t.quote.errorWrongStatus
-              : res.error === "conflict"
-                ? t.quote.errorConflict
-                : res.error === "rate_limited"
-                  ? t.quote.errorRateLimited
-                  : res.error === "shop_suspended"
-                    ? t.quote.errorSuspended
-                    : t.error.title,
-      );
+      // ⚠️ แพ้การแข่ง (ออเดอร์ถูกถอนใบ/ยกเลิกจากที่อื่น) ต้องรีเฟรช ไม่งั้นฟอร์มค้างอยู่บนสถานะที่ไม่มีแล้ว
+      const fail = issueQuoteFailure(t, res.error);
+      toast.error(fail.message);
+      if (fail.refresh) router.refresh();
     });
   }
 

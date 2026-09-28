@@ -4,7 +4,7 @@ import { daysUntil, formatDate, formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import type { Actor } from "./state-machine";
 import { dueState, type DueOrder } from "./lifecycle";
-import type { AcceptQuoteResult } from "./quote";
+import type { AcceptQuoteResult, IssueQuoteResult } from "./quote";
 
 /**
  * ปุ่มบน action bar มาจาก `allowedNext()` เสมอ ไม่ใช่รายการที่เขียนตายไว้
@@ -262,6 +262,40 @@ export function acceptQuoteFailure(
       return { message: t.quote.errorNotOpen, refresh: true };
     case "not_found":
       return { message: t.error.title, refresh: true };
+    case "invalid":
+    case "unauthenticated":
+      return { message: t.error.title, refresh: false };
+  }
+}
+
+/**
+ * ออกใบเสนอราคาไม่ผ่าน → ข้อความ + ต้องรีเฟรชหน้าไหม
+ *
+ * ⚠️ `wrong_status` = ออเดอร์ย้ายไปแล้วจากที่อื่น (ถอนใบจากอีกแท็บ ลูกค้ายกเลิก ออกใบจากอีกแท็บไปก่อน)
+ * ฟอร์มบนจอกำลังเสนอราคาให้ออเดอร์ในสภาพที่ไม่มีอยู่แล้ว — ต้องบอกว่า "เปลี่ยนไปแล้ว" แล้วดึงของจริงมาวาด
+ * ไม่ใช่บอกแค่ "ออกใบไม่ได้" แล้วปล่อยหน้าเก่าค้างไว้ให้กดซ้ำ
+ * ฟอร์มยังคงบรรทัดที่พิมพ์ไว้ (รีเฟรชแบบ router ไม่ล้าง state ของ client) — ออกใบใหม่ต่อได้ทันทีถ้ายังออกได้
+ */
+export function issueQuoteFailure(
+  t: Dictionary,
+  error: Extract<IssueQuoteResult, { ok: false }>["error"],
+): { message: string; refresh: boolean } {
+  switch (error) {
+    case "wrong_status":
+      return { message: t.order.moveStale, refresh: true };
+    case "conflict":
+      // มีใบอื่นเพิ่งถูกออกพอดี — ดึงมาให้เห็นก่อนตัดสินใจออกทับ
+      return { message: t.quote.errorConflict, refresh: true };
+    case "not_found":
+      return { message: t.error.title, refresh: true };
+    case "empty":
+      return { message: t.quote.errorEmpty, refresh: false };
+    case "too_large":
+      return { message: t.quote.errorTooLarge, refresh: false };
+    case "rate_limited":
+      return { message: t.quote.errorRateLimited, refresh: false };
+    case "shop_suspended":
+      return { message: t.quote.errorSuspended, refresh: false };
     case "invalid":
     case "unauthenticated":
       return { message: t.error.title, refresh: false };
