@@ -1,5 +1,4 @@
 import type { OrderStatus } from "@/lib/types";
-import { isTerminal } from "./state-machine";
 
 /**
  * เงื่อนไข "จ่ายครบแล้ว" — จุดเดียวในระบบ
@@ -90,7 +89,17 @@ export function canPay(status: OrderStatus): boolean {
  */
 export type PaymentMode = "open" | "not_yet" | "closed";
 
+/**
+ * ⚠️ `completed` **ไม่** นับเป็น closed
+ *
+ * งานเสร็จแล้วยังต้องแก้เรื่องเงินได้: ลูกค้าส่งสลิปปลอม ครีเอเตอร์ยืนยันแล้วส่งงาน
+ * ลูกค้ากดเสร็จ — ภายหลังครีเอเตอร์เพิ่งพบว่าเงินไม่เข้า ต้องยังกด "ยกเลิกการยืนยัน" ได้
+ * (ซึ่งทำให้ `canRelease()` ล็อกไฟล์กลับทันที) และถ้ายังค้างยอด ลูกค้าต้องยังจ่ายได้
+ * แผงแบบ open ซ่อน QR/ฟอร์มเองอยู่แล้วเมื่อไม่มียอดค้าง
+ */
+const CLOSED_FOR_MONEY: readonly OrderStatus[] = ["cancelled", "declined", "expired"];
+
 export function paymentMode(status: OrderStatus): PaymentMode {
-  if (isTerminal(status)) return "closed";
+  if (CLOSED_FOR_MONEY.includes(status)) return "closed";
   return canPay(status) ? "open" : "not_yet";
 }

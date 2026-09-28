@@ -28,6 +28,13 @@ import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 const Schema = z.object({
   code: z.string().refine(isOrderCode, "bad_code"),
   to: z.enum(ORDER_STATUSES),
+  /** สิ่งที่คนกดยกเลิกเห็นเรื่องเงิน ตอนกด — ดู `MoneyAck` ใน lib/orders/cancel.ts */
+  moneyAck: z
+    .object({
+      rows: z.number().int().min(0).max(10_000),
+      paidCents: z.number().int().min(0).max(1_000_000_000),
+    })
+    .optional(),
 });
 
 export type TransitionResult =
@@ -46,19 +53,21 @@ export type TransitionResult =
         | "no_files"
         | "price_missing"
         | "revisions_exhausted"
-        | "use_dedicated_action";
+        | "use_dedicated_action"
+        | "money_changed";
     };
 
 export async function transitionOrder(input: {
   code: string;
   to: OrderStatus;
+  moneyAck?: { rows: number; paidCents: number };
 }): Promise<TransitionResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "unauthenticated" };
 
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { code, to } = parsed.data;
+  const { code, to, moneyAck } = parsed.data;
 
   const db = getDb();
 
@@ -177,6 +186,32 @@ export async function transitionOrder(input: {
    * เงื่อนไขเงินก็อยู่ใน `where` ด้วยเหตุผลเดียวกัน — ยกเลิกการยืนยัน (`voidPayment`)
    * ลดยอดที่จ่ายลงได้ระหว่างที่เราอ่านกับเขียน (ดู `moneyGateSql`)
    */
+  /**
+   * ⚠️ ยกเลิกต้องยืนยันว่า "เห็นเรื่องเงินล่าสุดแล้ว" — ด่านนี้อยู่ที่ server ไม่ใช่แค่ dialog
+   *
+   * dialog เตือนตัดสินจาก snapshot ตอนหน้าโหลด ถ้าอีกฝ่ายแจ้งโอนหรือยืนยันเงินหลังจากนั้น
+   * หน้าที่ค้างอยู่จะยกเลิกได้ในคลิกเดียวโดยไม่มีคำเตือน และรายการที่เพิ่งแจ้งจะค้าง
+   * ตลอดกาลเพราะแผงเงินของออเดอร์ที่ยกเลิกแล้วเป็นแบบอ่านอย่างเดียว
+   * บอร์ด /orders ก็ยิงมาที่นี่โดยไม่มี dialog เลย
+   *
+   * ผู้เรียกส่ง `moneyAck` = (จำนวนแถวเงิน, ยอดที่นับแล้ว) ที่ตัวเองเห็น ไม่ตรงของจริง = ปฏิเสธ
+   * ไม่ส่งมาเลย = ถือว่าเห็นศูนย์ ซึ่งผ่านได้เฉพาะออเดอร์ที่ไม่มีเงินเกี่ยวข้องจริง ๆ
+   * และเงื่อนไขเดียวกันอยู่ใน WHERE ข้างล่างด้วย เพื่อปิดช่องระหว่างอ่านกับเขียน
+   */
+  const ack = moneyAck ?? { rows: 0, paidCents: 0 };
+  let moneyCas: ReturnType<typeof sql> | undefined;
+  if (to === "cancelled") {
+    const [{ n }] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.paymentRecord)
+      .where(eq(schema.paymentRecord.orderId, order.id));
+    if (n !== ack.rows || order.amountPaidCents !== ack.paidCents) {
+      return { ok: false, error: "money_changed" };
+    }
+    moneyCas = sql`(select count(*) from payment_record p where p.order_id = ${order.id}) = ${ack.rows}
+      and ${schema.order.amountPaidCents} = ${ack.paidCents}`;
+  }
+
   const updated = await db
     .update(schema.order)
     .set({
@@ -191,6 +226,7 @@ export async function transitionOrder(input: {
         eq(schema.order.status, from),
         consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
         moneyGateSql(to),
+        moneyCas,
       ),
     )
     .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed });
@@ -209,6 +245,10 @@ export async function transitionOrder(input: {
       columns: { status: true, depositCents: true, amountPaidCents: true, totalCents: true },
     });
     const nowBlocked = fresh && fresh.status === from ? moneyBlock(to, fresh) : null;
+    // สถานะยังเหมือนเดิมแต่ยกเลิกไม่ผ่าน = เงินขยับระหว่างทาง ให้หน้าจอรีเฟรชแล้วเตือนใหม่
+    if (!nowBlocked && to === "cancelled" && fresh && fresh.status === from) {
+      return { ok: false, error: "money_changed" };
+    }
     return { ok: false, error: nowBlocked ?? "stale" };
   }
 

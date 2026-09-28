@@ -18,7 +18,7 @@ import { fill } from "@/lib/i18n/dictionaries";
 import { formatMoney } from "@/lib/format";
 import { allowedNext, type Actor } from "@/lib/orders/state-machine";
 import { actionLabel, isPrimaryAction } from "@/lib/orders/labels";
-import { needsMoneyConfirm, type MoneyMoved } from "@/lib/orders/cancel";
+import { moneyAckFrom, needsMoneyConfirm, type MoneyMoved } from "@/lib/orders/cancel";
 import { consumesRevision, revisionHint, revisionQuota } from "@/lib/orders/revisions";
 import { transitionOrder } from "@/lib/orders/actions";
 import type { OrderStatus } from "@/lib/types";
@@ -79,7 +79,10 @@ export function OrderActions({
 
   function move(to: OrderStatus) {
     start(async () => {
-      const res = await transitionOrder({ code, to });
+      // ยกเลิกต้องบอก server ว่าเห็นเงินเท่าไร — ถ้าไม่ตรงของจริง server ปฏิเสธ (money_changed)
+      const res = await transitionOrder(
+        to === "cancelled" ? { code, to, moneyAck: moneyAckFrom(money) } : { code, to },
+      );
       // ปิด dialog ทั้งตอนสำเร็จและล้มเหลว — ล้มเหลวแล้ว toast บอกเหตุผลอยู่แล้ว
       // ค้าง dialog ไว้จะทำให้คนกดยืนยันซ้ำกับสถานะที่เปลี่ยนไปแล้ว
       setConfirming(null);
@@ -88,7 +91,9 @@ export function OrderActions({
         router.refresh();
       } else {
         toast.error(
-          res.error === "stale"
+          res.error === "money_changed"
+            ? t.order.moneyChanged
+            : res.error === "stale"
             ? t.order.moveStale
             : res.error === "deposit_unpaid"
               ? t.order.depositUnpaid
@@ -103,7 +108,7 @@ export function OrderActions({
                   : t.error.title,
         );
         // สิทธิ์หมดแปลว่าหน้าจอถือเลขเก่าอยู่ — รีเฟรชให้ปุ่มหายและข้อความอธิบายขึ้นแทน
-        if (res.error === "revisions_exhausted") router.refresh();
+        if (res.error === "revisions_exhausted" || res.error === "money_changed") router.refresh();
       }
     });
   }

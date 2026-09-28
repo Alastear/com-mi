@@ -56,8 +56,15 @@ export function boardDropTarget(from: OrderStatus, column: BoardColumn): OrderSt
  * ถ้ามีแต่ drag-and-drop ครีเอเตอร์จะทำสามอย่างนี้ไม่ได้ทั้งที่เป็นงานประจำวัน
  * และเมนูยังเป็นทางเดียวที่ใช้คีย์บอร์ดหรือมือถือได้
  */
+/**
+ * ⚠️ ไม่มี "ยกเลิก" ในเมนูบนบอร์ด — ยกเลิกได้จากหน้าออเดอร์เท่านั้น
+ *
+ * หน้าออเดอร์มี dialog ที่บอกยอดที่จ่ายแล้วและบอกว่าแพลตฟอร์มคืนเงินให้ไม่ได้
+ * บอร์ดไม่มี และการ์ดบนบอร์ดก็เห็นเงินจาก snapshot เก่าได้ ถึง server จะกันไว้แล้ว
+ * (`moneyAck` ใน transitionOrder) ก็ไม่ควรให้ปุ่มทำลายอยู่ในเมนูย้ายคอลัมน์ตั้งแต่แรก
+ */
 export function boardMenuTargets(from: OrderStatus): OrderStatus[] {
-  return allowedNext(from, "creator");
+  return allowedNext(from, "creator").filter((to) => to !== "cancelled");
 }
 
 /** คอลัมน์ที่ลากไปลงได้จากสถานะนี้ — ใช้ไฮไลต์ช่องที่รับของตอนเริ่มลาก */

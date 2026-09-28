@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { moneyMoved, needsMoneyConfirm } from "./cancel";
+import { moneyAckFrom, moneyMoved, needsMoneyConfirm } from "./cancel";
 import { paymentMode } from "./release";
 import { closedText } from "./labels";
 import { isTerminal } from "./state-machine";
@@ -20,13 +20,13 @@ describe("เงินที่ขยับแล้วก่อนยกเล�
 
   it("ยืนยันรับเงินแล้ว = ต้องถาม และบอกยอดที่ยืนยัน", () => {
     const m = moneyMoved(150_000, [{ amountCents: 150_000, state: "verified" }]);
-    assert.deepEqual(m, { paidCents: 150_000, pendingCents: 0 });
+    assert.deepEqual(m, { paidCents: 150_000, pendingCents: 0, rows: 1 });
     assert.equal(needsMoneyConfirm("cancelled", m), true);
   });
 
   it("แจ้งโอนแล้วแต่ยังไม่มีใครตอบ = ต้องถาม แม้ยอดที่นับยังเป็น 0", () => {
     const m = moneyMoved(0, [{ amountCents: 50_000, state: "pending" }]);
-    assert.deepEqual(m, { paidCents: 0, pendingCents: 50_000 });
+    assert.deepEqual(m, { paidCents: 0, pendingCents: 50_000, rows: 1 });
     assert.equal(needsMoneyConfirm("cancelled", m), true);
   });
 
@@ -36,8 +36,16 @@ describe("เงินที่ขยับแล้วก่อนยกเล�
       { amountCents: 50_000, state: "rejected" },
       { amountCents: 70_000, state: "voided" },
     ]);
-    assert.deepEqual(m, { paidCents: 0, pendingCents: 0 });
+    assert.deepEqual(m, { paidCents: 0, pendingCents: 0, rows: 2 });
     assert.equal(needsMoneyConfirm("cancelled", m), true);
+  });
+
+  it("snapshot ที่ส่งให้ server ตอนยกเลิก — ไม่มีเงินเกี่ยวข้องคือศูนย์ทั้งคู่", () => {
+    assert.deepEqual(moneyAckFrom(null), { rows: 0, paidCents: 0 });
+    assert.deepEqual(
+      moneyAckFrom(moneyMoved(50_000, [{ amountCents: 50_000, state: "verified" }])),
+      { rows: 1, paidCents: 50_000 },
+    );
   });
 
   it("ยอดที่รอตอบนับเฉพาะแถว pending", () => {
@@ -46,7 +54,7 @@ describe("เงินที่ขยับแล้วก่อนยกเล�
       { amountCents: 30_000, state: "rejected" },
       { amountCents: 20_000, state: "pending" },
     ]);
-    assert.deepEqual(m, { paidCents: 100_000, pendingCents: 20_000 });
+    assert.deepEqual(m, { paidCents: 100_000, pendingCents: 20_000, rows: 3 });
   });
 
   it("ถามเฉพาะตอนยกเลิก — ปุ่มอื่นยังกดได้ทันทีเหมือนเดิม", () => {
@@ -58,12 +66,18 @@ describe("เงินที่ขยับแล้วก่อนยกเล�
 });
 
 describe("โหมดแผงชำระเงิน", () => {
-  it("สถานะปลายทางทุกตัวเป็น closed — รวม completed ที่ server ยังรับเงินได้", () => {
-    for (const s of ORDER_STATUSES) {
-      if (isTerminal(s)) assert.equal(paymentMode(s), "closed", s);
+  it("ยกเลิก/ปฏิเสธ/หมดอายุเป็น closed", () => {
+    for (const s of ["cancelled", "declined", "expired"] as const) {
+      assert.equal(paymentMode(s), "closed", s);
     }
-    assert.equal(paymentMode("completed"), "closed");
-    assert.equal(paymentMode("cancelled"), "closed");
+  });
+
+  it("completed ยังเป็น open — ครีเอเตอร์ต้องยกเลิกการยืนยันสลิปปลอมได้หลังงานจบ", () => {
+    /**
+     * ลูกค้าส่งสลิปปลอม ครีเอเตอร์ยืนยัน ส่งงาน ลูกค้ากดเสร็จ แล้วครีเอเตอร์เพิ่งพบว่าเงินไม่เข้า
+     * ถ้า completed เป็น closed ปุ่มยกเลิกการยืนยันหาย ไฟล์ก็ล็อกกลับไม่ได้
+     */
+    assert.equal(paymentMode("completed"), "open");
   });
 
   it("ก่อนตอบรับเป็น not_yet ไม่ใช่ closed — ยังมีทางไปต่อ", () => {

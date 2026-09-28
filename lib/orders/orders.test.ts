@@ -427,6 +427,12 @@ describe("board", () => {
     }
   });
 
+  it("เมนูบนบอร์ดไม่มียกเลิก — ยกเลิกได้จากหน้าออเดอร์ที่มี dialog เรื่องเงินเท่านั้น", () => {
+    for (const from of ["accepted", "in_progress", "in_review", "revision_requested"] as const) {
+      assert.equal(boardMenuTargets(from).includes("cancelled"), false, from);
+    }
+  });
+
   it("สถานะปลายทางไม่ขึ้นบอร์ด", () => {
     for (const s of ["completed", "declined", "cancelled", "expired"] as const) {
       assert.equal(isOnBoard(s), false, s);

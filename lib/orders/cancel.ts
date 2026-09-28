@@ -13,7 +13,20 @@ import type { PaymentState } from "@/lib/payments/money";
  * ครีเอเตอร์บอกว่าไม่ได้รับ ไม่ได้แปลว่าลูกค้าไม่ได้โอน — สองฝั่งอาจยังเถียงกันอยู่
  * ยกเลิกทั้งที่มีรายการแบบนี้ค้างอยู่ก็ควรได้เห็นคำเตือนเรื่องคืนเงินเหมือนกัน
  */
-export type MoneyMoved = { paidCents: number; pendingCents: number };
+export type MoneyMoved = { paidCents: number; pendingCents: number; rows: number };
+
+/**
+ * สิ่งที่คนกดยกเลิก "เห็นแล้ว" — ส่งไปกับคำขอยกเลิก ให้ server เทียบกับของจริง
+ *
+ * ⚠️ dialog เตือนเรื่องเงินตัดสินจาก snapshot ตอนหน้าโหลด ถ้าอีกฝ่ายแจ้งโอนหรือยืนยันเงิน
+ * หลังจากนั้น หน้าจอจะยังคิดว่าไม่มีเงินเกี่ยวข้องแล้วยกเลิกได้ในคลิกเดียว — ด่านจริงจึงต้อง
+ * อยู่ที่ server: ถ้าจำนวนแถวเงินหรือยอดที่นับแล้วไม่ตรงกับที่ส่งมา ปฏิเสธและให้รีเฟรช
+ */
+export type MoneyAck = { rows: number; paidCents: number };
+
+export function moneyAckFrom(moved: MoneyMoved | null): MoneyAck {
+  return { rows: moved?.rows ?? 0, paidCents: moved?.paidCents ?? 0 };
+}
 
 export function moneyMoved(
   paidCents: number,
@@ -21,7 +34,7 @@ export function moneyMoved(
 ): MoneyMoved | null {
   if (paidCents <= 0 && rows.length === 0) return null;
   const pendingCents = rows.reduce((n, r) => (r.state === "pending" ? n + r.amountCents : n), 0);
-  return { paidCents: Math.max(0, paidCents), pendingCents };
+  return { paidCents: Math.max(0, paidCents), pendingCents, rows: rows.length };
 }
 
 /**
