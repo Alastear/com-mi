@@ -323,16 +323,26 @@ export async function setServiceCover(serviceId: string, mediaId: string) {
 export async function deleteService(serviceId: string) {
   const { user } = await requireCreator();
   await assertOwned(user.id, serviceId);
+  const db = getDb();
 
-  await getDb()
-    .update(schema.service)
-    .set({
-      deletedAt: new Date(),
-      isActive: false,
-      slug: `deleted-${serviceId}`,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(schema.service.id, serviceId), isNull(schema.service.deletedAt)));
+  /**
+   * ลบเมนู + ปลดปก ในทรานแซกชันเดียว (เหตุผลเดียวกับ `setServiceCover`)
+   * เดิมลบเมนูแล้วปกค้างเป็น linked ตลอดไป — ไม่มีหน้าไหนแสดงมันอีกแต่ยังกินโควตา
+   * `orphanUnreferenced` ต้องมาหลังคำสั่งที่ตั้ง `deleted_at` ถึงจะเห็นว่าปกหลุดแล้ว
+   * (`mediaReferencedSql` ไม่นับเมนูที่ลบแล้ว — ดูเหตุผลที่ lib/media/references.ts)
+   */
+  await db.batch([
+    db
+      .update(schema.service)
+      .set({
+        deletedAt: new Date(),
+        isActive: false,
+        slug: `deleted-${serviceId}`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(schema.service.id, serviceId), isNull(schema.service.deletedAt))),
+    orphanUnreferenced(user.id),
+  ]);
 
   revalidatePath("/services");
   if (user.handle) revalidatePath(`/${user.handle}`);

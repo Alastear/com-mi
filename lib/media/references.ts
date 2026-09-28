@@ -6,8 +6,16 @@ import { getDb } from "@/lib/db";
  *
  * ทุกคอลัมน์ที่ชี้ไป `media.id` ต้องอยู่ในนี้ครบ (grep `media.id` / `media_ids` ใน lib/db/schema):
  *   creator_page.avatar_media_id, creator_page.banner_media_id — รูปหน้าร้าน
- *   service.cover_media_id        — ปกเมนู (รวมเมนูที่ soft delete แล้ว: ออเดอร์เก่ายังเปิดเมนูนั้นได้)
+ *   service.cover_media_id        — ปกเมนู **เฉพาะเมนูที่ยังไม่ถูกลบ**
  *   service_tier.preview_media_id — ยังไม่มีหน้าจอไหนเขียน แต่ schema เปิดไว้ ใส่ไว้ก่อนดีกว่าลืม
+ *                                   (เฉพาะแพ็กของเมนูที่ยังไม่ถูกลบ เหตุผลเดียวกับปก)
+ *
+ * ⚠️ เมนูที่ soft delete แล้ว (`service.deleted_at`) ไม่นับเป็นผู้ใช้ — ไม่มีที่ไหนแสดงปกของมันอีก:
+ * ทุกคิวรีที่โหลด `cover`/`preview` กรอง `deleted_at is null` (lib/queries/creator.ts) หน้าออเดอร์
+ * โหลดแค่ชื่อ/slug/จำนวนวันของเมนู ไม่โหลดปก และไม่มีทางกู้เมนูที่ลบแล้วกลับมา
+ * เดิมนับรวม ปกของเมนูที่ลบไปค้างเป็น linked ตลอดไป กินโควตาและไม่มีวันถูกเก็บกวาด
+ * ถ้าวันหนึ่งมีหน้าที่แสดงปกของเมนูที่ลบแล้ว (เช่นประวัติออเดอร์โชว์ปก) ต้องเอาเงื่อนไขนี้ออกก่อน
+ * ไม่งั้นรูปในหน้านั้นหายหลังเวลาผ่อนผัน — แถว media ถูกลบแล้ว FK `set null` ปกเป็นว่าง
  *   portfolio_item.media_id       — ผลงาน
  *   payment_record.proof_media_id — สลิป
  *   delivery.media_ids, message.attachment_media_ids — jsonb อาร์เรย์ของ id
@@ -26,8 +34,11 @@ import { getDb } from "@/lib/db";
 export function mediaReferencedSql(id: SQL): SQL {
   return sql`(
     exists (select 1 from creator_page p where p.avatar_media_id = ${id} or p.banner_media_id = ${id})
-    or exists (select 1 from service s where s.cover_media_id = ${id})
-    or exists (select 1 from service_tier t where t.preview_media_id = ${id})
+    or exists (select 1 from service s where s.cover_media_id = ${id} and s.deleted_at is null)
+    or exists (
+      select 1 from service_tier t join service ts on ts.id = t.service_id
+      where t.preview_media_id = ${id} and ts.deleted_at is null
+    )
     or exists (select 1 from portfolio_item i where i.media_id = ${id})
     or exists (select 1 from payment_record r where r.proof_media_id = ${id})
     or ${id} in (select jsonb_array_elements_text(d.media_ids) from delivery d)
