@@ -83,3 +83,12 @@ describe("ลูกค้าปิดงานหลังเคยได้ไ�
     );
   });
 });
+
+describe("รอบที่ไม่ได้ส่งบนงานที่ปิดแล้ว — ฝั่งลูกค้า", () => {
+  it("หน้าลูกค้าไม่ส่งรอบที่ยังไม่ปล่อยไปให้แผง เมื่องานจบแล้ว", () => {
+    // เดิมลูกค้าเห็นไฟล์ที่จะไม่มีวันได้ ใต้หัว "รอบถัดไป" พร้อม "ดาวน์โหลดได้เมื่อชำระครบ" ทั้งที่จ่ายครบแล้ว
+    const src = read("app/(public)/my/requests/[code]/page.tsx");
+    assert.match(src, /const openRound = isTerminal\(order\.status as OrderStatus\) \? null : delivery\.open;/);
+    assert.match(src, /openRound=\{openRound\}/);
+  });
+});

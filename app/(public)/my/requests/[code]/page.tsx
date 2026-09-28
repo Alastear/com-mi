@@ -19,6 +19,7 @@ import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { readDelivery } from "@/lib/delivery/read";
 import { canRelease } from "@/lib/orders/release";
+import { isTerminal } from "@/lib/orders/state-machine";
 import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
@@ -57,7 +58,14 @@ export default async function ClientRequestPage({ params }: Props) {
   const handle = order.page.user?.handle ?? "";
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
-  const { open: openRound, released: releasedRound, releasedFiles } = await readDelivery(order.id, order.deliveries);
+  const delivery = await readDelivery(order.id, order.deliveries);
+  const { released: releasedRound, releasedFiles } = delivery;
+  /**
+   * งานจบแล้ว รอบที่ครีเอเตอร์เตรียมไว้แต่ไม่ได้ปล่อยจะไม่มีวันถูกส่ง — ลูกค้าไม่ต้องเห็นเลย
+   * เดิมยังโชว์ใต้หัว "รอบถัดไป" พร้อมเหตุผล "ดาวน์โหลดได้เมื่อชำระครบ" ทั้งที่จ่ายครบและปิดงานไปแล้ว
+   * ตัดที่หน้านี้ ไม่ใช่แค่ซ่อนในแผง — ชื่อไฟล์ที่ไม่ได้ส่งจะได้ไม่ไปอยู่ใน payload ของหน้าด้วย
+   */
+  const openRound = isTerminal(order.status as OrderStatus) ? null : delivery.open;
   // ใบเสนอราคาที่ยังกดได้ — ดึงเฉพาะตอนอยู่ในสถานะที่กดได้จริง ไม่งั้นเสีย query เปล่า
   const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
   // ยอดใน QR ต้องเป็นตัวเดียวกับที่แผงชำระเงินโชว์ — ใช้ฟังก์ชันเดียวกัน ไม่คำนวณซ้ำสองที่
