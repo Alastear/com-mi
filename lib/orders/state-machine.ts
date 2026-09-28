@@ -151,13 +151,25 @@ export function allowedNext(from: OrderStatus, actor: Actor): OrderStatus[] {
     .map((t) => t.to);
 }
 
-/** เส้นทางนี้ต้องเดินผ่าน action เฉพาะไหม — คืนชื่อ action ถ้าใช่ */
-export function requiresAction(from: OrderStatus, to: OrderStatus): string | null {
-  return TRANSITIONS[from].find((t) => t.to === to)?.viaAction ?? null;
+/**
+ * หาเส้นทางที่ตรงทั้งปลายทางและคนกด
+ *
+ * ⚠️ ห้ามหาจาก `to` อย่างเดียว — ปลายทางเดียวกันมีได้หลายเส้นที่ต่างกันแค่คนกด
+ * (delivered → revision_requested มีเส้นของลูกค้ากับเส้นของครีเอเตอร์แยกกัน)
+ * ถ้าหยิบเส้นแรกที่เจอ เส้นของลูกค้าที่อยู่ก่อนจะบังเส้นของครีเอเตอร์ตลอด
+ * ปุ่ม "เปิดรอบแก้" ของครีเอเตอร์ (ซึ่ง `allowedNext` โชว์ให้) จึงตก wrong_actor ทุกครั้ง
+ */
+function routeFor(from: OrderStatus, to: OrderStatus, actor: Actor): Transition | undefined {
+  return TRANSITIONS[from].find((t) => t.to === to && t.by.includes(actor));
+}
+
+/** เส้นทางนี้ (ของคนกดคนนี้) ต้องเดินผ่าน action เฉพาะไหม — คืนชื่อ action ถ้าใช่ */
+export function requiresAction(from: OrderStatus, to: OrderStatus, actor: Actor): string | null {
+  return routeFor(from, to, actor)?.viaAction ?? null;
 }
 
 export function canTransition(from: OrderStatus, to: OrderStatus, actor: Actor): boolean {
-  return TRANSITIONS[from].some((t) => t.to === to && t.by.includes(actor));
+  return routeFor(from, to, actor) !== undefined;
 }
 
 export class TransitionError extends Error {
@@ -180,7 +192,8 @@ export class TransitionError extends Error {
  * ซึ่งควรถูกบันทึกไว้ดูย้อนหลังได้
  */
 export function assertTransition(from: OrderStatus, to: OrderStatus, actor: Actor): void {
-  const route = TRANSITIONS[from].find((t) => t.to === to);
-  if (!route) throw new TransitionError(from, to, actor, "not_allowed");
-  if (!route.by.includes(actor)) throw new TransitionError(from, to, actor, "wrong_actor");
+  if (routeFor(from, to, actor)) return;
+  // มีเส้นไปปลายทางนี้แต่ไม่ใช่ของคนนี้ = ผิดคน / ไม่มีเส้นเลย = ไม่มีทางไปจริง ๆ
+  const exists = TRANSITIONS[from].some((t) => t.to === to);
+  throw new TransitionError(from, to, actor, exists ? "wrong_actor" : "not_allowed");
 }

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { consumesRevision, revisionHint, revisionQuota } from "./revisions";
-import { allowedNext, canTransition } from "./state-machine";
+import {
+  allowedNext,
+  assertTransition,
+  canTransition,
+  requiresAction,
+  TransitionError,
+} from "./state-machine";
 import { actionLabel, eventText } from "./labels";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { ORDER_STATUSES } from "@/lib/types";
@@ -70,6 +76,45 @@ describe("การเปลี่ยนสถานะที่กินโค�
      */
     assert.equal(canTransition("delivered", "revision_requested", "creator"), true);
     assert.equal(canTransition("in_review", "revision_requested", "creator"), false);
+  });
+
+  it("ครีเอเตอร์เปิดรอบแก้จาก delivered ผ่านด่านจริงได้ ไม่ใช่แค่ปุ่มโผล่", () => {
+    /**
+     * ⚠️ เคยพัง: `assertTransition` หยิบเส้นแรกที่ปลายทางตรง ซึ่งคือเส้นของลูกค้า
+     * ปุ่ม "เปิดรอบแก้ (ไม่นับสิทธิ์ลูกค้า)" โชว์ให้ครีเอเตอร์แต่กดแล้วตก wrong_actor ทุกครั้ง
+     * เทสต์เดิมเช็คแค่ `canTransition` จึงไม่เห็น
+     */
+    assert.doesNotThrow(() => assertTransition("delivered", "revision_requested", "creator"));
+    assert.doesNotThrow(() => assertTransition("delivered", "revision_requested", "client"));
+    assert.equal(requiresAction("delivered", "revision_requested", "creator"), null);
+    assert.equal(consumesRevision("revision_requested", "creator"), false);
+    // ระบบยังเปิดรอบแก้เองไม่ได้ — เส้นมีอยู่แต่ไม่ใช่ของมัน
+    assert.throws(
+      () => assertTransition("delivered", "revision_requested", "system"),
+      (e) => e instanceof TransitionError && e.reason === "wrong_actor",
+    );
+  });
+
+  it("ปุ่มที่โชว์ = ปุ่มที่ด่านจริงยอม ทุกสถานะ ทุกคนกด", () => {
+    // ถ้าสองตัวนี้เห็นไม่ตรงกันเมื่อไหร่ แปลว่ามีปุ่มที่กดแล้วพังทุกครั้ง (หรือด่านที่ปล่อยของที่ไม่ควรผ่าน)
+    for (const from of ORDER_STATUSES) {
+      for (const to of ORDER_STATUSES) {
+        for (const actor of ["creator", "client", "system"] as const) {
+          let passes = true;
+          try {
+            assertTransition(from, to, actor);
+          } catch {
+            passes = false;
+          }
+          assert.equal(passes, canTransition(from, to, actor), `${from} → ${to} by ${actor}`);
+        }
+      }
+      for (const actor of ["creator", "client", "system"] as const) {
+        for (const to of allowedNext(from, actor)) {
+          assert.doesNotThrow(() => assertTransition(from, to, actor), `${from} → ${to} by ${actor}`);
+        }
+      }
+    }
   });
 });
 

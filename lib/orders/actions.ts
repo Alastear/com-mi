@@ -177,7 +177,7 @@ export async function transitionOrder(input: {
    * ปุ่มพวกนี้ถูกซ่อนไปแล้วโดย `allowedNext()` แต่ Server Action ถูกเรียกตรงได้
    * และ UI ไม่ใช่ด่าน — ที่นี่คือด่านจริง
    */
-  const needsAction = requiresAction(from, to);
+  const needsAction = requiresAction(from, to, actor);
   if (needsAction) return { ok: false, error: "use_dedicated_action" };
 
   /**

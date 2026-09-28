@@ -697,8 +697,8 @@ describe("เส้นทางที่ต้องเดินผ่าน act
   it("เส้นทางยังมีอยู่จริง — deliverAndRelease ต้องเดินผ่านได้", () => {
     // ถ้าลบทิ้งจากตารางแทนที่จะทำเครื่องหมาย ตัว action จริงจะพังไปด้วย
     assert.equal(canTransition("in_progress", "delivered", "creator"), true);
-    assert.equal(requiresAction("in_progress", "delivered"), "deliverAndRelease");
-    assert.equal(requiresAction("in_progress", "in_review"), null);
+    assert.equal(requiresAction("in_progress", "delivered", "creator"), "deliverAndRelease");
+    assert.equal(requiresAction("in_progress", "in_review", "creator"), null);
   });
 });
 
