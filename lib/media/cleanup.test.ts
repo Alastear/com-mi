@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { GRACE_MS, INTENT_EXPIRY_MARGIN_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
+import {
+  GRACE_MS,
+  INTENT_EXPIRY_MARGIN_MS,
+  intentVerdict,
+  isOrphanDue,
+  isStray,
+  orphanSince,
+  referencedPaths,
+} from "./cleanup-rules";
 
 /**
  * เทสต์ของงานที่ "ลบไฟล์ทิ้ง" ต้องเน้นฝั่งที่ห้ามลบเป็นหลัก
@@ -134,5 +142,51 @@ describe("คำขออัปโหลดที่ค้าง", () => {
       intentVerdict({ key: "deliveries/ABCD2345/s", createdAt: old, expiresAt: longExpired, consumedAt: null }, ref, now),
       "drop_row",
     );
+  });
+});
+
+describe("แถวที่ถูกปลดเป็น orphan (เปลี่ยนรูป ลบผลงาน)", () => {
+  const now = 1_800_000_000_000;
+  const yearAgo = new Date(now - 365 * 24 * 60 * 60 * 1000);
+  const row = (o: Partial<{ status: string; access: string; createdAt: Date; orphanedAt: Date | null }>) => ({
+    status: "orphan",
+    access: "public",
+    createdAt: yearAgo,
+    orphanedAt: null,
+    ...o,
+  });
+
+  it("อวาตาร์เก่าหนึ่งปีที่เพิ่งถูกเปลี่ยน ยังไม่ลบ — หน้าที่เปิดค้างไว้ยังโหลดรูปนี้อยู่", () => {
+    // นี่คือเหตุผลที่ต้องมี orphaned_at: นับจาก created_at จะลบทันทีในรอบถัดไป
+    const r = row({ orphanedAt: new Date(now - 60_000) });
+    assert.equal(orphanSince(r).getTime(), now - 60_000);
+    assert.equal(isOrphanDue(r, now), false);
+  });
+
+  it("ถูกปลดมาเกินเวลาผ่อนผันแล้ว ลบได้", () => {
+    assert.equal(isOrphanDue(row({ orphanedAt: new Date(now - GRACE_MS - 1000) }), now), true);
+  });
+
+  it("ที่ขอบเวลาผ่อนผันพอดี ยังไม่ลบ", () => {
+    assert.equal(isOrphanDue(row({ orphanedAt: new Date(now - GRACE_MS) }), now), false);
+  });
+
+  it("แถวที่ไม่เคยผูก นับจาก created_at เหมือนเดิม", () => {
+    assert.equal(isOrphanDue(row({ createdAt: new Date(now - GRACE_MS - 1000) }), now), true);
+    assert.equal(isOrphanDue(row({ createdAt: new Date(now - 1000) }), now), false);
+  });
+
+  it("ถังส่วนตัวไม่ลบ ไม่ว่าจะค้างนานแค่ไหน — ไฟล์ส่งมอบที่ลูกค้าจ่ายแล้วกู้คืนไม่ได้", () => {
+    assert.equal(isOrphanDue(row({ access: "private", orphanedAt: new Date(0) }), now), false);
+    assert.equal(isOrphanDue(row({ access: "private" }), now), false);
+  });
+
+  it("แถวที่ถูกผูกกลับแล้ว (linked) ไม่ลบ แม้ orphaned_at จะค้างอยู่", () => {
+    assert.equal(isOrphanDue(row({ status: "linked", orphanedAt: new Date(0) }), now), false);
+  });
+
+  it("สถานะที่ไม่รู้จักตกไปฝั่งไม่ลบ", () => {
+    assert.equal(isOrphanDue(row({ status: "archived" }), now), false);
+    assert.equal(isOrphanDue(row({ access: "unknown" }), now), false);
   });
 });

@@ -1,0 +1,83 @@
+import { sql, type SQL } from "drizzle-orm";
+import { getDb } from "@/lib/db";
+
+/**
+ * "แถว media นี้ยังมีใครใช้อยู่ไหม" — ตัวตัดสินเดียวของทั้งการปลดเป็น orphan และการลบจริง
+ *
+ * ทุกคอลัมน์ที่ชี้ไป `media.id` ต้องอยู่ในนี้ครบ (grep `media.id` / `media_ids` ใน lib/db/schema):
+ *   creator_page.avatar_media_id, creator_page.banner_media_id — รูปหน้าร้าน
+ *   service.cover_media_id        — ปกเมนู (รวมเมนูที่ soft delete แล้ว: ออเดอร์เก่ายังเปิดเมนูนั้นได้)
+ *   service_tier.preview_media_id — ยังไม่มีหน้าจอไหนเขียน แต่ schema เปิดไว้ ใส่ไว้ก่อนดีกว่าลืม
+ *   portfolio_item.media_id       — ผลงาน
+ *   payment_record.proof_media_id — สลิป
+ *   delivery.media_ids, message.attachment_media_ids — jsonb อาร์เรย์ของ id
+ *
+ * ไม่นับ `delivery_issuance.media_id` — เป็นบันทึกว่าเคยออก URL ให้ใคร ไม่ใช่ที่ที่แสดงไฟล์
+ *
+ * ⚠️ เพิ่มคอลัมน์ที่ชี้ `media.id` ใหม่เมื่อไร ต้องมาเพิ่มที่นี่ด้วย ไม่งั้นไฟล์ที่ยังใช้อยู่
+ * จะถูกปลดเป็น orphan และถูกลบทิ้งหลังเวลาผ่อนผัน — ลบผิดคือรูปหายถาวร
+ *
+ * jsonb ใช้ `in (select jsonb_array_elements_text …)` แทน `@>` ต่อแถว — ซับคิวรีไม่ผูกกับ
+ * แถวนอก Postgres จึงคำนวณครั้งเดียวต่อคำสั่ง (hashed subplan) ไม่ต้องไล่ทั้งตารางซ้ำทุกแถว
+ * ถ้ามีสมาชิกเป็น JSON null ผล `in` จะเป็น null แล้วทั้งก้อนตกไปฝั่ง "ไม่ปลด / ไม่ลบ" ซึ่งปลอดภัย
+ *
+ * @param id นิพจน์ SQL ของ id แถว media ที่กำลังพิจารณา (เช่น sql`m.id`)
+ */
+export function mediaReferencedSql(id: SQL): SQL {
+  return sql`(
+    exists (select 1 from creator_page p where p.avatar_media_id = ${id} or p.banner_media_id = ${id})
+    or exists (select 1 from service s where s.cover_media_id = ${id})
+    or exists (select 1 from service_tier t where t.preview_media_id = ${id})
+    or exists (select 1 from portfolio_item i where i.media_id = ${id})
+    or exists (select 1 from payment_record r where r.proof_media_id = ${id})
+    or ${id} in (select jsonb_array_elements_text(d.media_ids) from delivery d)
+    or ${id} in (select jsonb_array_elements_text(x.attachment_media_ids) from message x)
+  )`;
+}
+
+/**
+ * ปลดไฟล์สาธารณะของเจ้าของคนนี้ที่ไม่มีใครใช้แล้วกลับเป็น orphan — ใส่ต่อท้ายใน `db.batch()`
+ * **หลัง** คำสั่งที่ปลดการอ้างถึง (เปลี่ยนรูป ลบผลงาน) เพื่อให้เห็นผลของคำสั่งนั้นในทรานแซกชันเดียวกัน
+ *
+ * เดิมเปลี่ยนอวาตาร์/แบนเนอร์/ปกเมนู หรือลบผลงาน แล้วแถวเก่ายังเป็น linked ตลอดไป:
+ * ไฟล์ค้างในถัง นับเข้าโควตา และงานเก็บกวาดไม่มีวันแตะ
+ *
+ * กวาดทั้งเจ้าของ ไม่ใช่แค่ id ที่เพิ่งถูกปลด —
+ *   - ไม่ต้องอ่าน id เก่าก่อนเขียน (อ่านแล้วค่อยเขียนคือช่องให้สองคำขอแทรกกัน)
+ *   - แถวที่รั่วไว้ก่อนมีโค้ดนี้ของคนเดียวกันถูกเก็บไปด้วยในการเปลี่ยนครั้งถัดไป
+ *
+ * ⚠️ แตะเฉพาะ `access = 'public'` — ไฟล์ในถังส่วนตัว (ส่งมอบ สลิป) ห้ามถูกปลดด้วยทางนี้เด็ดขาด
+ * ไฟล์ที่ลูกค้าจ่ายเงินแล้วหายคือกู้คืนไม่ได้ (เหตุผลเดียวกับหัวไฟล์ lib/media/cleanup.ts)
+ * และแตะเฉพาะ `status = 'linked'` — แถว orphan ที่เพิ่งอัป (`orphaned_at` ว่าง) ต้องคงนับเวลา
+ * ผ่อนผันจาก `created_at` เหมือนเดิม
+ *
+ * ⚠️ ด่านนี้ไม่ใช่ด่านสุดท้าย: สองคำขอที่วิ่งพร้อมกัน (เช่นตั้งรูปเดียวกันเป็นปกเมนูขณะเปลี่ยนอวาตาร์)
+ * อาจทำให้แถวที่ถูกอ้างถึงกลายเป็น orphan ได้ใน READ COMMITTED งานเก็บกวาดจึงตรวจ
+ * `mediaReferencedSql` ซ้ำในคำสั่ง delete เอง (compare-and-set) — แถวที่ยังถูกใช้ไม่มีวันถูกลบ
+ */
+export function orphanUnreferenced(ownerUserId: string) {
+  return getDb().execute(sql`
+    update media m
+       set status = 'orphan', orphaned_at = now()
+     where m.owner_user_id = ${ownerUserId}
+       and m.status = 'linked'
+       and m.access = 'public'
+       and not ${mediaReferencedSql(sql`m.id`)}
+    returning m.id
+  `);
+}
+
+/**
+ * เงื่อนไข "แถว orphan นี้ลบได้แล้ว" ในรูป SQL (alias `m`) — ใช้ทั้งตอนเลือกและในคำสั่ง delete
+ *
+ * ต้องตรงกับ `isOrphanDue` ใน lib/media/cleanup-rules.ts (ตัวนั้นมีเทสต์ ตัวนี้ทำงานจริง)
+ * งานเก็บกวาดเช็คทั้งสองทาง: SQL เลือก/ลบ และฟังก์ชันล้วนยืนยันซ้ำก่อนลบไฟล์
+ */
+export function dueOrphanSql(cutoff: Date): SQL {
+  return sql`(
+    m.status = 'orphan'
+    and m.access = 'public'
+    and coalesce(m.orphaned_at, m.created_at) < ${cutoff.toISOString()}::timestamptz
+    and not ${mediaReferencedSql(sql`m.id`)}
+  )`;
+}

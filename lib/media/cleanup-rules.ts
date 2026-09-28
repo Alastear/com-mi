@@ -25,6 +25,37 @@ export function isStray(
 }
 
 /**
+ * แถว orphan นี้เริ่มนับเวลาผ่อนผันเมื่อไร
+ *
+ * แถวที่อัปแล้วยังไม่เคยผูก → นับจาก `createdAt` (ไฟล์อาจกำลังเดินทางไปผูกอยู่)
+ * แถวที่เคยผูกแล้วถูกปลด (เปลี่ยนรูป ลบผลงาน) → นับจาก `orphanedAt`
+ *
+ * ⚠️ ห้ามนับจาก `createdAt` อย่างเดียว — อวาตาร์ที่อัปเมื่อปีก่อนแล้วเพิ่งถูกเปลี่ยน
+ * จะ "เก่าเกิน 24 ชม." ทันทีและโดนลบในรอบถัดไป ทั้งที่แท็บที่เปิดค้างไว้ (หน้าร้าน
+ * หน้าออเดอร์ที่ลูกค้าเปิดทิ้งไว้) ยังโหลดรูปนั้นอยู่ ให้เวลาผ่อนผันเต็มนับจากตอนที่เลิกใช้
+ */
+export function orphanSince(row: { createdAt: Date; orphanedAt: Date | null }): Date {
+  return row.orphanedAt ?? row.createdAt;
+}
+
+/**
+ * แถว media นี้ถึงเวลาลบแล้วหรือยัง — ต้องจริงทั้งหมดถึงจะลบ (กรณีที่ไม่ได้คิดไว้ตกไปฝั่งไม่ลบ)
+ *
+ * ตรงกับ `dueOrphanSql` ใน lib/media/references.ts ยกเว้นเรื่อง "ยังมีใครอ้างถึงไหม"
+ * ซึ่งตอบได้แค่ในฐานข้อมูล — ฟังก์ชันนี้ใช้ยืนยันซ้ำก่อนลบจริง ไม่ได้ใช้แทน SQL
+ */
+export function isOrphanDue(
+  row: { status: string; access: string; createdAt: Date; orphanedAt: Date | null },
+  now: number,
+  graceMs: number = GRACE_MS,
+): boolean {
+  if (row.status !== "orphan") return false;
+  // ถังส่วนตัวไม่แตะ — เหตุผลอยู่ที่หัวไฟล์ lib/media/cleanup.ts
+  if (row.access !== "public") return false;
+  return now - orphanSince(row).getTime() > graceMs;
+}
+
+/**
  * ทุก pathname ที่ยังมีแถวชี้ถึง
  *
  * ⚠️ ต้องรวม `posterPathname` ด้วย ไม่ใช่แค่ `pathname`

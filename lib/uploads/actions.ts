@@ -86,6 +86,19 @@ export async function startMediaUpload(
   const limits = planLimits(session.user.plan);
 
   /**
+   * ⚠️ มี handle ยังไม่พอ ต้องมีหน้าร้านจริงด้วย — onboarding ที่ล้มกลางคัน (ตั้ง handle แล้ว
+   * แต่สร้างร้านไม่ทัน ดู lib/shop/ensure.ts) ทำให้มีคนที่มี handle แต่ไม่มี `creator_page`
+   * คนกลุ่มนี้ผูกไฟล์กับอะไรไม่ได้เลย (setShopImage / addPortfolioItem / setServiceCover
+   * ต้องมีร้านทั้งหมด) เดิมกลับได้ URL อัปขึ้นถังสาธารณะ = ที่ฝากไฟล์ให้ใครก็เปิดได้
+   * ไม่มีร้าน กับไม่มีสิทธิ์ ตอบเหมือนกัน
+   */
+  const page = await getDb().query.creatorPage.findFirst({
+    columns: { id: true },
+    where: eq(schema.creatorPage.userId, userId),
+  });
+  if (!page) return fail("forbidden");
+
+  /**
    * รูปถูกย่อและแปลงเป็น WebP ในเบราว์เซอร์มาแล้วเสมอ ส่วนวิดีโอตัวอย่าง **ไม่ถูกแปลง**
    * (transcode ในเบราว์เซอร์กินเวลาหลายนาทีบนมือถือและผลไม่แน่นอน)
    * จึงคุมด้วยขนาดกับความยาวแทน และรับเฉพาะพอร์ตโฟลิโอ

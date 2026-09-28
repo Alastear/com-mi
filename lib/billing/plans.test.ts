@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { COMPARISON, PRO_BULLETS, effectivePlan, planDisplay } from "./plans";
+import { BETA_FREE_PRO, COMPARISON, PRO_BULLETS, effectivePlan, planDisplay, quotaFullText } from "./plans";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { MAX_IMAGE_UPLOAD_BYTES } from "@/lib/media/prepare";
 import { MAX_VIDEO_BYTES } from "@/lib/media/video";
@@ -104,5 +104,30 @@ describe("ป้าย 'เร็ว ๆ นี้' บนหน้า /pricing"
     const firstSoon = PRO_BULLETS.findIndex((b) => b.soon);
     assert.ok(firstSoon > 0, "ต้องมีข้อที่ใช้ได้จริงอย่างน้อยหนึ่งข้อก่อน");
     assert.ok(PRO_BULLETS.slice(firstSoon).every((b) => b.soon));
+  });
+});
+
+describe("ข้อความพื้นที่เต็ม", () => {
+  const d = { quotaFull: "เต็ม — อัปเกรดเป็น Pro", quotaFullBeta: "เต็ม — ลบของเก่า" };
+
+  it("ช่วงเบต้าไม่ชวนอัปเกรด — ทุกคนได้ลิมิต Pro อยู่แล้ว", () => {
+    assert.equal(quotaFullText(d, true), d.quotaFullBeta);
+  });
+
+  it("ปิดเบต้าแล้วกลับมาใช้ข้อความ Pro", () => {
+    assert.equal(quotaFullText(d, false), d.quotaFull);
+  });
+
+  it("ค่าเริ่มต้นตามสวิตช์ BETA_FREE_PRO", () => {
+    assert.equal(quotaFullText(d), BETA_FREE_PRO ? d.quotaFullBeta : d.quotaFull);
+  });
+
+  it("ข้อความเบต้าของทั้งสองภาษาไม่พูดถึง Pro", () => {
+    for (const locale of ["th", "en"] as const) {
+      const t = getDictionary(locale);
+      for (const text of [t.media.quotaFullBeta, t.delivery.quotaFullBeta]) {
+        assert.equal(/pro|อัปเกรด|upgrade/i.test(text), false, text);
+      }
+    }
   });
 });

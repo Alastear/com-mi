@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
+import { orphanUnreferenced } from "@/lib/media/references";
 import { requireCreator } from "@/lib/auth-guard";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -298,11 +299,18 @@ export async function setServiceCover(serviceId: string, mediaId: string) {
   });
   if (!owned) throw new Error("not_found");
 
-  await db
-    .update(schema.service)
-    .set({ coverMediaId: mediaId, updatedAt: new Date() })
-    .where(eq(schema.service.id, serviceId));
-  await db.update(schema.media).set({ status: "linked" }).where(eq(schema.media.id, mediaId));
+  /**
+   * ผูกปกใหม่ ปลดปกเก่า — ในทรานแซกชันเดียว (เหตุผลเดียวกับ `setShopImage`)
+   * เดิมปกเก่าค้างเป็น linked ตลอดไป ไฟล์ไม่เคยถูกเก็บกวาดและกินโควตา
+   */
+  await db.batch([
+    db
+      .update(schema.service)
+      .set({ coverMediaId: mediaId, updatedAt: new Date() })
+      .where(eq(schema.service.id, serviceId)),
+    db.update(schema.media).set({ status: "linked", orphanedAt: null }).where(eq(schema.media.id, mediaId)),
+    orphanUnreferenced(user.id),
+  ]);
 
   revalidatePath(`/services/${serviceId}`);
   if (user.handle) revalidatePath(`/${user.handle}`);

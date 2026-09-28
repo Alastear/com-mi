@@ -193,6 +193,22 @@ export function planDisplay(
   return { shown, viaBeta: shown !== stored, offerUpgrade: shown === "free" };
 }
 
+/**
+ * ข้อความ "พื้นที่เต็ม" ที่ควรโชว์ — ช่วงเบต้าตัดคำชวนอัปเกรดออก
+ *
+ * ข้อความเดิมบอกให้ "อัปเกรดเป็น Pro" แต่ช่วงเบต้าทุกคนได้ลิมิต Pro อยู่แล้ว
+ * (เหตุผลเดียวกับ `planDisplay`) — กดตามไปก็เจอหน้าราคาที่ไม่มีอะไรให้จ่าย
+ * เก็บข้อความ Pro ไว้ใน `quotaFull` สำหรับวันที่ปิด `BETA_FREE_PRO`
+ *
+ * ⚠️ ทุกที่ที่โชว์ `quotaFull` ต้องผ่านตัวนี้ (grep `quotaFull` ใน components/ กับ app/)
+ */
+export function quotaFullText(
+  d: { quotaFull: string; quotaFullBeta: string },
+  beta: boolean = BETA_FREE_PRO,
+): string {
+  return beta ? d.quotaFullBeta : d.quotaFull;
+}
+
 export function can(plan: PlanId, feature: Feature): boolean {
   return PLANS[plan].features.has(feature);
 }

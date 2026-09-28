@@ -8,6 +8,7 @@ import { newId } from "@/lib/db/id";
 import { requireCreator } from "@/lib/auth-guard";
 import { parseEmbed, serializeEmbed } from "@/lib/media/embed";
 import { isPublicKind } from "@/lib/media/kinds";
+import { orphanUnreferenced } from "@/lib/media/references";
 import { deleteObjects, headObject, publicUrl } from "@/lib/storage/r2";
 import {
   affectedRows,
@@ -116,16 +117,25 @@ export async function setShopImage(mediaId: string, slot: "banner" | "avatar") {
   });
   if (!owned) throw new Error("not_found");
 
-  await db
-    .update(schema.creatorPage)
-    .set(
-      slot === "banner"
-        ? { bannerMediaId: mediaId, updatedAt: new Date() }
-        : { avatarMediaId: mediaId, updatedAt: new Date() },
-    )
-    .where(eq(schema.creatorPage.userId, user.id));
-
-  await db.update(schema.media).set({ status: "linked" }).where(eq(schema.media.id, mediaId));
+  /**
+   * ผูกรูปใหม่ ปลดรูปเก่า — ในทรานแซกชันเดียว
+   *
+   * เดิมเขียนแค่ id ใหม่ทับ แถวของรูปเก่ายังเป็น linked ตลอดไป ไฟล์ค้างในถังและกินโควตา
+   * ทุกครั้งที่เปลี่ยนรูป `orphanUnreferenced` ต้องมาหลังคำสั่งที่ทับ id ถึงจะเห็นว่ารูปเก่าหลุดแล้ว
+   * `orphanedAt: null` — รูปที่เคยถูกปลดแล้วถูกตั้งกลับมาต้องเริ่มนับใหม่ ไม่งั้นโดนลบทั้งที่ใช้อยู่
+   */
+  await db.batch([
+    db
+      .update(schema.creatorPage)
+      .set(
+        slot === "banner"
+          ? { bannerMediaId: mediaId, updatedAt: new Date() }
+          : { avatarMediaId: mediaId, updatedAt: new Date() },
+      )
+      .where(eq(schema.creatorPage.userId, user.id)),
+    db.update(schema.media).set({ status: "linked", orphanedAt: null }).where(eq(schema.media.id, mediaId)),
+    orphanUnreferenced(user.id),
+  ]);
 
   revalidatePath("/shop");
   if (user.handle) revalidatePath(`/${user.handle}`);
@@ -190,15 +200,18 @@ export async function addPortfolioItem(mediaId: string, title = "") {
     where: eq(schema.portfolioItem.creatorPageId, page.id),
   });
 
-  await db.insert(schema.portfolioItem).values({
-    id: newId("port"),
-    creatorPageId: page.id,
-    mediaId,
-    title: title.slice(0, 120),
-    sortOrder: existing.length,
-  });
-
-  await db.update(schema.media).set({ status: "linked" }).where(eq(schema.media.id, mediaId));
+  // แถวผลงานกับสถานะ linked ต้องเกิดพร้อมกัน — ขาดตัวหลังเมื่อไร งานเก็บกวาดจะเห็นเป็น orphan
+  // ที่พ้นเวลาผ่อนผัน (ด่าน `mediaReferencedSql` ตอนลบยังกันไว้ แต่แถวจะค้างสถานะผิดตลอดไป)
+  await db.batch([
+    db.insert(schema.portfolioItem).values({
+      id: newId("port"),
+      creatorPageId: page.id,
+      mediaId,
+      title: title.slice(0, 120),
+      sortOrder: existing.length,
+    }),
+    db.update(schema.media).set({ status: "linked", orphanedAt: null }).where(eq(schema.media.id, mediaId)),
+  ]);
 
   revalidatePath("/portfolio");
   if (user.handle) revalidatePath(`/${user.handle}`);
@@ -214,15 +227,23 @@ export async function removePortfolioItem(itemId: string) {
   });
   if (!page) throw new Error("not_found");
 
-  // จำกัดด้วย creatorPageId ด้วย — ไม่งั้นลบของคนอื่นได้ถ้ารู้ id
-  await db
-    .delete(schema.portfolioItem)
-    .where(
-      and(
-        eq(schema.portfolioItem.id, itemId),
-        eq(schema.portfolioItem.creatorPageId, page.id),
+  /**
+   * ลบผลงานแล้วปลดไฟล์ของมันเป็น orphan ในทรานแซกชันเดียว — เดิมแถว media ค้างเป็น linked
+   * ตลอดไป ไฟล์อยู่ในถังและกินโควตาทั้งที่ไม่มีที่ไหนแสดงแล้ว
+   * ไฟล์ถูกลบจริงโดยงานเก็บกวาดหลังเวลาผ่อนผัน ไม่ใช่ตรงนี้ — หน้าร้านที่เปิดค้างไว้ยังโหลดรูปอยู่ได้
+   */
+  await db.batch([
+    // จำกัดด้วย creatorPageId ด้วย — ไม่งั้นลบของคนอื่นได้ถ้ารู้ id
+    db
+      .delete(schema.portfolioItem)
+      .where(
+        and(
+          eq(schema.portfolioItem.id, itemId),
+          eq(schema.portfolioItem.creatorPageId, page.id),
+        ),
       ),
-    );
+    orphanUnreferenced(user.id),
+  ]);
 
   revalidatePath("/portfolio");
   if (user.handle) revalidatePath(`/${user.handle}`);

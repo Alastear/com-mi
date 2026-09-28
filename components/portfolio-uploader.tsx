@@ -1,5 +1,6 @@
 "use client";
 
+import { quotaFullText } from "@/lib/billing/plans";
 import { useRef, useState } from "react";
 import { ImagePlus, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -50,7 +51,7 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
           const f = uploadFailure(msg);
           toast.error(
             f === "quota"
-              ? t.media.quotaFull
+              ? quotaFullText(t.media)
               : f === "too_large"
                 ? t.media.tooBig
                 : f === "rate_limited"

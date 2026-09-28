@@ -176,6 +176,13 @@
       "when": 1790580226397,
       "tag": "0024_majestic_wiccan",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790625611287,
+      "tag": "0025_secret_venom",
+      "breakpoints": true
     }
   ]
 }

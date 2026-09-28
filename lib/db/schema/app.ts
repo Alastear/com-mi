@@ -87,10 +87,24 @@ export const media = pgTable(
     filename: text("filename").notNull().default(""),
 
     /**
-     * orphan = อัปโหลดแล้วแต่ผู้ใช้ยังไม่ submit → cron เก็บกวาดทีหลัง
+     * orphan = อัปโหลดแล้วแต่ผู้ใช้ยังไม่ submit หรือเคยผูกแล้วแต่ไม่มีใครใช้อีก → cron เก็บกวาดทีหลัง
      * linked  = ผูกกับ record จริงแล้ว
+     *
+     * ⚠️ ทุกที่ที่ปลดการอ้างถึง (เปลี่ยนรูป ลบผลงาน) ต้องเรียก `orphanUnreferencedSql()`
+     * (lib/media/references.ts) ใน batch เดียวกัน ไม่งั้นแถวค้างเป็น linked ตลอดไป
+     * กินโควตาและไม่มีวันถูกเก็บกวาด
      */
     status: text("status").notNull().default("orphan"),
+
+    /**
+     * เวลาที่แถวที่เคยผูกแล้วถูกปลดกลับเป็น orphan — null = ไม่เคยถูกปลด (อัปมาแล้วยังไม่ได้ผูก)
+     *
+     * ⚠️ งานเก็บกวาดนับเวลาผ่อนผันจากค่านี้ก่อน `createdAt` (ดู `orphanSince` ใน
+     * lib/media/cleanup-rules.ts) — อวาตาร์ที่อัปมาเมื่อปีก่อนแล้วเพิ่งถูกเปลี่ยนเมื่อกี้
+     * ถ้านับจาก `createdAt` จะถูกลบในรอบถัดไปทันที ขณะที่หน้าที่เปิดค้างไว้หรือ HTML
+     * ที่แคชไว้ยังชี้ไฟล์นั้นอยู่ รูปจะแตกกลางหน้า
+     */
+    orphanedAt: timestamp("orphaned_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

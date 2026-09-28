@@ -1,5 +1,6 @@
 "use client";
 
+import { quotaFullText } from "@/lib/billing/plans";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Trash2 } from "lucide-react";
@@ -65,7 +66,7 @@ export function PortfolioManager({
 
       {atLimit ? (
         <Card className="mt-5 flex-row items-center gap-3 border-primary/40 bg-primary/5 p-4">
-          <p className="flex-1 text-sm">{t.media.quotaFull}</p>
+          <p className="flex-1 text-sm">{quotaFullText(t.media)}</p>
         </Card>
       ) : (
         <div className="mt-5">

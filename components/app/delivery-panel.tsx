@@ -1,5 +1,6 @@
 "use client";
 
+import { quotaFullText } from "@/lib/billing/plans";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileUp, Loader2, Lock, Package, Trash2 } from "lucide-react";
@@ -105,7 +106,7 @@ export function DeliveryPanel({
   function failureText(f: UploadFailure): string {
     switch (f) {
       case "quota":
-        return t.delivery.quotaFull;
+        return quotaFullText(t.delivery);
       case "too_large":
         return t.delivery.tooLarge;
       case "rate_limited":
