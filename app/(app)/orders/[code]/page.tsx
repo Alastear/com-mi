@@ -105,7 +105,12 @@ export default async function OrderPage({ params }: Props) {
         ) : null}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
+      {/*
+        ⚠️ `grid-cols-1` (= minmax(0, 1fr)) ต้องมี — ไม่ใส่ คอลัมน์บนมือถือเป็น `auto`
+        ที่ถูกดันกว้างตามข้อความ `truncate` (nowrap) ข้างใน ชื่อไฟล์ส่งมอบยาว ๆ
+        จึงทำให้ทั้งหน้าเลื่อนแนวนอนที่ 390px แทนที่จะถูกตัดเป็น "…"
+      */}
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
         <div className="space-y-6">
           {/* รีวิวอยู่บนสุด — งานจบแล้ว สิ่งเดียวที่ร้านยังทำได้กับออเดอร์นี้คือตอบรีวิว (ครั้งเดียว) */}
           {reviewRow ? (
