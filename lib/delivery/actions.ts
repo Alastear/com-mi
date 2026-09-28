@@ -212,7 +212,7 @@ export type RemoveFileResult =
  * ครีเอเตอร์ลบไฟล์ส่งมอบที่อัปผิด — เฉพาะไฟล์ที่ยังไม่อยู่ในรอบไหนเลย (ยังไม่เคยเตรียม ยังไม่เคยปล่อย)
  *
  * ไฟล์ที่อยู่ในรอบแล้วลบไม่ได้: รอบที่ปล่อยแล้วคือของที่ลูกค้าซื้อและเป็นหลักฐาน (trigger ใน 0008)
- * ส่วนรอบที่เตรียมไว้ถ้ายอมให้ลบไฟล์ออก `deliverAndRelease` ที่อ่านรายการไปแล้วอาจปล่อยรอบที่ไฟล์หายไป
+ * ส่วนไฟล์ในรอบที่เตรียมไว้ ต้องเอาออกจากรอบก่อน (`takeOutOfRound`) แล้วค่อยลบ
  *
  * ⚠️ **ไม่มีด่านสถานะออเดอร์** — ลบได้แม้งานปิดไปแล้ว (ส่งมอบ/เสร็จ/ยกเลิก/ข้อพิพาท)
  * เดิมลบได้เฉพาะช่วงที่ยังอัปไฟล์ได้ ครีเอเตอร์ที่อัปไฟล์เพิ่มแล้วกดส่งมอบโดยไม่ได้ใส่เข้ารอบ
@@ -294,6 +294,72 @@ function firstKey(result: unknown): string | undefined {
   return (Array.isArray(r) ? r[0] : r.rows?.[0])?.key;
 }
 
+/**
+ * ครีเอเตอร์เอาไฟล์ออกจากรอบที่เตรียมไว้แต่ยังไม่ปล่อย — ไฟล์กลับไปเป็นไฟล์ค้าง (ลบทิ้งหรือเพิ่มกลับได้)
+ *
+ * ⚠️ เดิมไม่มีทางนี้เลย: กด "เพิ่มเข้ารอบนี้" (ส่งไฟล์ค้างทุกไฟล์) แล้วมีไฟล์ผิดติดไปหนึ่งไฟล์
+ * — เช่น PSD ของลูกค้าอีกคน — ไฟล์นั้นลบไม่ได้ เอาออกไม่ได้ ทางเดียวที่จะส่งไฟล์ที่ถูก
+ * คือส่งไฟล์ผิดให้ลูกค้าไปด้วย
+ *
+ * รอบที่เหลือว่างถูกลบทิ้งในทรานแซกชันเดียวกัน — รอบว่างที่ยังเปิดอยู่ทำให้ปุ่มส่งมอบโผล่
+ * แต่กดแล้วได้ `no_files` ทุกครั้ง (โน้ตถึงลูกค้าของรอบนั้นหายไปด้วย ยอมรับได้: ยังไม่เคยส่ง)
+ *
+ * ⚠️ แข่งกับ `deliverAndRelease` ได้ — ทั้งคู่ถือ `lockOrder` และ batch ของการปล่อยตรวจรอบซ้ำ
+ * ใต้ lock (ยังไม่ปล่อย + ยังมีไฟล์) ก่อนเปลี่ยนสถานะ จึงไม่มีทางปล่อยรอบว่าง
+ * หรือพาออเดอร์ไป `delivered` โดยไม่มีไฟล์ใหม่ ส่วนรอบที่ถูกปล่อยไปก่อน `released_at is null` กันไว้
+ */
+export async function takeOutOfRound(code: string, mediaId: string): Promise<RemoveFileResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "forbidden" };
+  if (!isOrderCode(code) || typeof mediaId !== "string" || !mediaId || mediaId.length > 60) {
+    return { ok: false, error: "invalid" };
+  }
+  const userId = session.user.id;
+
+  const order = await resolve(code, userId);
+  if (!order || !order.isCreator) return { ok: false, error: "forbidden" };
+  // งานปิดแล้วรอบที่ค้างอยู่ไม่มีวันถูกปล่อย — คำตอบให้ตรงเรื่อง ด่านจริงอยู่ใน batch
+  if (!canUploadDelivery(order.status)) return { ok: false, error: "not_allowed" };
+
+  const db = getDb();
+  const idJson = JSON.stringify([mediaId]);
+
+  /**
+   * คำสั่งที่ 2 ตัด id ออก (`jsonb - text` ตัดทุกตัวที่ตรง) เฉพาะรอบที่ยังไม่ปล่อยและงานยังเปิด
+   * คำสั่งที่ 3 ลบรอบที่ว่างแล้ว · คำสั่งที่ 4 คืนสถานะไฟล์เป็น orphan แบบตอนเพิ่งอัป
+   * (ไฟล์ส่วนตัวไม่เคยถูกเก็บกวาดด้วยสถานะนี้ — `orphanUnreferenced` / `dueOrphanSql` แตะแค่ public)
+   * คำสั่งหลังเห็นผลของคำสั่งก่อนหน้าในทรานแซกชันเดียวกัน
+   */
+  const [, out] = await db.batch([
+    lockOrder(order.id),
+    db.execute(sql`
+      update delivery d set media_ids = d.media_ids - ${mediaId}::text
+      where d.order_id = ${order.id} and d.released_at is null
+        and d.media_ids @> ${idJson}::jsonb
+        and ${orderAcceptsFilesSql(order.id)}
+      returning d.id
+    `),
+    db.execute(sql`
+      delete from delivery d
+      where d.order_id = ${order.id} and d.released_at is null and jsonb_array_length(d.media_ids) = 0
+    `),
+    db.execute(sql`
+      update media m set status = 'orphan'
+      where m.id = ${mediaId} and m.order_id = ${order.id} and ${notInAnyRoundSql(order.id)}
+    `),
+  ]);
+
+  if (affectedRows(out) === 0) {
+    // รอบถูกปล่อยไปแล้ว ไฟล์ถูกเอาออกไปแล้ว หรือสถานะเปลี่ยนระหว่างทาง — ให้หน้าจอโหลดใหม่
+    const fresh = await resolve(code, userId);
+    return { ok: false, error: fresh && !canUploadDelivery(fresh.status) ? "not_allowed" : "stale" };
+  }
+
+  revalidatePath(`/orders/${code}`);
+  revalidatePath(`/my/requests/${code}`);
+  return { ok: true };
+}
+
 /** ครีเอเตอร์กดส่งมอบ — เปลี่ยนสถานะและปล่อยไฟล์พร้อมกัน */
 export async function deliverAndRelease(code: string, deliveryId: string): Promise<DeliveryResult> {
   const session = await getSession();
@@ -311,8 +377,10 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
     where: and(eq(schema.delivery.id, deliveryId), eq(schema.delivery.orderId, order.id)),
     columns: { id: true, mediaIds: true, releasedAt: true },
   });
+  // รอบหายไปแล้ว = เอาไฟล์ออกจนหมดจากอีกแท็บ (`takeOutOfRound` ลบรอบที่ว่าง) — หน้าจอเก่ากว่าของจริง
+  if (!dlv) return { ok: false, error: "stale" };
   // ส่งมอบที่ไม่มีไฟล์เลย = ลูกค้าได้แจ้งเตือนว่างานเสร็จแล้วเปิดไปเจอหน้าเปล่า
-  if (!dlv || dlv.mediaIds.length === 0) return { ok: false, error: "no_files" };
+  if (dlv.mediaIds.length === 0) return { ok: false, error: "no_files" };
   /**
    * ⚠️ รอบนี้ถูกปล่อยไปแล้ว (แท็บเก่ากดซ้ำ) — ห้ามเดินต่อ
    * ไม่งั้นออเดอร์ที่กลับมาทำรอบแก้อยู่จะถูกพาไป `delivered` และลูกค้าได้แจ้งเตือน "ได้ไฟล์แล้ว"
@@ -343,14 +411,50 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
   const now = new Date();
 
   /**
-   * compare-and-set เหมือน transitionOrder — สองแท็บกดพร้อมกันต้องมีอันเดียวที่ผ่าน
+   * เปลี่ยนสถานะ + ปล่อยรอบ ใน batch เดียวใต้ lock ของออเดอร์ — ผ่านทั้งคู่หรือไม่ผ่านเลย
    *
+   * ⚠️ เดิมเป็นสองคำสั่งแยกกันหลังอ่านรอบไปแล้ว ระหว่างนั้นรอบเปลี่ยนได้ (เอาไฟล์ออกจนว่าง
+   * ปล่อยจากอีกแท็บ) แล้วได้ออเดอร์ `delivered` + แจ้งลูกค้าว่าได้ไฟล์ ทั้งที่รอบที่ปล่อยว่างเปล่า
+   * หรือไม่มีรอบไหนถูกปล่อยเลย ตอนนี้ตรวจรอบซ้ำใต้ lock เดียวกับ `attachDelivery` / `takeOutOfRound`
+   *
+   * compare-and-set เหมือน transitionOrder — สองแท็บกดพร้อมกันต้องมีอันเดียวที่ผ่าน
    * "จ่ายครบ" ต้องอยู่ใน `where` ด้วย ไม่ใช่แค่ `canRelease()` ด้านบน — ยกเลิกการยืนยัน
    * (`voidPayment`) ลดยอดลงได้ระหว่างที่เราอ่านกับเขียน ถ้าไม่เช็คซ้ำตรงนี้ ออเดอร์จะเป็น
    * `delivered` พร้อมแจ้งลูกค้าว่าได้ไฟล์แล้ว ทั้งที่ URL ดาวน์โหลดยังล็อกอยู่
    */
-  if (!alreadyDelivered) {
-    const updated = await db
+  const roundReady = sql`exists (
+    select 1 from delivery d
+    where d.id = ${dlv.id} and d.order_id = ${order.id}
+      and d.released_at is null and jsonb_array_length(d.media_ids) > 0
+  )`;
+  /**
+   * ปล่อยได้ครั้งเดียว (`released_at is null`) และเฉพาะเมื่อออเดอร์เป็น `delivered` + จ่ายครบ
+   * **ตอนนี้** — ในทางปกติคือผลของคำสั่งเปลี่ยนสถานะก่อนหน้าใน batch เดียวกัน
+   * ถ้าคำสั่งนั้นไม่ผ่าน สถานะยังไม่ใช่ `delivered` คำสั่งนี้จึงไม่ผ่านตาม
+   * ไฟล์ที่ถูกต่อท้ายเข้ารอบนี้ก่อน batch นี้ได้ lock (`attachDelivery`) ถูกปล่อยไปด้วย — เป็นรอบเดียวกันที่ครีเอเตอร์กดปล่อย
+   * ⚠️ subquery ใช้ `"order"` ไม่ตั้ง alias — `moneyGateSql` อ้างคอลัมน์เป็น "order"."…"
+   */
+  const release = db
+    .update(schema.delivery)
+    .set({ releasedAt: now })
+    .where(
+      and(
+        eq(schema.delivery.id, dlv.id),
+        isNull(schema.delivery.releasedAt),
+        sql`jsonb_array_length(${schema.delivery.mediaIds}) > 0`,
+        sql`exists (
+          select 1 from "order"
+          where "order"."id" = ${order.id} and "order"."status" = 'delivered' and ${moneyGateSql("delivered")}
+        )`,
+      ),
+    )
+    .returning({ id: schema.delivery.id });
+
+  let released: { id: string }[];
+  if (alreadyDelivered) {
+    [, released] = await db.batch([lockOrder(order.id), release]);
+  } else {
+    const flip = db
       .update(schema.order)
       .set({ status: "delivered", updatedAt: now })
       .where(
@@ -358,28 +462,24 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
           eq(schema.order.id, order.id),
           eq(schema.order.status, from),
           moneyGateSql("delivered"),
+          roundReady,
         ),
       )
       .returning({ id: schema.order.id });
-    if (updated.length === 0) {
-      // สถานะยังเหมือนเดิมแต่เขียนไม่ผ่าน = เงินลดลงระหว่างทาง ไม่ใช่มีคนกดไปก่อน
+    const [, flipped, rel] = await db.batch([lockOrder(order.id), flip, release]);
+    released = rel;
+    if (flipped.length === 0) {
+      // สถานะยังเหมือนเดิมแต่เขียนไม่ผ่าน = เงินลดลงระหว่างทาง · อย่างอื่น = รอบ/สถานะเปลี่ยนจากอีกแท็บ
       const fresh = await resolve(code, session.user.id);
       const paidDropped = fresh && fresh.status === from && !canRelease(fresh);
       return { ok: false, error: paidDropped ? "not_paid" : "stale" };
     }
   }
-
   /**
-   * compare-and-set: ปล่อยได้ครั้งเดียว — สองแท็บที่ผ่านด่านสถานะมาพร้อมกัน (ออเดอร์เป็น
-   * `delivered` อยู่แล้วจึงไม่มี CAS ของสถานะกั้น) ต้องมีอันเดียวที่ได้แจ้งลูกค้า
-   * ไฟล์ที่ถูกต่อท้ายเข้ารอบนี้ก่อนบรรทัดนี้ (`attachDelivery`) ถูกปล่อยไปด้วย — เป็นรอบเดียวกันที่ครีเอเตอร์กดปล่อย
+   * ทางปกติไม่มีทางมาถึงตรงนี้หลังเปลี่ยนสถานะสำเร็จ (ทั้งสองคำสั่งเห็นแถวเดียวกันใต้ lock)
+   * เหลือแค่กรณีออเดอร์ `delivered` อยู่แล้วและรอบถูกปล่อย/เปลี่ยนจากอีกแท็บ
    */
-  const releasedNow = await db
-    .update(schema.delivery)
-    .set({ releasedAt: now })
-    .where(and(eq(schema.delivery.id, dlv.id), isNull(schema.delivery.releasedAt)))
-    .returning({ id: schema.delivery.id });
-  if (releasedNow.length === 0) return { ok: false, error: "stale" };
+  if (released.length === 0) return { ok: false, error: "stale" };
 
   await db.insert(schema.message).values({
     id: newId("msg"),

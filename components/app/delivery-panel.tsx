@@ -3,7 +3,7 @@
 import { quotaFullText } from "@/lib/billing/plans";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileUp, Loader2, Lock, Package, Trash2 } from "lucide-react";
+import { Download, FileUp, Loader2, Lock, Package, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,7 @@ import {
   deliverAndRelease,
   removeDeliveryFile,
   requestDeliveryDownload,
+  takeOutOfRound,
 } from "@/lib/delivery/actions";
 import { canUploadDelivery } from "@/lib/delivery/path";
 import { attachPlan, namesPreview } from "@/lib/delivery/plan";
@@ -239,6 +240,17 @@ export function DeliveryPanel({
 
   function prepare() {
     if (!plan) return;
+    /**
+     * เติมเข้ารอบ = ส่งไฟล์ค้าง **ทุกไฟล์** และลูกค้าเห็นชื่อไฟล์ในรอบทันที (ล็อกไว้) — ถามก่อนพร้อมรายชื่อ
+     * ปุ่มนี้คือปุ่มที่กดต่อจากอัปไฟล์ทันที ซึ่งอาจยังไม่ได้ดูว่าอัปไฟล์ถูกหรือเปล่า
+     * (เอาออกจากรอบได้ด้วยปุ่มข้างไฟล์ แต่ชื่อไฟล์ที่ลูกค้าเห็นไปแล้วเอาคืนไม่ได้)
+     */
+    if (plan.mode === "add") {
+      const ids = new Set(plan.mediaIds);
+      const adding = pendingFiles.filter((f) => ids.has(f.mediaId));
+      const text = fill(t.delivery.addConfirm, { n: adding.length, names: nameList(adding) });
+      if (!window.confirm(text)) return;
+    }
     start(async () => {
       const res = await attachDelivery({
         code,
@@ -282,6 +294,22 @@ export function DeliveryPanel({
     const lines = shown.map((n) => `• ${n}`);
     if (more > 0) lines.push(fill(t.delivery.andMore, { n: more }));
     return lines.join("\n");
+  }
+
+  /** เอาไฟล์ออกจากรอบที่ยังไม่ปล่อย — ไฟล์ไม่หาย กลับไปเป็นไฟล์ค้าง จึงไม่ต้องถาม */
+  async function takeOut(f: DeliveryFileRow) {
+    if (removing) return;
+    setRemoving(f.mediaId);
+    try {
+      const res = await takeOutOfRound(code, f.mediaId);
+      if (res.ok) toast.success(t.delivery.takenOut);
+      else toast.error(staleText(res.error));
+      router.refresh();
+    } catch {
+      toast.error(t.error.title);
+    } finally {
+      setRemoving(null);
+    }
   }
 
   function release() {
@@ -338,7 +366,8 @@ export function DeliveryPanel({
   const roundFiles = openRound?.files ?? [];
   const loose = viewer === "creator" ? pendingFiles : [];
 
-  function fileRow(f: DeliveryFileRow, canDownload: boolean, removable = false) {
+  /** `action` — ปุ่มข้างไฟล์ของครีเอเตอร์: ลบทิ้ง (ไฟล์ค้าง) หรือเอาออกจากรอบ (รอบที่ยังไม่ปล่อย) */
+  function fileRow(f: DeliveryFileRow, canDownload: boolean, action: "remove" | "takeOut" | null = null) {
     return (
       <li key={f.mediaId} className="flex items-center gap-3 rounded-lg border p-3">
         <div className="min-w-0 flex-1">
@@ -364,7 +393,7 @@ export function DeliveryPanel({
             <Lock className="size-3.5" />
             {t.delivery.lockedUntilPaid}
           </span>
-        ) : removable ? (
+        ) : action === "remove" ? (
           <Button
             size="icon"
             variant="ghost"
@@ -375,6 +404,18 @@ export function DeliveryPanel({
             onClick={() => void remove(f)}
           >
             {removing === f.mediaId ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          </Button>
+        ) : action === "takeOut" ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0 text-muted-foreground"
+            aria-label={t.delivery.takeOut}
+            title={t.delivery.takeOut}
+            disabled={removing !== null || busy || pending}
+            onClick={() => void takeOut(f)}
+          >
+            {removing === f.mediaId ? <Loader2 className="size-4 animate-spin" /> : <Undo2 className="size-4" />}
           </Button>
         ) : null}
       </li>
@@ -408,7 +449,10 @@ export function DeliveryPanel({
           ) : loose.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.files}</p>
           ) : null}
-          <ul className="space-y-2">{roundFiles.map((f) => fileRow(f, false))}</ul>
+          {/* เอาออกจากรอบได้เฉพาะครีเอเตอร์และตอนงานยังเปิด — ลูกค้าเห็นแค่ไฟล์ที่ล็อกไว้ */}
+          <ul className="space-y-2">
+            {roundFiles.map((f) => fileRow(f, false, viewer === "creator" && uploadable ? "takeOut" : null))}
+          </ul>
         </>
       ) : null}
 
@@ -426,7 +470,7 @@ export function DeliveryPanel({
           ) : releasedFiles.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
           ) : null}
-          <ul className="space-y-2">{loose.map((f) => fileRow(f, false, true))}</ul>
+          <ul className="space-y-2">{loose.map((f) => fileRow(f, false, "remove"))}</ul>
         </>
       ) : null}
 
