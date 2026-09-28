@@ -104,6 +104,17 @@ export function parseBaht(raw: string): number | null {
   return baht * 100;
 }
 
+/**
+ * ยอดเป็นบาทเต็มไหม — ด่านฝั่ง server ของกติกาเดียวกับ `parseBaht()`
+ *
+ * ⚠️ ช่องกรอกบังคับบาทเต็มอยู่แล้ว แต่ Server Action ถูกยิงตรงได้ ถ้ารับเศษสตางค์
+ * (เช่น 2,999.50) แล้วครีเอเตอร์ยืนยัน ยอดคงค้างจะเหลือ 50 สตางค์ ซึ่งไม่มีฟอร์มไหน
+ * จ่ายได้ (`parseBaht` ต้องอย่างน้อย ฿1) ไฟล์งานจึงล็อกค้างจนกว่าจะยกเลิกการยืนยัน
+ */
+export function isWholeBaht(cents: number): boolean {
+  return Number.isSafeInteger(cents) && cents % 100 === 0;
+}
+
 /** ค่าตั้งต้นของช่องกรอก — ยอดเป็นสตางค์ที่ไม่ลงตัว (ข้อมูลเก่า) ปัดลง จะได้ไม่เกินยอดคงค้าง */
 export function toBahtInput(cents: number): string {
   return cents > 0 ? String(Math.floor(cents / 100)) : "";

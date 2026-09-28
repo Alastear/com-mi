@@ -24,6 +24,30 @@ export function depositSatisfied(order: {
 }
 
 /**
+ * ย้ายไปสถานะนี้ติดเงื่อนไขเงินข้อไหนไหม — คืน error ที่ตอบกลับได้เลย หรือ null ถ้าเงินไม่ใช่ปัญหา
+ *
+ *   in_progress → ต้องถึงมัดจำ (`depositSatisfied`)
+ *   delivered   → ต้องจ่ายครบ (`canRelease` — ตัวเดียวกับด่านออก URL ดาวน์โหลด
+ *                 ห้ามเขียน `paid >= total` ซ้ำที่ไหนอีก ไม่งั้นสองด่านจะเพี้ยนออกจากกัน)
+ *
+ * `transitionOrder` เรียกสองรอบ: ก่อนเขียนเพื่อตอบให้ตรงเรื่อง และหลังเขียนไม่ผ่าน
+ * เพื่อแยกว่า "เงินลดลงระหว่างทาง" กับ "มีคนเปลี่ยนสถานะไปก่อน" (`stale`)
+ *
+ * ⚠️ ด่านจริงคือ `moneyGateSql()` ใน release-sql.ts ที่อยู่ใน WHERE ของ UPDATE
+ * แก้กติกาที่นี่ต้องแก้ที่นั่นด้วยเสมอ
+ */
+export type MoneyBlock = "deposit_unpaid" | "not_fully_paid";
+
+export function moneyBlock(
+  to: OrderStatus,
+  order: { totalCents: number; amountPaidCents: number; depositCents: number },
+): MoneyBlock | null {
+  if (to === "in_progress" && !depositSatisfied(order)) return "deposit_unpaid";
+  if (to === "delivered" && !canRelease(order)) return "not_fully_paid";
+  return null;
+}
+
+/**
  * ออเดอร์นี้รับเงินได้หรือยัง — **ครีเอเตอร์ต้องตอบรับก่อนเสมอ**
  *
  * เดิมแผงจ่ายเงินกับ QR พร้อมเพย์แสดงตลอดโดยไม่ดูสถานะเลย ลูกค้าจึงโอนได้ทันที

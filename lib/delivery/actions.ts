@@ -11,6 +11,7 @@ import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
 import { isOrderCode } from "@/lib/orders/code";
 import { canRelease } from "@/lib/orders/release";
+import { moneyGateSql } from "@/lib/orders/release-sql";
 import { assertTransition, TransitionError } from "@/lib/orders/state-machine";
 import { notify } from "@/lib/notifications/create";
 import type { OrderStatus } from "@/lib/types";
@@ -152,14 +153,31 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
 
   const now = new Date();
 
-  // compare-and-set เหมือน transitionOrder — สองแท็บกดพร้อมกันต้องมีอันเดียวที่ผ่าน
+  /**
+   * compare-and-set เหมือน transitionOrder — สองแท็บกดพร้อมกันต้องมีอันเดียวที่ผ่าน
+   *
+   * "จ่ายครบ" ต้องอยู่ใน `where` ด้วย ไม่ใช่แค่ `canRelease()` ด้านบน — ยกเลิกการยืนยัน
+   * (`voidPayment`) ลดยอดลงได้ระหว่างที่เราอ่านกับเขียน ถ้าไม่เช็คซ้ำตรงนี้ ออเดอร์จะเป็น
+   * `delivered` พร้อมแจ้งลูกค้าว่าได้ไฟล์แล้ว ทั้งที่ URL ดาวน์โหลดยังล็อกอยู่
+   */
   if (!alreadyDelivered) {
     const updated = await db
       .update(schema.order)
       .set({ status: "delivered", updatedAt: now })
-      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from)))
+      .where(
+        and(
+          eq(schema.order.id, order.id),
+          eq(schema.order.status, from),
+          moneyGateSql("delivered"),
+        ),
+      )
       .returning({ id: schema.order.id });
-    if (updated.length === 0) return { ok: false, error: "stale" };
+    if (updated.length === 0) {
+      // สถานะยังเหมือนเดิมแต่เขียนไม่ผ่าน = เงินลดลงระหว่างทาง ไม่ใช่มีคนกดไปก่อน
+      const fresh = await resolve(code, session.user.id);
+      const paidDropped = fresh && fresh.status === from && !canRelease(fresh);
+      return { ok: false, error: paidDropped ? "not_paid" : "stale" };
+    }
   }
 
   await db

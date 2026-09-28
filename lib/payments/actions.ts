@@ -11,7 +11,7 @@ import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
 import { notify } from "@/lib/notifications/create";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
-import { checkReportAmount, fitsUnderTotal, paymentState, verifiedSum } from "./money";
+import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedSum } from "./money";
 
 /**
  * บันทึกการชำระเงิน — แพลตฟอร์มไม่ได้ประมวลผลเงิน แค่จดว่ามีการจ่าย
@@ -29,7 +29,7 @@ import { checkReportAmount, fitsUnderTotal, paymentState, verifiedSum } from "./
  * ⚠️ ช่องโหว่เดิมที่ไฟล์นี้ปิด: ลูกค้ากดแจ้งโอนยอดเดิมซ้ำได้เรื่อย ๆ แล้วครีเอเตอร์
  * ยืนยันทั้งสองแถว → ออเดอร์ขึ้นว่าจ่ายครบ ไฟล์ปลดล็อก ทั้งที่เงินเข้าจริงครึ่งเดียว
  * กันไว้สามชั้น ทุกชั้นอยู่ใน SQL ไม่ใช่ UI:
- *   - มีรายการรอยืนยันอยู่ ลูกค้าแจ้งเพิ่มไม่ได้
+ *   - มีรายการรอยืนยันอยู่ ใครก็เพิ่มแถวเงินไม่ได้ — ทั้งลูกค้าแจ้งซ้ำ และครีเอเตอร์บันทึกเอง
  *   - ยอดที่แจ้งต้องไม่เกินยอดคงค้าง
  *   - ยืนยันแล้วยอดรวมห้ามเกินราคางาน
  *
@@ -48,7 +48,8 @@ const PAYMENT_ID = /^pay_[0-9A-HJKMNP-TV-Z]{22}$/;
 
 const RecordSchema = z.object({
   code: z.string().refine(isOrderCode, "bad_code"),
-  amountCents: z.number().int().positive().max(100_000_000),
+  // บาทเต็มเท่านั้น เหมือนช่องกรอก — เศษสตางค์ทิ้งยอดค้างที่ไม่มีฟอร์มไหนจ่ายได้ (ดู `isWholeBaht`)
+  amountCents: z.number().int().positive().max(100_000_000).refine(isWholeBaht, "whole_baht"),
   method: z.enum(METHODS),
   proofMediaId: z.string().max(60).nullable(),
   note: z.string().trim().max(500),
@@ -223,6 +224,7 @@ function revalidateOrder(code: string) {
  *
  * ครีเอเตอร์ก็บันทึกแทนได้ (ลูกค้าโอนมาแล้วบอกทางไลน์) และในกรณีนั้น
  * ถือว่ายืนยันไปในตัว เพราะคนที่เห็นยอดในบัญชีคือคนกดเอง
+ * — แต่ไม่ใช่ระหว่างที่ลูกค้ามีรายการรอตอบอยู่ (เหตุผลอยู่ที่ด่าน `pending_exists` ข้างล่าง)
  */
 export async function recordPayment(input: z.input<typeof RecordSchema>): Promise<PaymentResult> {
   const session = await getSession();
@@ -265,7 +267,17 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
   // ส่งซ้ำด้วย id เดิม = แถวนี้บันทึกไปแล้ว ตอบสำเร็จโดยไม่ทำอะไรเพิ่ม
   if (v.paymentId && rows.some((r) => r.id === v.paymentId)) return { ok: true };
 
-  if (!byCreator && rows.some((r) => r.state === "pending")) {
+  /**
+   * มีรายการที่ลูกค้าแจ้งไว้แล้วยังไม่ถูกตอบ = ห้ามเพิ่มแถวเงิน **ทั้งสองฝ่าย**
+   *
+   * ⚠️ เดิมครีเอเตอร์ข้ามด่านนี้ได้ ซึ่งเปิดช่องนับเงินซ้ำกลับมาเอง: ลูกค้าโอนมัดจำ ฿1,500
+   * ของงาน ฿3,000 กด "แจ้งว่าโอนแล้ว" แล้วส่งสลิปทางไลน์ด้วย ครีเอเตอร์เห็นสลิปก่อน
+   * เลยบันทึก ฿1,500 เอง (นับทันที) แล้วค่อยกดยืนยันรายการที่ลูกค้าแจ้ง →
+   * 1,500 + 1,500 = 3,000 ไม่เกินราคางาน เพดานจึงจับไม่ได้ ออเดอร์ขึ้นว่าจ่ายครบ
+   * ไฟล์ปลดล็อก ทั้งที่เงินเข้าจริงก้อนเดียว
+   * ให้ครีเอเตอร์ตอบรายการนั้นก่อน (ยืนยัน หรือ ยังไม่ได้รับ) แล้วค่อยบันทึกเงินก้อนอื่น
+   */
+  if (rows.some((r) => r.state === "pending")) {
     return { ok: false, error: "pending_exists" };
   }
   const outstanding = Math.max(0, order.totalCents - verifiedSum(rows));
@@ -281,15 +293,13 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
    * insert แบบมีเงื่อนไข — เงื่อนไขชุดเดียวกับที่เช็คด้านบน แต่เช็คซ้ำใต้ lock
    * ด้านบนมีไว้ตอบ error ให้ตรงเรื่อง ตรงนี้คือด่านจริง
    *
-   *   ลูกค้า: ต้องไม่มีแถวที่ยังไม่ถูกตอบ (ไม่ verified และไม่ rejected)
-   *   ทั้งสองฝ่าย: ยอดต้องไม่เกินราคางาน − ที่ยืนยันแล้ว
+   *   ต้องไม่มีแถวที่ยังไม่ถูกตอบ (ไม่ verified และไม่ rejected) — ทั้งสองฝ่าย
+   *   ยอดต้องไม่เกินราคางาน − ที่ยืนยันแล้ว
    */
-  const noPending = byCreator
-    ? sql`true`
-    : sql`not exists (
-        select 1 from payment_record p
-        where p.order_id = ${order.id} and p.verified_at is null and p.rejected_at is null
-      )`;
+  const noPending = sql`not exists (
+    select 1 from payment_record p
+    where p.order_id = ${order.id} and p.verified_at is null and p.rejected_at is null
+  )`;
 
   const [, inserted] = await db.batch([
     lockOrder(order.id),
@@ -322,7 +332,7 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
     // แพ้การแข่งกับอีก request — ดูของจริงอีกรอบแล้วตอบให้ตรงเรื่อง
     const fresh = await loadPayments(order.id);
     if (fresh.some((r) => r.id === id)) return { ok: true };
-    if (!byCreator && fresh.some((r) => r.state === "pending")) {
+    if (fresh.some((r) => r.state === "pending")) {
       return { ok: false, error: "pending_exists" };
     }
     return { ok: false, error: "over_outstanding" };

@@ -65,9 +65,23 @@ function errorText(t: Dictionary, error: Failure): string {
 }
 
 /**
+ * error ที่แปลว่า "ตัวเลขบนหน้าจอเก่าแล้ว" — อีกแท็บหรืออีกฝ่ายเปลี่ยนแถวเงินหรือยอดที่ยืนยันไปแล้ว
+ *
+ * `over_outstanding` / `over_total` อยู่ในนี้ด้วย: ยอดคงค้างบนหน้าจอคือเพดานของช่องกรอก
+ * และเป็นตัวตัดสินว่าปุ่มยืนยันกดได้ไหม (`fits`) ถ้าไม่รีเฟรช ฟอร์มจะยังยอมให้กดยอดเดิม
+ * แล้วได้ error เดิมซ้ำ
+ */
+const REFRESH_ON: ReadonlySet<Failure> = new Set<Failure>([
+  "stale",
+  "pending_exists",
+  "over_outstanding",
+  "over_total",
+]);
+
+/**
  * เรียก action แล้วจัดการผลแบบเดียวกันทุกปุ่ม — toast + รีเฟรชหน้า
  *
- * error ที่แปลว่า "หน้าจอเก่าแล้ว" รีเฟรชให้เลย ไม่งั้นคนจะกดปุ่มเดิมซ้ำ
+ * error ที่แปลว่า "หน้าจอเก่าแล้ว" (`REFRESH_ON`) รีเฟรชให้เลย ไม่งั้นคนจะกดปุ่มเดิมซ้ำ
  * แล้วเจอ error เดิมไปเรื่อย ๆ ทั้งที่ของจริงเปลี่ยนไปแล้ว
  */
 function usePaymentAction() {
@@ -84,7 +98,7 @@ function usePaymentAction() {
         router.refresh();
       } else {
         toast.error(errorText(t, res.error));
-        if (res.error === "stale" || res.error === "pending_exists") router.refresh();
+        if (REFRESH_ON.has(res.error)) router.refresh();
       }
     });
   }
@@ -98,7 +112,7 @@ function usePaymentAction() {
  * ลูกค้าเห็น: ยอดที่ต้องจ่าย + QR + ช่องยอดที่โอนจริง + ปุ่ม "แจ้งว่าโอนแล้ว"
  *   ระหว่างมีรายการรอยืนยัน QR กับปุ่มหายไป เหลือแค่ "แจ้งโอน ฿X แล้ว รอยืนยัน"
  * ครีเอเตอร์เห็น: รายการที่ลูกค้าแจ้ง + ยืนยัน / ยังไม่ได้รับ / ยกเลิกการยืนยัน
- *   และบันทึกเงินที่ได้รับเองได้
+ *   และบันทึกเงินที่ได้รับเองได้ — ยกเว้นระหว่างที่ลูกค้ามีรายการรอตอบ (ต้องตอบรายการนั้นก่อน)
  *
  * ⚠️ ปุ่มของครีเอเตอร์ถามว่า **"เงินเข้าบัญชีจริงหรือยัง"** ไม่ใช่ "สลิปถูกไหม"
  * ต่างกันที่คำเดียวแต่เปลี่ยนสิ่งที่คนไปตรวจ — สลิปปลอมดูด้วยตาไม่ออกแล้ว
@@ -254,7 +268,18 @@ export function PaymentPanel({
       ) : null}
 
       {viewer === "creator" && outstanding > 0 ? (
-        <RecordForm code={code} outstanding={outstanding} money={money} />
+        pendingReport ? (
+          /*
+            ระหว่างที่ลูกค้ามีรายการรอตอบ ไม่มีฟอร์มบันทึกเอง — server ก็ไม่รับ (`pending_exists`)
+            เงินก้อนที่ลูกค้าแจ้งกับก้อนที่ครีเอเตอร์เห็นทางไลน์มักเป็นก้อนเดียวกัน
+            ถ้าบันทึกเองแล้วกดยืนยันรายการนั้นด้วย จะนับเงินก้อนเดียวสองครั้ง
+          */
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t.payment.recordBlockedPending}
+          </p>
+        ) : (
+          <RecordForm code={code} dueNow={dueNow} outstanding={outstanding} money={money} />
+        )
       ) : null}
 
       {viewer === "creator" && !hasPayout ? (
@@ -579,13 +604,20 @@ function PaymentItem({
  *
  * พับไว้ก่อนเสมอ: ทางปกติคือให้ลูกค้าแจ้งแล้วครีเอเตอร์ยืนยัน ฟอร์มนี้มีไว้
  * สำหรับเงินที่มาทางอื่น (ไลน์ เงินสด) ไม่ใช่ทางลัดที่ควรเด่นกว่าปุ่มยืนยัน
+ *
+ * ⚠️ ค่าตั้งต้นคือยอดรอบนี้ (`dueNow`) ไม่ใช่ยอดคงค้างทั้งหมด — ยังไม่ถึงมัดจำ ลูกค้าก็มักโอนแค่มัดจำ
+ * ถ้าตั้งเป็นยอดเต็ม กดบันทึกทีเดียวโดยไม่ได้แก้ตัวเลข = ออเดอร์ขึ้นว่าจ่ายครบ ไฟล์ปลดล็อก
+ * ทั้งที่เงินเข้าแค่มัดจำ เพดานจับไม่ได้เพราะยอดไม่เกินราคางาน
+ * เพดานของช่องกรอกยังเป็นยอดคงค้าง — ลูกค้าจ่ายเต็มก้อนเดียวก็บันทึกได้
  */
 function RecordForm({
   code,
+  dueNow,
   outstanding,
   money,
 }: {
   code: string;
+  dueNow: number;
   outstanding: number;
   money: (c: number) => string;
 }) {
@@ -593,7 +625,7 @@ function RecordForm({
   const [pending, run] = usePaymentAction();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
-  const amount = useBahtField(outstanding, outstanding, money);
+  const amount = useBahtField(dueNow, outstanding, money);
   const requestId = useRequestId();
 
   if (!open) {
@@ -603,8 +635,8 @@ function RecordForm({
         variant="outline"
         className="w-full"
         onClick={() => {
-          // ยอดคงค้างเปลี่ยนได้ระหว่างที่ฟอร์มพับอยู่ — เปิดใหม่ต้องเริ่มจากยอดล่าสุด
-          amount.setValue(toBahtInput(outstanding));
+          // ยอดเปลี่ยนได้ระหว่างที่ฟอร์มพับอยู่ — เปิดใหม่ต้องเริ่มจากยอดรอบนี้ล่าสุด
+          amount.setValue(toBahtInput(dueNow));
           setOpen(true);
         }}
       >

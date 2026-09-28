@@ -4,6 +4,7 @@ import {
   checkReportAmount,
   dueNowCents,
   fitsUnderTotal,
+  isWholeBaht,
   outstandingCents,
   parseBaht,
   paymentState,
@@ -167,5 +168,26 @@ describe("ช่องกรอกเงินเป็นบาทเต็ม"
     assert.equal(toBahtInput(150_000), "1500");
     assert.equal(toBahtInput(150_050), "1500");
     assert.equal(toBahtInput(0), "");
+  });
+});
+
+describe("ยอดที่ server รับ ต้องเป็นบาทเต็ม", () => {
+  it("บาทเต็มผ่าน", () => {
+    assert.equal(isWholeBaht(100), true);
+    assert.equal(isWholeBaht(299_900), true);
+  });
+
+  it("เศษสตางค์ไม่ผ่าน — ยืนยันแล้วจะเหลือยอดค้างที่ไม่มีฟอร์มไหนจ่ายได้", () => {
+    for (const bad of [50, 299_950, 1, 101]) {
+      assert.equal(isWholeBaht(bad), false, `${bad} ต้องไม่ผ่าน`);
+    }
+  });
+
+  it("ทุกยอดที่ช่องกรอกสร้างได้ ผ่านด่าน server เสมอ", () => {
+    // สองด่านต้องไม่เพี้ยนกัน ไม่งั้นช่องกรอกบอกว่าถูกแต่ server ตอบ invalid
+    for (const raw of ["1", "1500", "9999999"]) {
+      const cents = parseBaht(raw);
+      assert.ok(cents !== null && isWholeBaht(cents), raw);
+    }
   });
 });

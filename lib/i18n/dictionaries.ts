@@ -381,10 +381,13 @@ const th = {
     recordReceivedHint:
       "ลูกค้าโอนมาแล้วแต่ไม่ได้แจ้งในระบบ? บันทึกเองได้ ยอดนี้นับทันที และลูกค้าจะได้รับแจ้ง",
     recordAmount: "ยอดที่ได้รับ (บาท)",
-    recordNote: "บันทึก (ไม่บังคับ)",
+    // ลูกค้าเห็นบันทึกนี้บนหน้าออเดอร์ของตัวเอง — ป้ายต้องบอก ไม่งั้นครีเอเตอร์จะเขียนโน้ตส่วนตัวลงไป
+    recordNote: "บันทึก (ไม่บังคับ — ลูกค้าจะเห็น)",
     recordNotePlaceholder: "เช่น โอนผ่านบัญชีธนาคาร / จ่ายเป็นเงินสด",
     recordSubmit: "บันทึกรายการ",
     recordedToast: "บันทึกการรับเงินแล้ว",
+    recordBlockedPending:
+      "ลูกค้าแจ้งโอนไว้แล้ว ตอบรายการนั้นก่อน (ยืนยันว่าเงินเข้า หรือ ยังไม่ได้รับ) แล้วค่อยบันทึกเงินก้อนอื่นที่ได้รับ — ถ้าเงินที่ได้รับคือก้อนเดียวกับที่ลูกค้าแจ้ง กดยืนยันรายการนั้นอย่างเดียวพอ",
     /* ── error ที่ server ตอบกลับ ── */
     errPending: "มีรายการแจ้งโอนที่รอครีเอเตอร์ยืนยันอยู่แล้ว",
     errOverOutstanding: "ยอดเกินที่ต้องชำระ",
@@ -1537,10 +1540,12 @@ const en: Dictionary = {
     recordReceivedHint:
       "Client paid but did not report it here? Record it yourself. It counts right away and the client is notified",
     recordAmount: "Amount received (THB)",
-    recordNote: "Note (optional)",
+    recordNote: "Note (optional — the client sees it)",
     recordNotePlaceholder: "e.g. bank transfer / paid in cash",
     recordSubmit: "Record payment",
     recordedToast: "Payment recorded",
+    recordBlockedPending:
+      "The client has reported a payment. Answer that report first (confirm it arrived, or mark it not received), then record anything else you received. If what you received is that same transfer, just confirm the report.",
     errPending: "A reported payment is already waiting for the creator to confirm",
     errOverOutstanding: "That is more than what is owed",
     errOverTotal: "Cannot confirm — the confirmed total would exceed the order price",

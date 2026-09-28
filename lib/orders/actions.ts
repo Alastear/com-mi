@@ -10,7 +10,8 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
 import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
-import { canRelease, depositSatisfied } from "./release";
+import { moneyBlock } from "./release";
+import { moneyGateSql } from "./release-sql";
 import { consumesRevision, revisionQuota } from "./revisions";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
@@ -116,14 +117,9 @@ export async function transitionOrder(input: {
   if (to === "accepted" && order.totalCents <= 0) {
     return { ok: false, error: "price_missing" };
   }
-  if (to === "in_progress" && !depositSatisfied(order)) {
-    return { ok: false, error: "deposit_unpaid" };
-  }
-  if (to === "delivered" && !canRelease(order)) {
-    // เงื่อนไขเดียวกับด่านออก URL ดาวน์โหลด — เรียก canRelease() ทั้งคู่
-    // ห้ามเขียน `paid >= total` ซ้ำที่ไหนอีก ไม่งั้นสองด่านจะเพี้ยนออกจากกัน
-    return { ok: false, error: "not_fully_paid" };
-  }
+  // มัดจำ (in_progress) / จ่ายครบ (delivered) — ตรงนี้แค่ตอบให้ตรงเรื่อง ด่านจริงอยู่ใน WHERE ข้างล่าง
+  const blocked = moneyBlock(to, order);
+  if (blocked) return { ok: false, error: blocked };
   /**
    * ขอแก้ไขเกินโควตาไม่ได้ — ตอบเป็น error ของมันเอง ไม่ใช่ `not_allowed`
    * เพราะเส้นทางนี้มีอยู่จริง แค่สิทธิ์หมด หน้าจอต้องบอกให้ไปคุยในแชท ไม่ใช่บอกว่า "ย้ายไม่ได้"
@@ -177,6 +173,9 @@ export async function transitionOrder(input: {
    * ⚠️ ห้ามแยกเป็นสอง query (เปลี่ยนสถานะก่อนแล้วค่อยบวก) — ถ้าตัวหลังล้ม
    * จะได้รอบแก้ฟรีที่ไม่ถูกนับ และห้ามบวกจากค่าที่อ่านมาใน JS (`used + 1`)
    * เพราะสองคำขอที่อ่านค่าเดียวกันจะเขียนเลขเดียวกันทับกัน — ให้ DB บวกเอง
+   *
+   * เงื่อนไขเงินก็อยู่ใน `where` ด้วยเหตุผลเดียวกัน — ยกเลิกการยืนยัน (`voidPayment`)
+   * ลดยอดที่จ่ายลงได้ระหว่างที่เราอ่านกับเขียน (ดู `moneyGateSql`)
    */
   const updated = await db
     .update(schema.order)
@@ -191,6 +190,7 @@ export async function transitionOrder(input: {
         eq(schema.order.id, order.id),
         eq(schema.order.status, from),
         consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
+        moneyGateSql(to),
       ),
     )
     .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed });
@@ -199,8 +199,18 @@ export async function transitionOrder(input: {
    * ไม่มีแถวไหนถูกเขียน = มีคนเปลี่ยนออเดอร์ไปก่อนแล้ว ตอบ `stale` ให้รีเฟรช
    * ด่านโควตาใน `where` จะตกเองได้ก็ต่อเมื่อระหว่างอ่านกับเขียนมีคนวนรอบแก้จนครบ
    * แล้วกลับมาสถานะเดิม ซึ่งรีเฟรชแล้วหน้าจอจะบอกว่าสิทธิ์หมดเอง
+   *
+   * ยกเว้นกรณีสถานะยังเหมือนเดิมแต่เงินลดลงระหว่างทาง — ตอบเป็น error เรื่องเงิน
+   * ไม่ใช่ `stale` เพราะรีเฟรชแล้วกดใหม่ก็ไม่ผ่าน ต้องบอกให้รู้ว่าติดที่มัดจำ/ยอดค้าง
    */
-  if (updated.length === 0) return { ok: false, error: "stale" };
+  if (updated.length === 0) {
+    const fresh = await db.query.order.findFirst({
+      where: eq(schema.order.id, order.id),
+      columns: { status: true, depositCents: true, amountPaidCents: true, totalCents: true },
+    });
+    const nowBlocked = fresh && fresh.status === from ? moneyBlock(to, fresh) : null;
+    return { ok: false, error: nowBlocked ?? "stale" };
+  }
 
   /**
    * บันทึกลง timeline เป็น event ไม่ใช่ข้อความสำเร็จรูป

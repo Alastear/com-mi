@@ -13,7 +13,7 @@ import { generateOrderCode, isOrderCode } from "./code";
 import { BOARD_COLUMNS, ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { boardDropTarget, boardMenuTargets, columnOf, isOnBoard } from "./board";
 import { isPrivateKind, isPublicKind, MEDIA_KINDS } from "@/lib/media/kinds";
-import { canPay, canRelease, depositSatisfied } from "./release";
+import { canPay, canRelease, depositSatisfied, moneyBlock } from "./release";
 import { deliveryPrefix, isDeliveryPath } from "@/lib/delivery/path";
 import { formatLineAmount, formatMoney } from "@/lib/format";
 
@@ -481,6 +481,44 @@ describe("เงื่อนไขปล่อยไฟล์ส่งมอบ"
     assert.equal(depositSatisfied({ depositCents: 0, amountPaidCents: 0 }), true);
     assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 144_999 }), false);
     assert.equal(depositSatisfied({ depositCents: 145_000, amountPaidCents: 145_000 }), true);
+  });
+});
+
+describe("เงื่อนไขเงินของการเปลี่ยนสถานะ", () => {
+  const order = (paid: number) => ({
+    totalCents: 300_000,
+    depositCents: 150_000,
+    amountPaidCents: paid,
+  });
+
+  it("เริ่มงานต้องถึงมัดจำ", () => {
+    assert.equal(moneyBlock("in_progress", order(149_900)), "deposit_unpaid");
+    assert.equal(moneyBlock("in_progress", order(150_000)), null);
+  });
+
+  it("ส่งมอบต้องจ่ายครบ", () => {
+    assert.equal(moneyBlock("delivered", order(150_000)), "not_fully_paid");
+    assert.equal(moneyBlock("delivered", order(300_000)), null);
+  });
+
+  it("ยกเลิกการยืนยันจนยอดลด = ด่านเดิมกลับมาปิด", () => {
+    // ยืนยันครบแล้ว undo ก้อนหลังทิ้ง เหลือแค่มัดจำ — ส่งมอบต้องไม่ผ่านอีก ส่วนเริ่มงานยังผ่าน
+    assert.equal(moneyBlock("delivered", order(150_000)), "not_fully_paid");
+    assert.equal(moneyBlock("in_progress", order(150_000)), null);
+    assert.equal(moneyBlock("in_progress", order(0)), "deposit_unpaid");
+  });
+
+  it("สถานะอื่นไม่ติดเงื่อนไขเงิน", () => {
+    for (const to of ["in_review", "cancelled", "completed", "revision_requested"] as const) {
+      assert.equal(moneyBlock(to, order(0)), null, to);
+    }
+  });
+
+  it("ส่งมอบใช้กติกาเดียวกับ canRelease — ออเดอร์ ฿0 ไม่ถือว่าจ่ายครบ", () => {
+    assert.equal(
+      moneyBlock("delivered", { totalCents: 0, depositCents: 0, amountPaidCents: 0 }),
+      "not_fully_paid",
+    );
   });
 });
 
