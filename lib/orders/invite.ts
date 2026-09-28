@@ -13,7 +13,7 @@ import { assertCanAcceptNewOrder, insertNewOrder } from "./new-order";
 import { generateInviteToken, isInviteToken } from "./invite-token";
 import { notify } from "@/lib/notifications/create";
 import { sql } from "drizzle-orm";
-import { startClockOnAcceptSet } from "./due-clock-sql";
+import { insertClockStartedEvent, startClockOnAcceptSet } from "./due-clock-sql";
 
 /**
  * ใบเชิญลูกค้า — ฝั่งครีเอเตอร์
@@ -580,6 +580,8 @@ export async function confirmInviteClaim(claimId: string): Promise<ConfirmResult
       .update(schema.order)
       .set({ status: "accepted", updatedAt: now, ...startClockOnAcceptSet(now) })
       .where(and(eq(schema.order.id, created.orderId), eq(schema.order.status, "requested"))),
+    // กำหนดส่งใหม่ลงเธรด — มีแถวเฉพาะเมื่อ UPDATE ข้างบนเพิ่งเริ่มนาฬิกา (ใบเชิญไม่มีมัดจำ)
+    insertClockStartedEvent(created.orderId, now),
     db
       .update(schema.orderInviteRevision)
       .set({ acceptedAt: now })

@@ -153,13 +153,14 @@ export function eventText(
   if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;
   if (eventType === "quote_withdrawn") return t.orderEvent.quote_withdrawn;
   if (eventType === "invite_confirmed") return t.orderEvent.invite_confirmed;
-  if (eventType === "deposit_met") {
+  if (eventType === "deposit_met" || eventType === "due_started") {
     /**
-     * กำหนดส่งใหม่ถูกเก็บไว้ใน event ตอนเขียน (`recomputePaid`) — ไม่ใช่อ่าน `order.dueAt` ปัจจุบัน
-     * เพราะ event คือหลักฐานว่า "ตอนนั้นนาฬิกาเริ่มที่ไหน" วันที่ไม่มี/อ่านไม่ออกก็ไม่ใส่ ไม่เดา
+     * กำหนดส่งใหม่ถูกเก็บไว้ใน event ตอนเขียน (`insertDepositMetEvent` / `insertClockStartedEvent`)
+     * — ไม่ใช่อ่าน `order.dueAt` ปัจจุบัน เพราะ event คือหลักฐานว่า "ตอนนั้นนาฬิกาเริ่มที่ไหน"
+     * วันที่ไม่มี/อ่านไม่ออกก็ไม่ใส่ ไม่เดา
      */
     const due = typeof data?.due === "string" ? new Date(data.due) : null;
-    const base = t.orderEvent.deposit_met;
+    const base = t.orderEvent[eventType];
     if (!due || Number.isNaN(due.getTime())) return base;
     return `${base} · ${fill(t.orderEvent.dueOn, { date: formatDate(due, locale) })}`;
   }

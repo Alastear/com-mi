@@ -661,6 +661,16 @@ describe("event ของระบบบน timeline", () => {
     }
   });
 
+  it("ตอบรับงานไม่มีมัดจำ: บอกกำหนดส่งใหม่เหมือนมัดจำครบ — ทั้งสองภาษา", () => {
+    for (const [locale, t] of [["th", th], ["en", en]] as const) {
+      const withDate = eventText(t, "due_started", { actor: "system", due: "2026-10-05T12:00:00.000+00:00" }, locale)!;
+      assert.ok(withDate.startsWith(t.orderEvent.due_started));
+      assert.match(withDate, /2026|2569/);
+      assert.equal(/\{\w+\}/.test(withDate), false);
+      assert.equal(eventText(t, "due_started", { actor: "system" }, locale), t.orderEvent.due_started);
+    }
+  });
+
   it("เตือนปิดงาน: บอกจำนวนวัน — ไม่มีจำนวนวัน = ไม่แสดง", () => {
     for (const [locale, t] of [["th", th], ["en", en]] as const) {
       const text = eventText(t, "auto_complete_warned", { actor: "system", days: 2 }, locale)!;
@@ -718,6 +728,33 @@ describe("ด่านใน SQL ที่เทสต์นี้รันไ�
     // ครีเอเตอร์ยืนยันใบเชิญ
     const inv = read("lib/orders/invite.ts");
     assert.match(inv, /\.set\(\{ status: "accepted", updatedAt: now, \.\.\.startClockOnAcceptSet\(now\) \}\)/);
+  });
+
+  it("ตอบรับงาน (ไม่มีมัดจำ) เขียนกำหนดส่งใหม่ลงเธรดใน batch เดียวกับ UPDATE — ครบทั้งสามทาง", () => {
+    const clock = read("lib/orders/due-clock-sql.ts");
+    const fn = clock.slice(clock.indexOf("export function insertClockStartedEvent"));
+    // ด่าน "เพิ่งเริ่มตรงนี้" ใช้จุดเริ่มเดียวกับ `startClockOnAcceptSet` และเก็บ due ไว้ใน event
+    assert.match(fn, /o\.deposit_met_at = greatest\(\$\{iso\}::timestamptz, o\.created_at\)/);
+    assert.match(fn, /o\.deposit_cents <= 0/);
+    assert.match(fn, /jsonb_build_object\('actor', 'system', 'due', o\.due_at\)/);
+
+    // ต้องอยู่ใน batch หลัง UPDATE ที่เริ่มนาฬิกา (อ่านค่าที่เพิ่งเขียน) ไม่ใช่คำสั่งแยก
+    const act = read("lib/orders/actions.ts");
+    const actBatch = act.slice(act.indexOf("await db.batch([\n    lockOrder(order.id),"));
+    assert.ok(
+      actBatch.indexOf("startClockOnAcceptSet(now)") < actBatch.indexOf("insertClockStartedEvent(order.id, now)"),
+    );
+    assert.ok(actBatch.indexOf("insertClockStartedEvent(order.id, now)") < actBatch.indexOf("]);"));
+
+    const quote = read("lib/orders/quote.ts");
+    const qBatch = quote.slice(quote.indexOf("const [, acceptedQuote, updatedOrder] = await db.batch(["));
+    assert.ok(qBatch.indexOf("startClockOnAcceptSet(now, quote.depositCents)") < qBatch.indexOf("insertClockStartedEvent(order.id, now)"));
+    assert.ok(qBatch.indexOf("insertClockStartedEvent(order.id, now)") < qBatch.indexOf("  ]);"));
+
+    const inv = read("lib/orders/invite.ts");
+    const iBatch = inv.slice(inv.lastIndexOf("await db.batch(["));
+    assert.ok(iBatch.indexOf("startClockOnAcceptSet(now)") < iBatch.indexOf("insertClockStartedEvent(created.orderId, now)"));
+    assert.ok(iBatch.indexOf("insertClockStartedEvent(created.orderId, now)") < iBatch.indexOf("  ]);"));
   });
 
   it("เลื่อนกำหนดส่งตอนมัดจำครบอยู่ใน UPDATE เดียวกับยอดเงิน และเช็ค 'ข้ามเส้น' + 'ครั้งเดียว'", () => {

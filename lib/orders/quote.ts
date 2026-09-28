@@ -12,7 +12,7 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { isOrderCode } from "./code";
 import { depositFor, quoteFromLines } from "./pricing";
 import type { OrderStatus } from "@/lib/types";
-import { startClockOnAcceptSet } from "./due-clock-sql";
+import { insertClockStartedEvent, startClockOnAcceptSet } from "./due-clock-sql";
 
 /**
  * ใบเสนอราคาที่ครีเอเตอร์เขียนเอง
@@ -461,6 +461,12 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
              'quote_accepted'::text, ${JSON.stringify({ actor: "client" })}::jsonb, ${at}::timestamptz
       where exists (${acceptedHere})
     `),
+
+    /**
+     * ใบไม่มีมัดจำ = กำหนดส่งใหม่ลงเธรดทันที (มีมัดจำ → `deposit_met` ตอนมัดจำครบแทน)
+     * ด่านใน `insertClockStartedEvent` อ่านแถวที่ UPDATE ข้างบนเพิ่งเขียน — แพ้การแข่ง = ไม่มีแถว
+     */
+    insertClockStartedEvent(order.id, now),
   ]);
 
   /**

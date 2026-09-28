@@ -12,7 +12,7 @@ import { isOrderCode } from "./code";
 import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
 import { moneyBlock } from "./release";
 import { moneyGateSql } from "./release-sql";
-import { startClockOnAcceptSet } from "./due-clock-sql";
+import { insertClockStartedEvent, startClockOnAcceptSet } from "./due-clock-sql";
 import { consumesRevision, revisionQuota } from "./revisions";
 import { lockOrder } from "./lock";
 import { orderVersion, versionIso } from "./version";
@@ -286,6 +286,8 @@ export async function transitionOrder(input: {
         ),
       )
       .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed }),
+    // กำหนดส่งใหม่ลงเธรด — มีแถวเฉพาะเมื่อ UPDATE ข้างบนเพิ่งเริ่มนาฬิกา (ด่านอยู่ใน `insertClockStartedEvent`)
+    ...(to === "accepted" ? [insertClockStartedEvent(order.id, now)] : []),
   ]);
 
   /**
