@@ -221,8 +221,14 @@ const th = {
     wrongType: "รองรับเฉพาะไฟล์รูปภาพ",
     tooBig: "ไฟล์ใหญ่เกินไป",
     quotaFull: "พื้นที่เก็บไฟล์เต็มแล้ว — ลบของเก่าหรืออัปเกรดเป็น Pro",
-    /** ช่วงเบต้าทุกคนได้ลิมิต Pro อยู่แล้ว — ไม่มีอะไรให้อัปเกรด (เลือกด้วย `quotaFullText`) */
-    quotaFullBeta: "พื้นที่เก็บไฟล์เต็มแล้ว — ลบของเก่าที่ไม่ใช้ออกก่อน แล้วอัปใหม่",
+    /**
+     * ช่วงเบต้าทุกคนได้ลิมิต Pro อยู่แล้ว — ไม่มีอะไรให้อัปเกรด (เลือกด้วย `quotaFullText`)
+     *
+     * ⚠️ ห้ามบอกให้ "ลบแล้วอัปใหม่" ทันที — ของที่ลบ (เปลี่ยนรูป ลบผลงาน ลบเมนู) ยังนับโควตา
+     * จนงานเก็บกวาดรายวันลบจริง: ต้องพ้น 24 ชม. นับจากตอนลบ แล้วรอรอบ cron ถัดไป = 1–2 วัน
+     * (ไม่หักออกจากโควตาทันทีเพราะจะเปิดช่องอัป-ลบวนกองไฟล์ในถังได้ไม่จำกัด)
+     */
+    quotaFullBeta: "พื้นที่เก็บไฟล์เต็มแล้ว — ลบของที่ไม่ใช้ออกได้ แต่พื้นที่จะคืนมาภายในราว 2 วัน ไม่ใช่ทันที",
     rateLimited: "อัปโหลดถี่เกินไป — รอสักพัก (ไม่เกินหนึ่งชั่วโมง) แล้วค่อยอัปต่อ",
     banner: "แบนเนอร์",
     avatar: "รูปโปรไฟล์",
@@ -513,7 +519,13 @@ const th = {
     linkWarning:
       "ลิงก์ดาวน์โหลดมีอายุ 15 นาที และใครก็ตามที่ได้ลิงก์ไปก็เปิดได้ — การส่งต่อให้คนอื่นผิดเงื่อนไขการใช้งาน ไม่ใช่เรื่องที่ระบบกันได้",
     quotaFull: "พื้นที่เก็บไฟล์เต็ม — ลบไฟล์เก่าหรืออัปเกรดเป็น Pro",
-    quotaFullBeta: "พื้นที่เก็บไฟล์เต็ม — ลบไฟล์เก่าที่ไม่ใช้ออกก่อน แล้วอัปใหม่",
+    /**
+     * ไฟล์ส่งงานที่ยังไม่ได้ส่ง (`removeDeliveryFile`) ลบแถวทันที = คืนพื้นที่ทันที
+     * ส่วนไฟล์สาธารณะที่ถูกปลดต้องรองานเก็บกวาด 1–2 วัน (เหตุผลที่ `media.quotaFullBeta`)
+     * ไฟล์ที่ส่งมอบไปแล้วลบไม่ได้ — อย่าบอกให้ "ลบไฟล์เก่า" เฉย ๆ
+     */
+    quotaFullBeta:
+      "พื้นที่เก็บไฟล์เต็ม — ไฟล์ส่งงานที่ยังไม่ได้ส่งลบได้และคืนพื้นที่ทันที ส่วนรูปหน้าร้านหรือผลงานที่ลบ พื้นที่จะคืนมาภายในราว 2 วัน",
     failed: "อัปโหลดไม่สำเร็จ ลองใหม่อีกครั้ง",
     tooLarge: "ไฟล์ใหญ่เกิน 2,000 MB — แบ่งเป็นหลายไฟล์หรือบีบอัดก่อน",
     wrongState: "สถานะงานตอนนี้อัปโหลดไฟล์ส่งมอบไม่ได้",
@@ -1542,7 +1554,8 @@ const en: Dictionary = {
     wrongType: "Images only",
     tooBig: "That file is too large",
     quotaFull: "Storage is full — remove something or upgrade to Pro",
-    quotaFullBeta: "Storage is full — remove something you no longer use, then try again",
+    quotaFullBeta:
+      "Storage is full — you can remove things you no longer use, but the space comes back within about two days, not right away",
     rateLimited: "Too many uploads — wait a while (up to an hour) before uploading more",
     banner: "Banner",
     avatar: "Profile picture",
@@ -1807,7 +1820,8 @@ const en: Dictionary = {
     linkWarning:
       "Download links last 15 minutes and work for anyone holding them — resharing breaks the licence, it is not something the system can prevent",
     quotaFull: "Storage is full — remove old files or upgrade to Pro",
-    quotaFullBeta: "Storage is full — remove old files you no longer need, then try again",
+    quotaFullBeta:
+      "Storage is full — deleting delivery files you have not sent frees space right away; removed shop images and portfolio items free theirs within about two days",
     failed: "Upload failed. Try again.",
     tooLarge: "Files over 2,000 MB can't be uploaded — split or compress it first",
     wrongState: "Files cannot be uploaded at this stage",

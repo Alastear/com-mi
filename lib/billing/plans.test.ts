@@ -130,4 +130,15 @@ describe("ข้อความพื้นที่เต็ม", () => {
       }
     }
   });
+
+  // ของที่ลบยังนับโควตาจนงานเก็บกวาดรายวันลบจริง (24 ชม. + รอรอบ cron) — บอกให้ลองใหม่ทันทีคือโกหก
+  it("ข้อความเบต้าไม่สัญญาว่าลบแล้วอัปใหม่ได้ทันที และบอกว่าต้องรอ", () => {
+    for (const locale of ["th", "en"] as const) {
+      const t = getDictionary(locale);
+      for (const text of [t.media.quotaFullBeta, t.delivery.quotaFullBeta]) {
+        assert.equal(/try again|แล้วอัปใหม่/i.test(text), false, text);
+        assert.equal(/2 วัน|two days/.test(text), true, text);
+      }
+    }
+  });
 });
