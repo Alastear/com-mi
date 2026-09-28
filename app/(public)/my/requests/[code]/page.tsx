@@ -56,7 +56,7 @@ export default async function ClientRequestPage({ params }: Props) {
   const handle = order.page.user?.handle ?? "";
 
   // ยังไม่ถึงมัดจำ ให้โอนแค่มัดจำก่อน ไม่ใช่ยอดเต็ม — ตรงกับด่านใน transitionOrder
-  const { open: openRound, released: releasedRound, releasedFiles, pendingFiles } = await readDelivery(order.id, order.deliveries);
+  const { open: openRound, released: releasedRound, releasedFiles } = await readDelivery(order.id, order.deliveries);
   // ใบเสนอราคาที่ยังกดได้ — ดึงเฉพาะตอนอยู่ในสถานะที่กดได้จริง ไม่งั้นเสีย query เปล่า
   const liveQuote = order.status === "quoted" ? await getLiveQuote(order.id) : null;
   // ยอดใน QR ต้องเป็นตัวเดียวกับที่แผงชำระเงินโชว์ — ใช้ฟังก์ชันเดียวกัน ไม่คำนวณซ้ำสองที่
@@ -319,7 +319,9 @@ export default async function ClientRequestPage({ params }: Props) {
             openRound={openRound}
             releasedRound={releasedRound}
             releasedFiles={releasedFiles}
-            pendingFiles={pendingFiles}
+            // ⚠️ ไฟล์ที่ครีเอเตอร์อัปไว้แต่ยังไม่อยู่ในรอบไหนเป็นของครีเอเตอร์คนเดียว — แผงไม่วาดให้ลูกค้าอยู่แล้ว
+            // แต่ส่ง prop ไปก็คือส่งชื่อไฟล์กับขนาดไปอยู่ใน payload ของหน้า ลูกค้าเปิดอ่านได้
+            pendingFiles={[]}
             canDeliver={canRelease(order)}
             orderStatus={order.status}
           />

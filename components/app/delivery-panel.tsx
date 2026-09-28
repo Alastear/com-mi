@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileUp, Loader2, Lock, Package } from "lucide-react";
+import { Download, FileUp, Loader2, Lock, Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useDict } from "@/lib/i18n/client";
 import { formatBytes } from "@/lib/format";
-import { attachDelivery, deliverAndRelease, requestDeliveryDownload } from "@/lib/delivery/actions";
+import {
+  attachDelivery,
+  deliverAndRelease,
+  removeDeliveryFile,
+  requestDeliveryDownload,
+} from "@/lib/delivery/actions";
 import { canUploadDelivery } from "@/lib/delivery/path";
+import { attachPlan } from "@/lib/delivery/plan";
 import { fill } from "@/lib/i18n/dictionaries";
 import { registerDelivery, uploadDelivery } from "@/lib/uploads/client";
 import { stopsBatch, uploadFailure, type UploadFailure } from "@/lib/uploads/errors";
@@ -64,8 +70,11 @@ export function DeliveryPanel({
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   const uploadable = canUploadDelivery(orderStatus);
+  // ไฟล์ค้างไปทางไหน: เตรียมรอบใหม่ หรือเติมเข้ารอบที่เตรียมไว้ (กติกาและเหตุผลอยู่ใน plan.ts)
+  const plan = viewer === "creator" ? attachPlan(pendingFiles.map((f) => f.mediaId), openRound !== null, uploadable) : null;
 
   /**
    * สถานะที่ `deliverAndRelease()` เดินไป `delivered` ได้จริง ตามเครื่องสถานะ
@@ -138,17 +147,50 @@ export function DeliveryPanel({
     }
   }
 
+  /** ข้อความของผลที่ไม่ผ่านซึ่งเกิดจากหน้าจอเก่ากว่าของจริง — โหลดใหม่ให้ด้วยเสมอ */
+  function staleText(error: string): string {
+    if (error === "stale") return t.delivery.roundChanged;
+    if (error === "not_allowed") return t.delivery.cannotChangeRound;
+    return t.error.title;
+  }
+
   function prepare() {
+    if (!plan) return;
     start(async () => {
       const res = await attachDelivery({
         code,
-        mediaIds: pendingFiles.map((f) => f.mediaId),
+        mediaIds: plan.mediaIds,
         note,
         licenseType: "personal",
       });
-      if (res.ok) router.refresh();
-      else toast.error(t.error.title);
+      if (res.ok) {
+        if (res.added) toast.success(t.delivery.addedToRound);
+        else setNote("");
+      } else {
+        toast.error(staleText(res.error));
+      }
+      router.refresh();
     });
+  }
+
+  /**
+   * ลบไฟล์ที่อัปผิด — เฉพาะไฟล์ที่ยังไม่อยู่ในรอบไหน (server ตรวจซ้ำเป็น compare-and-set)
+   * ถามก่อนเสมอ: ไฟล์ส่งมอบใหญ่ได้ถึง 2 GB อัปใหม่บนเน็ตบ้านใช้เวลาเป็นชั่วโมง
+   */
+  async function remove(f: DeliveryFileRow) {
+    if (removing) return;
+    if (!window.confirm(fill(t.delivery.removeConfirm, { name: f.filename || f.mediaId }))) return;
+    setRemoving(f.mediaId);
+    try {
+      const res = await removeDeliveryFile(code, f.mediaId);
+      if (res.ok) toast.success(t.delivery.removed);
+      else toast.error(staleText(res.error));
+      router.refresh();
+    } catch {
+      toast.error(t.error.title);
+    } finally {
+      setRemoving(null);
+    }
   }
 
   function release() {
@@ -186,12 +228,16 @@ export function DeliveryPanel({
   }
 
   /**
-   * ไฟล์ที่ยังไม่ถูกปล่อย = รอบที่เตรียมไว้ ถ้ายังไม่เตรียมก็คือกองที่เพิ่งอัป
-   * ลูกค้าเห็นทั้งสองกองแต่โหลดได้เฉพาะกองที่ปล่อยแล้ว
+   * ไฟล์ที่ยังไม่ถูกปล่อยมีสองกอง: รอบที่เตรียมไว้ กับไฟล์ค้างที่ยังไม่อยู่ในรอบไหน
+   * ลูกค้าเห็นแค่รอบที่เตรียมไว้ (ล็อกอยู่) — ไฟล์ค้างเป็นของครีเอเตอร์คนเดียว
+   *
+   * ⚠️ เดิมรวมเป็นกองเดียว `openRound?.files ?? pendingFiles` ไฟล์ที่อัปหลังกดเตรียม
+   * จึงหายไปจากจอครีเอเตอร์ทันทีที่มีรอบเปิด ทั้งที่อัปสำเร็จและกินพื้นที่อยู่
    */
-  const lockedFiles = openRound?.files ?? (viewer === "creator" ? pendingFiles : []);
+  const roundFiles = openRound?.files ?? [];
+  const loose = viewer === "creator" ? pendingFiles : [];
 
-  function fileRow(f: DeliveryFileRow, canDownload: boolean) {
+  function fileRow(f: DeliveryFileRow, canDownload: boolean, removable = false) {
     return (
       <li key={f.mediaId} className="flex items-center gap-3 rounded-lg border p-3">
         <div className="min-w-0 flex-1">
@@ -217,6 +263,18 @@ export function DeliveryPanel({
             <Lock className="size-3.5" />
             {t.delivery.lockedUntilPaid}
           </span>
+        ) : removable ? (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label={t.delivery.removeFile}
+            title={t.delivery.removeFile}
+            disabled={removing !== null || busy || pending}
+            onClick={() => void remove(f)}
+          >
+            {removing === f.mediaId ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+          </Button>
         ) : null}
       </li>
     );
@@ -232,7 +290,7 @@ export function DeliveryPanel({
         {releasedRound ? <Badge variant="secondary">{t.delivery.released}</Badge> : null}
       </div>
 
-      {releasedFiles.length === 0 && lockedFiles.length === 0 ? (
+      {releasedFiles.length === 0 && roundFiles.length === 0 && loose.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t.delivery.noFiles}</p>
       ) : null}
 
@@ -241,13 +299,27 @@ export function DeliveryPanel({
         <ul className="space-y-2">{releasedFiles.map((f) => fileRow(f, true))}</ul>
       ) : null}
 
-      {/* รอบที่กำลังทำอยู่ */}
-      {lockedFiles.length > 0 ? (
+      {/* รอบที่เตรียมไว้ ยังไม่ปล่อย */}
+      {roundFiles.length > 0 ? (
         <>
           {releasedFiles.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
+          ) : loose.length > 0 ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.files}</p>
           ) : null}
-          <ul className="space-y-2">{lockedFiles.map((f) => fileRow(f, false))}</ul>
+          <ul className="space-y-2">{roundFiles.map((f) => fileRow(f, false))}</ul>
+        </>
+      ) : null}
+
+      {/* ไฟล์ค้าง (ครีเอเตอร์เท่านั้น) — ลบได้ตราบที่ยังไม่อยู่ในรอบไหนและงานยังเปิดอยู่ */}
+      {loose.length > 0 ? (
+        <>
+          {openRound ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.notInRound}</p>
+          ) : releasedFiles.length > 0 ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
+          ) : null}
+          <ul className="space-y-2">{loose.map((f) => fileRow(f, false, uploadable))}</ul>
         </>
       ) : null}
 
@@ -305,7 +377,7 @@ export function DeliveryPanel({
           )}
 
           {/* เตรียมรอบใหม่ได้เมื่อมีไฟล์ค้างและยังไม่มีรอบไหนเปิดอยู่ */}
-          {pendingFiles.length > 0 && !openRound ? (
+          {plan?.mode === "prepare" ? (
             <>
               <Textarea
                 value={note}
@@ -315,9 +387,25 @@ export function DeliveryPanel({
                 placeholder={t.delivery.note}
                 className="resize-none"
               />
-              <Button onClick={prepare} disabled={pending} className="w-full">
+              <Button onClick={prepare} disabled={pending || busy || removing !== null} className="w-full">
                 {pending ? <Loader2 className="size-4 animate-spin" /> : null}
                 {t.delivery.prepare}
+              </Button>
+            </>
+          ) : null}
+
+          {/* มีรอบที่เตรียมไว้แล้ว — ไฟล์ที่อัปทีหลังเติมเข้ารอบนั้นได้จนกว่าจะกดส่งมอบ */}
+          {plan?.mode === "add" ? (
+            <>
+              <p className="text-xs text-muted-foreground">{t.delivery.addHint}</p>
+              <Button
+                variant="outline"
+                onClick={prepare}
+                disabled={pending || busy || removing !== null}
+                className="w-full"
+              >
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                {fill(t.delivery.addToRound, { n: plan.mediaIds.length })}
               </Button>
             </>
           ) : null}

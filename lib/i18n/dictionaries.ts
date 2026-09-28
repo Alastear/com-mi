@@ -511,6 +511,15 @@ const th = {
     noFilesYet: "ต้องมีไฟล์อย่างน้อยหนึ่งไฟล์ก่อนส่งมอบ",
     nextRound: "รอบถัดไป (ยังไม่ปล่อย)",
     startWorkFirst: "กด \"เริ่มงาน\" ที่แถบสถานะก่อน แล้วจึงส่งมอบรอบนี้ได้",
+    notInRound: "อัปเพิ่มแล้ว แต่ยังไม่อยู่ในรอบที่เตรียมไว้",
+    addToRound: "เพิ่ม {n} ไฟล์เข้ารอบนี้",
+    addHint: "ไฟล์ที่เพิ่มจะถูกส่งพร้อมรอบนี้ตอนกดส่งมอบ",
+    addedToRound: "เพิ่มไฟล์เข้ารอบที่เตรียมไว้แล้ว",
+    removeFile: "ลบไฟล์นี้",
+    removeConfirm: "ลบ \"{name}\" ถาวร? ไฟล์นี้ยังไม่เคยส่งให้ลูกค้า ลบแล้วได้พื้นที่คืนทันที แต่กู้คืนไม่ได้",
+    removed: "ลบไฟล์แล้ว",
+    roundChanged: "รายการไฟล์เปลี่ยนไปแล้ว — โหลดหน้าใหม่ให้แล้ว ลองอีกครั้ง",
+    cannotChangeRound: "สถานะงานตอนนี้แก้ไฟล์ส่งมอบไม่ได้",
   },
 
   portfolioVideo: {
@@ -1773,6 +1782,15 @@ const en: Dictionary = {
     noFilesYet: "Attach at least one file before delivering",
     nextRound: "Next round (not released yet)",
     startWorkFirst: "Press \"Start work\" in the status bar first, then this round can be delivered",
+    notInRound: "Uploaded, but not in the prepared round yet",
+    addToRound: "Add {n} file(s) to this round",
+    addHint: "Added files go out with this round when you deliver it",
+    addedToRound: "Added to the prepared round",
+    removeFile: "Remove this file",
+    removeConfirm: "Delete \"{name}\" permanently? It was never sent to the client. The space is freed right away, but this cannot be undone.",
+    removed: "File removed",
+    roundChanged: "The file list changed — the page was refreshed, try again",
+    cannotChangeRound: "Delivery files cannot be changed at this stage",
   },
 
   portfolioVideo: {

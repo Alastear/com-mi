@@ -1,13 +1,17 @@
 "use server";
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { pickDeliveryFor } from "./read";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { presignPrivateGet } from "@/lib/storage/r2";
+import { deleteObjects, presignPrivateGet } from "@/lib/storage/r2";
+import { canUploadDelivery, DELIVERY_UPLOAD_STATUSES } from "@/lib/delivery/path";
+import { ATTACH_MAX, uniqueIds } from "@/lib/delivery/plan";
+import { lockOrder } from "@/lib/orders/lock";
+import { affectedRows } from "@/lib/uploads/intent";
 import { isOrderCode } from "@/lib/orders/code";
 import { canRelease } from "@/lib/orders/release";
 import { moneyGateSql } from "@/lib/orders/release-sql";
@@ -27,13 +31,13 @@ import type { OrderStatus } from "@/lib/types";
 
 const AttachSchema = z.object({
   code: z.string().refine(isOrderCode, "bad_code"),
-  mediaIds: z.array(z.string().max(60)).min(1).max(30),
+  mediaIds: z.array(z.string().max(60)).min(1).max(ATTACH_MAX),
   note: z.string().trim().max(2000),
   licenseType: z.enum(["personal", "commercial", "exclusive"]),
 });
 
 export type DeliveryResult =
-  | { ok: true; deliveryId?: string }
+  | { ok: true; deliveryId?: string; added?: boolean }
   | {
       ok: false;
       error: "forbidden" | "invalid" | "not_paid" | "no_files" | "not_allowed" | "stale";
@@ -59,7 +63,39 @@ async function resolve(code: string, userId: string) {
   return { ...order, isCreator, isClient };
 }
 
-/** ครีเอเตอร์ผูกไฟล์ที่อัปไว้เข้ากับการส่งมอบหนึ่งครั้ง — ยังไม่ปล่อยให้ลูกค้า */
+/** เงื่อนไข "ออเดอร์ยังอยู่ในสถานะที่แก้ไฟล์ส่งมอบได้" ในรูป SQL — ใช้ใต้ `lockOrder` */
+function orderAcceptsFilesSql(orderId: string) {
+  const statuses = sql.join(
+    DELIVERY_UPLOAD_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql`exists (select 1 from "order" o where o.id = ${orderId} and o.status in (${statuses}))`;
+}
+
+/** ไฟล์นี้ (แถว media ที่ชื่อ `m`) ยังไม่อยู่ในการส่งมอบรอบไหนของออเดอร์นี้เลย */
+function notInAnyRoundSql(orderId: string) {
+  return sql`not exists (
+    select 1 from delivery d
+    where d.order_id = ${orderId} and d.media_ids @> jsonb_build_array(m.id)
+  )`;
+}
+
+/**
+ * ครีเอเตอร์ผูกไฟล์ที่อัปไว้เข้ากับการส่งมอบ — ยังไม่ปล่อยให้ลูกค้า
+ *
+ * ไม่มีรอบเปิดอยู่ = เปิดรอบใหม่ · มีรอบที่เตรียมไว้แต่ยังไม่ปล่อย = **ต่อท้ายรอบนั้น**
+ *
+ * ⚠️ เดิม insert แถวใหม่เสมอโดยไม่ดูว่ามีรอบเปิดอยู่แล้วไหม และหน้าจอซ่อนไฟล์ที่อัปหลังกดเตรียม
+ * ครีเอเตอร์จึงติดอยู่กับชุดที่เตรียมไว้ — ถ้ายิง action ตรง ๆ ก็ได้รอบเปิดซ้อนสองรอบ
+ * ซึ่งรอบเก่าหายจากจอ (read.ts เลือกรอบเปิดล่าสุดรอบเดียว) ไฟล์ในนั้นไม่ถูกปล่อยและไม่กลับมาเป็นไฟล์ค้าง
+ *
+ * ⚠️ ต่อท้ายแล้ว **เลื่อน `created_at` เป็นตอนนี้** — สถิติเวลาส่งงานของร้าน
+ * (`HANDOVER_AT` ใน lib/queries/reputation.ts) นับ `created_at` ของรอบที่ปล่อยเป็นเวลาที่ไฟล์ชุดนั้นพร้อม
+ * ถ้าไม่เลื่อน ร้านเตรียมรอบด้วยไฟล์หลอกไว้ก่อนกำหนด แล้วค่อยเติมงานจริงทีหลัง ก็ได้ "ตรงเวลา" ฟรี
+ *
+ * ⚠️ รอบที่ปล่อยแล้วแตะไม่ได้ — `released_at is null` อยู่ใน WHERE และ trigger ใน 0008 กันอีกชั้น
+ * ถ้ารอบถูกปล่อยระหว่างทาง ไฟล์ชุดนี้ไปเปิดรอบใหม่แทน (คำสั่ง insert ถัดไปใน batch) ไม่หายเงียบ
+ */
 export async function attachDelivery(input: z.input<typeof AttachSchema>): Promise<DeliveryResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "forbidden" };
@@ -67,47 +103,194 @@ export async function attachDelivery(input: z.input<typeof AttachSchema>): Promi
   const parsed = AttachSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
   const v = parsed.data;
+  const ids = uniqueIds(v.mediaIds);
+  const userId = session.user.id;
 
-  const order = await resolve(v.code, session.user.id);
+  const order = await resolve(v.code, userId);
   if (!order || !order.isCreator) return { ok: false, error: "forbidden" };
+  /**
+   * ปิดงานแล้ว (ส่งมอบ/เสร็จ/ยกเลิก/ข้อพิพาท) ห้ามเปิดหรือเติมรอบ — เดิมไม่เช็คสถานะเลย
+   * นี่คือคำตอบให้ตรงเรื่อง ด่านจริงอยู่ใน batch ใต้ lock ด้านล่าง
+   */
+  if (!canUploadDelivery(order.status)) return { ok: false, error: "not_allowed" };
 
   const db = getDb();
 
   /**
    * ตรวจไฟล์ทุกไฟล์ว่าเป็นของออเดอร์นี้ ของเจ้าของคนนี้ ชนิด final และอยู่ store ส่วนตัว
-   * ตรวจที่นี่ครั้งเดียว แล้วตอนออก URL ดาวน์โหลดตรวจซ้ำจากตาราง media อีกที
-   * — ไม่เคยเชื่อ `delivery.mediaIds` เป็นแหล่งอำนาจ เพราะเป็นบันทึกที่เก่ากว่า
+   * ตอบ `forbidden` ให้การยิง id ของคนอื่นเข้ามา — ส่วน "ยังไม่อยู่ในรอบไหน" ตัดสินใน batch
+   * ตอนออก URL ดาวน์โหลดตรวจซ้ำจากตาราง media อีกที ไม่เคยเชื่อ `delivery.mediaIds` เป็นแหล่งอำนาจ
    */
   const owned = await db.query.media.findMany({
     columns: { id: true },
     where: and(
-      inArray(schema.media.id, v.mediaIds),
+      inArray(schema.media.id, ids),
       eq(schema.media.orderId, order.id),
-      eq(schema.media.ownerUserId, session.user.id),
+      eq(schema.media.ownerUserId, userId),
       eq(schema.media.kind, "final"),
       eq(schema.media.access, "private"),
     ),
   });
-  if (owned.length !== v.mediaIds.length) return { ok: false, error: "forbidden" };
+  if (owned.length !== ids.length) return { ok: false, error: "forbidden" };
 
+  /**
+   * ทุกไฟล์ยังใช้ได้ **ตอนเขียน**: ยังอยู่ (ไม่ถูกลบระหว่างทาง) ยังเป็นของคนนี้ และยังไม่อยู่ในรอบไหน
+   * ไฟล์เดียวกันอยู่สองรอบ = รอบหนึ่งปล่อยไปแล้วอีกรอบยังล็อก ลูกค้าเห็นไฟล์เดิมซ้ำสองที่
+   */
+  const idList = sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const allUsable = sql`(
+    select count(*) from media m
+    where m.id in (${idList}) and m.order_id = ${order.id} and m.owner_user_id = ${userId}
+      and m.kind = 'final' and m.access = 'private'
+      and ${notInAnyRoundSql(order.id)}
+  ) = ${ids.length}::bigint`;
+  const accepts = orderAcceptsFilesSql(order.id);
+  const idsJson = JSON.stringify(ids);
   const deliveryId = newId("dlv");
-  await db.insert(schema.delivery).values({
-    id: deliveryId,
-    orderId: order.id,
-    mediaIds: v.mediaIds,
-    note: v.note,
-    licenseType: v.licenseType,
-    // ยังไม่ปล่อย — ปล่อยเป็นอีกขั้นที่ต้องกดแยก
-    releasedAt: null,
-  });
 
-  await db
-    .update(schema.media)
-    .set({ status: "linked" })
-    .where(inArray(schema.media.id, v.mediaIds));
+  /**
+   * batch เดียวใต้ lock ของออเดอร์ — การลบไฟล์ค้าง (`removeDeliveryFile`) และการบันทึกไฟล์ใหม่
+   * ถือ lock เดียวกัน จึงไม่มีทางผูกไฟล์ที่เพิ่งถูกลบไปแล้ว
+   *
+   * คำสั่งที่ 2 ต่อท้ายรอบเปิด (ถ้ามี) · คำสั่งที่ 3 เปิดรอบใหม่เฉพาะเมื่อไม่มีรอบเปิดเหลืออยู่
+   * คำสั่งที่ 3 มาหลังคำสั่งที่ 2 ใน transaction เดียวกัน จึงเห็นผลของมัน — ต่อท้ายสำเร็จแล้วไม่เปิดซ้อน
+   * ⚠️ `order by created_at desc` ต้องตรงกับที่ read.ts เลือกรอบเปิดล่าสุดมาโชว์
+   */
+  const [, appended, inserted] = await db.batch([
+    lockOrder(order.id),
+    db.execute(sql`
+      update delivery set media_ids = media_ids || ${idsJson}::jsonb, created_at = now()
+      where id = (
+          select d.id from delivery d
+          where d.order_id = ${order.id} and d.released_at is null
+          order by d.created_at desc limit 1
+        )
+        and released_at is null
+        and ${accepts}
+        and ${allUsable}
+      returning id
+    `),
+    db.execute(sql`
+      insert into delivery (id, order_id, media_ids, note, license_type)
+      select ${deliveryId}::text, ${order.id}::text, ${idsJson}::jsonb, ${v.note}::text, ${v.licenseType}::text
+      where not exists (select 1 from delivery d where d.order_id = ${order.id} and d.released_at is null)
+        and ${accepts}
+        and ${allUsable}
+      returning id
+    `),
+    db.execute(sql`
+      update media m set status = 'linked'
+      where m.id in (${idList}) and m.order_id = ${order.id}
+        and not ${notInAnyRoundSql(order.id)}
+    `),
+  ]);
+
+  const added = affectedRows(appended) > 0;
+  if (!added && affectedRows(inserted) === 0) {
+    // ไม่ผ่าน — สถานะเปลี่ยน หรือไฟล์ถูกผูก/ลบไปแล้วจากอีกแท็บ ให้หน้าจอโหลดใหม่
+    const fresh = await resolve(v.code, userId);
+    return { ok: false, error: fresh && !canUploadDelivery(fresh.status) ? "not_allowed" : "stale" };
+  }
 
   revalidatePath(`/orders/${v.code}`);
-  return { ok: true, deliveryId };
+  return { ok: true, deliveryId: added ? firstId(appended) : deliveryId, added };
+}
+
+function firstId(result: unknown): string | undefined {
+  const r = result as { rows?: { id: string }[] } | { id: string }[];
+  return (Array.isArray(r) ? r[0] : r.rows?.[0])?.id;
+}
+
+export type RemoveFileResult =
+  | { ok: true }
+  | { ok: false; error: "forbidden" | "invalid" | "not_allowed" | "stale" };
+
+/**
+ * ครีเอเตอร์ลบไฟล์ส่งมอบที่อัปผิด — เฉพาะไฟล์ที่ยังไม่อยู่ในรอบไหนเลย (ยังไม่เคยเตรียม ยังไม่เคยปล่อย)
+ *
+ * ไฟล์ที่อยู่ในรอบแล้วลบไม่ได้: รอบที่ปล่อยแล้วคือของที่ลูกค้าซื้อและเป็นหลักฐาน (trigger ใน 0008)
+ * ส่วนรอบที่เตรียมไว้ถ้ายอมให้ลบไฟล์ออก `deliverAndRelease` ที่อ่านรายการไปแล้วอาจปล่อยรอบที่ไฟล์หายไป
+ *
+ * ลำดับ: ลบแถวก่อน (compare-and-set ใต้ lock ของออเดอร์) แล้วค่อยลบไฟล์ในถัง
+ * ⚠️ ห้ามลบไฟล์ก่อน — ถ้าแถวลบไม่ผ่านเพราะอีกแท็บเพิ่งผูกไฟล์นี้เข้ารอบ เราจะทำลายไฟล์ที่กำลังจะส่งให้ลูกค้า
+ *
+ * พื้นที่ได้คืนทันทีที่แถวหาย — `usedBytesSql` นับจากตาราง `media` (กับคำขอที่ยังไม่ถูกใช้)
+ */
+export async function removeDeliveryFile(code: string, mediaId: string): Promise<RemoveFileResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "forbidden" };
+  if (!isOrderCode(code) || typeof mediaId !== "string" || !mediaId || mediaId.length > 60) {
+    return { ok: false, error: "invalid" };
+  }
+  const userId = session.user.id;
+
+  const order = await resolve(code, userId);
+  if (!order || !order.isCreator) return { ok: false, error: "forbidden" };
+  // ปิดงานแล้ว ไฟล์ที่เคยอัปไว้เป็นส่วนหนึ่งของประวัติงาน — แก้ได้เฉพาะช่วงที่ยังอัปไฟล์ได้
+  if (!canUploadDelivery(order.status)) return { ok: false, error: "not_allowed" };
+
+  const db = getDb();
+
+  /**
+   * ลบแถวพร้อมทิ้ง "ป้ายหลุมศพ" ไว้ใน `upload_intent` ในคำสั่งเดียว
+   *
+   * ⚠️ ถ้าลบไฟล์ใน R2 ไม่สำเร็จ (เน็ตสะดุด) ไฟล์จะค้างในถังส่วนตัวโดยไม่มีแถวไหนรู้จัก
+   * และงานเก็บกวาดแตะถังส่วนตัวได้ทางเดียวคือผ่านคำขออัปโหลด (lib/media/cleanup.ts)
+   * คำขอเดิมของไฟล์นี้อาจถูกเก็บกวาดไปแล้ว (บันทึกสำเร็จเกิน 24 ชม.) — จึงสร้าง/แก้แถวคำขอให้
+   * "ใช้แล้ว + หมดอายุ" ชี้ key นี้ งานเก็บกวาดจะเห็นว่าไม่มีแถว media ชี้ถึงแล้วลบให้ (`purge`)
+   * ใช้แล้ว = ไม่จองโควตา (usedBytesSql) และ `claimIntent` เอาไปบันทึกซ้ำไม่ได้
+   */
+  const [, gone] = await db.batch([
+    lockOrder(order.id),
+    db.execute(sql`
+      with gone as (
+        delete from media m
+        where m.id = ${mediaId} and m.order_id = ${order.id} and m.owner_user_id = ${userId}
+          and m.kind = 'final' and m.access = 'private'
+          and ${orderAcceptsFilesSql(order.id)}
+          and ${notInAnyRoundSql(order.id)}
+        returning m.pathname, m.bytes, m.content_type, m.filename
+      )
+      insert into upload_intent
+        (id, user_id, bucket, key, kind, order_id, content_type, bytes, filename, expires_at, consumed_at)
+      select ${newId("upl")}::text, ${userId}::text, 'private', g.pathname, 'final', ${order.id}::text,
+             g.content_type, g.bytes, g.filename, now(), now()
+      from gone g
+      on conflict (key) do update
+        set expires_at = least(upload_intent.expires_at, now()),
+            consumed_at = coalesce(upload_intent.consumed_at, now())
+      returning key
+    `),
+  ]);
+
+  const key = firstKey(gone);
+  if (!key) {
+    // ไฟล์ถูกผูกเข้ารอบ ถูกลบไปแล้ว หรือสถานะเปลี่ยนระหว่างทาง — ให้หน้าจอโหลดใหม่
+    const fresh = await resolve(code, userId);
+    return { ok: false, error: fresh && !canUploadDelivery(fresh.status) ? "not_allowed" : "stale" };
+  }
+
+  try {
+    await deleteObjects("private", [key]);
+    // ไฟล์หายแล้วจริง ป้ายหลุมศพไม่ต้องรอให้งานเก็บกวาดมาเก็บ
+    await db
+      .delete(schema.uploadIntent)
+      .where(and(eq(schema.uploadIntent.key, key), eq(schema.uploadIntent.userId, userId)));
+  } catch (err) {
+    // แถวหายไปแล้ว ผู้ใช้ได้พื้นที่คืนแล้ว — ไฟล์ที่ค้างเป็นหน้าที่ของงานเก็บกวาดผ่านป้ายด้านบน
+    console.error("[delivery-remove]", err instanceof Error ? err.message : err);
+  }
+
+  revalidatePath(`/orders/${code}`);
+  return { ok: true };
+}
+
+function firstKey(result: unknown): string | undefined {
+  const r = result as { rows?: { key: string }[] } | { key: string }[];
+  return (Array.isArray(r) ? r[0] : r.rows?.[0])?.key;
 }
 
 /** ครีเอเตอร์กดส่งมอบ — เปลี่ยนสถานะและปล่อยไฟล์พร้อมกัน */
@@ -129,6 +312,12 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
   });
   // ส่งมอบที่ไม่มีไฟล์เลย = ลูกค้าได้แจ้งเตือนว่างานเสร็จแล้วเปิดไปเจอหน้าเปล่า
   if (!dlv || dlv.mediaIds.length === 0) return { ok: false, error: "no_files" };
+  /**
+   * ⚠️ รอบนี้ถูกปล่อยไปแล้ว (แท็บเก่ากดซ้ำ) — ห้ามเดินต่อ
+   * ไม่งั้นออเดอร์ที่กลับมาทำรอบแก้อยู่จะถูกพาไป `delivered` และลูกค้าได้แจ้งเตือน "ได้ไฟล์แล้ว"
+   * ทั้งที่ไม่มีไฟล์ใหม่ และการเขียน `released_at` ซ้ำชน trigger ใน 0008 กลายเป็น error ที่ถูกซ่อน
+   */
+  if (dlv.releasedAt !== null) return { ok: false, error: "stale" };
 
   const from = order.status as OrderStatus;
 
@@ -179,10 +368,17 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
     }
   }
 
-  await db
+  /**
+   * compare-and-set: ปล่อยได้ครั้งเดียว — สองแท็บที่ผ่านด่านสถานะมาพร้อมกัน (ออเดอร์เป็น
+   * `delivered` อยู่แล้วจึงไม่มี CAS ของสถานะกั้น) ต้องมีอันเดียวที่ได้แจ้งลูกค้า
+   * ไฟล์ที่ถูกต่อท้ายเข้ารอบนี้ก่อนบรรทัดนี้ (`attachDelivery`) ถูกปล่อยไปด้วย — เป็นรอบเดียวกันที่ครีเอเตอร์กดปล่อย
+   */
+  const releasedNow = await db
     .update(schema.delivery)
     .set({ releasedAt: now })
-    .where(eq(schema.delivery.id, dlv.id));
+    .where(and(eq(schema.delivery.id, dlv.id), isNull(schema.delivery.releasedAt)))
+    .returning({ id: schema.delivery.id });
+  if (releasedNow.length === 0) return { ok: false, error: "stale" };
 
   await db.insert(schema.message).values({
     id: newId("msg"),
