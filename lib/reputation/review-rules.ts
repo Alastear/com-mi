@@ -15,23 +15,37 @@ export const REVIEW_REPLY_MAX = 500;
 const DAY_MS = 86_400_000;
 
 /**
+ * ร้าน **เคย** ยืนยันรับเงินของออเดอร์นี้ไหม — รวมแถวที่ถูกยกเลิกการยืนยันทีหลัง
+ *
+ * ⚠️ ไม่ดู `voidedAt` โดยตั้งใจ — เหตุผลเต็มอยู่ที่ `PAID_ONCE_SQL` (paid-once-sql.ts)
+ * สั้น ๆ: ถ้าดูยอด ณ ตอนนี้ ร้านกด "ยกเลิกการยืนยัน" บนงานที่เสร็จแล้วเพื่อกันลูกค้าไม่ให้รีวิว
+ * หรือซ่อนรีวิวที่เขียนแล้วได้ ต้องตรงกับ SQL ตัวนั้นทุกเงื่อนไข
+ */
+export function paidOnce(
+  payments: ReadonlyArray<{ verifiedAt: Date | string | null }>,
+): boolean {
+  return payments.some((p) => p.verifiedAt !== null);
+}
+
+/**
  * ลูกค้ารีวิวออเดอร์นี้ได้ไหม
  *
- *   ok            — งานเสร็จและร้านยืนยันรับเงินแล้ว
+ *   ok            — งานเสร็จและร้านเคยยืนยันรับเงินแล้ว
  *   not_completed — งานยังไม่จบ หรือจบแบบไม่ได้งาน (ยกเลิก/ปฏิเสธ/หมดอายุ)
- *   unpaid        — จบแล้วแต่ไม่มีเงินที่ร้านยืนยัน (เช่น ร้านยกเลิกการยืนยันสลิปปลอมทีหลัง)
+ *   unpaid        — จบแล้วแต่ร้านไม่เคยยืนยันเงินเลย (ออเดอร์เก่าก่อนมีด่านเงินตอนส่งงาน)
  *
  * ⚠️ ต้องมีเงินเข้าด้วยเหตุผลเดียวกับประวัติร้าน — ไม่งั้นบัญชีปลอมสั่งงานฟรีแล้วรีวิวให้ร้านตัวเองได้
- * ตรงกับ `status = 'completed' and amount_paid_cents > 0` ใน `createReview`
+ * (กันได้แค่คนที่ไม่ตั้งใจโกง — ดูหมายเหตุ "สิ่งที่ตัวเลขนี้พิสูจน์ไม่ได้" ใน lib/queries/reputation.ts)
+ * ตรงกับ `status = 'completed' and PAID_ONCE_SQL` ใน `createReview`
  */
 export type ReviewEligibility = "ok" | "not_completed" | "unpaid";
 
 export function reviewEligibility(o: {
   status: OrderStatus | string;
-  amountPaidCents: number;
+  paidOnce: boolean;
 }): ReviewEligibility {
   if (o.status !== "completed") return "not_completed";
-  if (o.amountPaidCents <= 0) return "unpaid";
+  if (!o.paidOnce) return "unpaid";
   return "ok";
 }
 

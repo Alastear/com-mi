@@ -10,11 +10,13 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "@/lib/orders/code";
 import {
+  paidOnce,
   REVIEW_BODY_MAX,
   REVIEW_EDIT_DAYS,
   REVIEW_REPLY_MAX,
   reviewEligibility,
 } from "./review-rules";
+import { PAID_ONCE_SQL } from "./paid-once-sql";
 
 /**
  * รีวิวและคำตอบของร้าน
@@ -30,12 +32,18 @@ import {
  *     unique ของ `review.order_id` คือด่าน "หนึ่งออเดอร์หนึ่งรีวิว" — สองแท็บกดพร้อมกันได้แถวเดียว
  *   - แก้ = UPDATE ที่ WHERE มีช่วง 7 วันนับจาก `created_at` ตามนาฬิกาของ Postgres
  *   - ตอบ = UPDATE ที่ WHERE มี `creator_replied_at is null` — ตอบซ้ำจากสองแท็บผ่านได้ครั้งเดียว
+ *   - ซ่อน/เปิด = UPDATE `is_public` ที่ WHERE มี `client_user_id` ของ session
  */
 
 const ReviewSchema = z.object({
   code: z.string().refine(isOrderCode, "bad_code"),
   rating: z.number().int().min(1).max(5),
   body: z.string().trim().max(REVIEW_BODY_MAX),
+});
+
+const VisibilitySchema = z.object({
+  code: z.string().refine(isOrderCode, "bad_code"),
+  isPublic: z.boolean(),
 });
 
 const ReplySchema = z.object({
@@ -54,7 +62,7 @@ export type ReviewResult =
         | "rate_limited"
         /** งานยังไม่เสร็จ (หรือจบแบบไม่ได้งาน) */
         | "not_completed"
-        /** จบแล้วแต่ร้านยังไม่ได้ยืนยันรับเงิน หรือยกเลิกการยืนยันไปแล้ว */
+        /** จบแล้วแต่ร้านไม่เคยยืนยันรับเงินเลย */
         | "unpaid"
         /** ออเดอร์นี้มีรีวิวแล้ว — ให้หน้าจอรีเฟรชไปโหมดแก้ไข */
         | "exists"
@@ -71,11 +79,15 @@ async function gate(userId: string): Promise<boolean> {
 
 /** ออเดอร์ที่ผู้ใช้คนนี้เป็น **ลูกค้า** — กรองด้วย user id ในคิวรีเดียว */
 async function clientOrder(code: string, userId: string) {
-  return getDb().query.order.findFirst({
+  const o = await getDb().query.order.findFirst({
     where: and(eq(schema.order.code, code), eq(schema.order.clientUserId, userId)),
-    columns: { id: true, status: true, amountPaidCents: true },
-    with: { page: { columns: { userId: true } } },
+    columns: { id: true, status: true },
+    with: {
+      page: { columns: { userId: true } },
+      payments: { columns: { verifiedAt: true } },
+    },
   });
+  return o ? { ...o, paidOnce: paidOnce(o.payments) } : undefined;
 }
 
 function revalidateOrder(code: string) {
@@ -84,10 +96,12 @@ function revalidateOrder(code: string) {
 }
 
 /**
- * ลูกค้าเขียนรีวิวครั้งแรก — ได้เมื่องานเสร็จและร้านยืนยันรับเงินแล้วเท่านั้น
+ * ลูกค้าเขียนรีวิวครั้งแรก — ได้เมื่องานเสร็จและร้านเคยยืนยันรับเงินแล้วเท่านั้น
  *
- * ⚠️ เงื่อนไข `completed + amount_paid_cents > 0` อยู่ใน SELECT ของ INSERT ไม่ใช่แค่เช็คใน JS —
- * ระหว่างอ่านกับเขียน ร้านยกเลิกการยืนยันเงินได้ ต้องตรงกับ `reviewEligibility()`
+ * ⚠️ เงื่อนไข `completed + PAID_ONCE_SQL` อยู่ใน SELECT ของ INSERT ไม่ใช่แค่เช็คใน JS
+ * ต้องตรงกับ `reviewEligibility()`
+ * ⚠️ ไม่ใช่ `amount_paid_cents > 0` — ร้านกด "ยกเลิกการยืนยัน" บนงานที่เสร็จแล้วได้
+ * ถ้าใช้ยอด ณ ตอนนี้ ร้านจะกันลูกค้าที่ยังไม่ได้เขียนรีวิวไม่ให้เขียนได้ด้วยปุ่มเดียว
  */
 export async function createReview(input: {
   code: string;
@@ -118,7 +132,7 @@ export async function createReview(input: {
     where o.id = ${order.id}
       and o.client_user_id = ${userId}
       and o.status = 'completed'
-      and o.amount_paid_cents > 0
+      and ${PAID_ONCE_SQL}
     on conflict (order_id) do nothing
     returning id
   `);
@@ -179,9 +193,22 @@ export async function editReview(input: {
    * นาฬิกาเดียวกันทั้งสองฝั่ง — ถ้าใช้ `new Date()` ของเครื่องที่รันโค้ด ขอบ 7 วันจะเพี้ยนตามนาฬิกาเครื่อง
    * ตรงกับ `canEditReview()` ใน review-rules.ts (หน้าจอใช้ตัดสินว่าจะโชว์ปุ่มแก้ไหม)
    */
+  /**
+   * ⚠️ `updated_at` ขยับเฉพาะเมื่อดาวหรือข้อความเปลี่ยนจริง — กด "บันทึก" โดยไม่แก้อะไร
+   * ต้องไม่ทำให้หน้าร้านขึ้น "แก้ไขแล้ว" และ "ร้านตอบก่อนลูกค้าแก้ไขรีวิวนี้" (`repliedBeforeEdit`)
+   * ซึ่งบอกคนอ่านว่ารีวิวเปลี่ยนหลังร้านตอบ ทั้งที่ไม่ได้เปลี่ยน
+   * ใช้ CASE ใน SET แทนการใส่ใน WHERE: บันทึกซ้ำภายใน 7 วันยังตอบ ok ส่วนหลัง 7 วันยังตอบ edit_closed
+   * (ใน SET คอลัมน์ทางขวาคือค่าก่อนเขียน จึงเทียบค่าเก่ากับค่าใหม่ได้ในคำสั่งเดียว)
+   */
   const updated = await db
     .update(schema.review)
-    .set({ rating, body, updatedAt: sql`now()` })
+    .set({
+      rating,
+      body,
+      updatedAt: sql`case
+        when (${schema.review.rating}, ${schema.review.body}) is distinct from (${rating}::int, ${body}::text)
+        then now() else ${schema.review.updatedAt} end`,
+    })
     .where(
       and(
         eq(schema.review.orderId, order.id),
@@ -204,10 +231,53 @@ export async function editReview(input: {
 }
 
 /**
+ * ลูกค้าซ่อนรีวิวของตัวเองจากหน้าร้าน หรือเปิดกลับ — ได้ตลอด ไม่มีกรอบ 7 วัน
+ *
+ * ทำไมต้องมี: คำตอบของร้านขึ้นใต้รีวิวบนหน้าสาธารณะ ตอบได้ครั้งเดียวและแก้/ลบไม่ได้
+ * ร้านที่ไม่พอใจจึงเขียนชื่อจริง อีเมล หรือรายละเอียดออเดอร์ของลูกค้าลงไปได้ถาวร — ขัดกับที่หน้าร้าน
+ * โชว์แค่ตัวอักษรแรกของชื่อ คำตอบโชว์เฉพาะใต้รีวิวที่ `is_public` (lib/queries/reputation.ts)
+ * ลูกค้าซ่อนรีวิวตัวเองได้ = เอาคำตอบนั้นลงจากหน้าร้านได้เองโดยไม่ต้องรอใคร
+ *
+ * ไม่ลบแถวทิ้ง: สองฝ่ายยังเห็นรีวิวและคำตอบบนหน้าออเดอร์เป็นหลักฐาน และเปิดกลับได้ถ้ากดผิด
+ * ซ่อนแล้วไม่นับในคะแนนเฉลี่ยของร้าน (`shown_reviews` กรอง `is_public` เหมือนรายการรีวิว)
+ * ไม่แจ้งเตือนร้าน — หน้าออเดอร์ฝั่งร้านบอกเองว่ารีวิวถูกซ่อนอยู่
+ * ⚠️ ร้านไม่มีทางแตะคอลัมน์นี้ — WHERE ผูกกับ `client_user_id` ของ session
+ */
+export async function setReviewPublic(input: {
+  code: string;
+  isPublic: boolean;
+}): Promise<ReviewResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "unauthenticated" };
+  const parsed = VisibilitySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  const { code, isPublic } = parsed.data;
+  const userId = session.user.id;
+
+  if (!(await gate(userId))) return { ok: false, error: "rate_limited" };
+
+  const order = await clientOrder(code, userId);
+  if (!order) return { ok: false, error: "not_found" };
+
+  // กดซ้ำ/สองแท็บ = เขียนค่าเดิมทับ ผลเหมือนกัน ไม่ต้องมี compare-and-set
+  const updated = await getDb()
+    .update(schema.review)
+    .set({ isPublic })
+    .where(and(eq(schema.review.orderId, order.id), eq(schema.review.clientUserId, userId)))
+    .returning({ id: schema.review.id });
+  if (updated.length === 0) return { ok: false, error: "not_found" };
+
+  revalidateOrder(code);
+  return { ok: true };
+}
+
+/**
  * เจ้าของร้านตอบรีวิว — **ครั้งเดียว แก้ไม่ได้**
  *
  * ตอบครั้งเดียวเพื่อไม่ให้หน้าร้านกลายเป็นที่เถียงกันไปมา และคำตอบที่ลูกค้าอ่านไปแล้ว
  * ต้องไม่ถูกเปลี่ยนทีหลัง เรื่องที่ต้องคุยต่อมีเธรดของออเดอร์อยู่แล้ว
+ * ⚠️ คำตอบเป็นข้อความอิสระบนหน้าสาธารณะ — ทางเอาลงคือลูกค้าซ่อนรีวิวตัวเอง (`setReviewPublic`)
+ * ยังไม่มีปุ่มซ่อนฝั่งแอดมิน ถ้าต้องการต้องแก้ใน DB (`is_public = false`)
  */
 export async function replyToReview(input: { code: string; body: string }): Promise<ReviewResult> {
   const session = await getSession();

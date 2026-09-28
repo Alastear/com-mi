@@ -755,7 +755,7 @@ const th = {
     reviewCountOne: "{n} รีวิว",
     reviewCountMany: "{n} รีวิว",
     footnote:
-      "นับเฉพาะงานที่ร้านยืนยันรับเงินแล้ว · ตรงกำหนด = ส่งงานครั้งแรกก่อนหรือตรงวันกำหนดส่ง · เวลาทำงานนับจากได้รับมัดจำ (หรือจากวันสั่งถ้าไม่มีมัดจำ) ถึงส่งงานครั้งแรก",
+      "นับเฉพาะงานที่ร้านเคยยืนยันรับเงิน (ยกเลิกการยืนยันทีหลังก็ยังนับ) · ส่งงาน = ตอนที่ร้านแนบไฟล์ชุดแรกที่ลูกค้าได้รับ ไม่ใช่ตอนลูกค้าโอนงวดท้าย · ตรงกำหนด = ส่งงานไม่เกินเวลากำหนดส่ง (เทียบถึงชั่วโมง ไม่ใช่แค่วันที่) · กำหนดส่งและเวลาทำงานเริ่มนับตอนลูกค้าแจ้งโอนมัดจำที่ร้านยืนยันแล้ว (หรือตอนสั่งถ้าไม่มีมัดจำ) · ร้านยกเลิกหลังรับเงิน นับทุกครั้งที่ร้านยกเลิกงานหลังเคยยืนยันเงิน",
     reviewsTitle: "รีวิวจากลูกค้า",
     noReviews: "ยังไม่มีรีวิว",
     /** ลูกค้าที่ไม่มีตัวอักษรในชื่อให้ใช้ */
@@ -797,6 +797,14 @@ const th = {
     replied: "ส่งคำตอบแล้ว",
     yourReply: "คำตอบของคุณ",
     errorAlreadyReplied: "ตอบรีวิวนี้ไปแล้ว",
+    /** ลูกค้าซ่อน/เปิดรีวิวของตัวเองบนหน้าร้าน */
+    hide: "ซ่อนจากหน้าร้าน",
+    show: "แสดงบนหน้าร้านอีกครั้ง",
+    hideHint: "ซ่อนแล้ว รีวิวนี้และคำตอบของร้านจะไม่ขึ้นบนหน้าร้านและไม่นับในคะแนนเฉลี่ย เปิดกลับได้ทุกเมื่อ",
+    hiddenNote: "รีวิวนี้ถูกซ่อนจากหน้าร้านอยู่ คุณกับร้านยังเห็นได้บนหน้าออเดอร์นี้",
+    hidden: "ซ่อนรีวิวจากหน้าร้านแล้ว",
+    shown: "รีวิวกลับขึ้นหน้าร้านแล้ว",
+    creatorHiddenNote: "ลูกค้าซ่อนรีวิวนี้จากหน้าร้าน รีวิวและคำตอบของคุณจะไม่ขึ้นบนหน้าร้าน",
   },
 
   service: {
@@ -1981,7 +1989,7 @@ const en: Dictionary = {
     reviewCountOne: "{n} review",
     reviewCountMany: "{n} reviews",
     footnote:
-      "Counts only orders where the shop confirmed payment · On time = first delivery on or before the due date · Turnaround runs from the deposit (or from the order, if there is no deposit) to the first delivery",
+      "Counts only orders where the shop has confirmed a payment, even if it later withdrew the confirmation · Delivery = when the shop attached the first files the client received, not when the balance was paid · On time = delivered no later than the due time (to the hour, not just the date) · The due time and turnaround start when the client reported the deposit the shop confirmed (or when the order was placed, if there is no deposit) · Cancelled by shop counts every cancellation by the shop after it had confirmed a payment",
     reviewsTitle: "Client reviews",
     noReviews: "No reviews yet",
     anonymous: "Client",
@@ -2021,6 +2029,13 @@ const en: Dictionary = {
     replied: "Reply posted",
     yourReply: "Your reply",
     errorAlreadyReplied: "You already replied to this review",
+    hide: "Hide from shop page",
+    show: "Show on shop page again",
+    hideHint: "Hiding removes this review and the shop's reply from the shop page and from its average score. You can show it again at any time.",
+    hiddenNote: "This review is hidden from the shop page. You and the shop can still see it on this order.",
+    hidden: "Review hidden from the shop page",
+    shown: "Review is back on the shop page",
+    creatorHiddenNote: "The client has hidden this review. It and your reply do not appear on your shop page.",
   },
 
   service: {

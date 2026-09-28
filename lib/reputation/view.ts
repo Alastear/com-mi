@@ -14,6 +14,8 @@ export type OrderReviewView = {
   reply: string | null;
   edited: boolean;
   repliedBeforeEdit: boolean;
+  /** false = ลูกค้าซ่อนรีวิวนี้จากหน้าร้าน (`setReviewPublic`) — สองฝั่งต้องเห็นสถานะนี้ */
+  isPublic: boolean;
   /** คิดจากนาฬิกาฝั่ง server แล้ว (`getReviewForOrder`) — ไม่เทียบเวลาเองตอน render */
   editable: boolean;
   /** วันสุดท้ายที่แก้ได้ ฟอร์แมตที่ server — เขตเวลาของเบราว์เซอร์จะได้ไม่ทำให้ HTML สองฝั่งไม่ตรงกัน */
@@ -27,6 +29,7 @@ export function toOrderReviewView(
     creatorReply: string;
     creatorRepliedAt: Date | null;
     updatedAt: Date | null;
+    isPublic: boolean;
     editable: boolean;
     editableUntil: Date;
     repliedBeforeEdit: boolean;
@@ -39,6 +42,7 @@ export function toOrderReviewView(
     reply: row.creatorRepliedAt ? row.creatorReply : null,
     edited: row.updatedAt !== null,
     repliedBeforeEdit: row.repliedBeforeEdit,
+    isPublic: row.isPublic,
     editable: row.editable,
     editableUntilText: formatDate(row.editableUntil, locale),
   };

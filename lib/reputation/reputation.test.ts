@@ -12,6 +12,7 @@ import {
 } from "./track-record";
 import {
   canEditReview,
+  paidOnce,
   repliedBeforeEdit,
   REVIEW_EDIT_DAYS,
   reviewEditableUntil,
@@ -119,18 +120,36 @@ describe("ประวัติร้าน — เวลาทำงาน", ()
 });
 
 describe("รีวิว — ใครรีวิวได้", () => {
-  it("งานเสร็จและร้านยืนยันเงินแล้วเท่านั้น", () => {
-    assert.equal(reviewEligibility({ status: "completed", amountPaidCents: 50_000 }), "ok");
+  const at = new Date("2026-09-01T00:00:00Z");
+
+  it("งานเสร็จและร้านเคยยืนยันเงินแล้วเท่านั้น", () => {
+    assert.equal(reviewEligibility({ status: "completed", paidOnce: true }), "ok");
   });
 
-  it("งานเสร็จแต่เงินถูกยกเลิกการยืนยันจนเหลือศูนย์ = รีวิวไม่ได้", () => {
-    assert.equal(reviewEligibility({ status: "completed", amountPaidCents: 0 }), "unpaid");
+  it("งานเสร็จแต่ร้านไม่เคยยืนยันเงินเลย = รีวิวไม่ได้", () => {
+    assert.equal(reviewEligibility({ status: "completed", paidOnce: false }), "unpaid");
   });
 
   it("งานที่ยังไม่จบหรือจบแบบไม่ได้งาน รีวิวไม่ได้ แม้จะจ่ายเงินแล้ว", () => {
     for (const status of ["delivered", "in_progress", "cancelled", "declined", "expired"]) {
-      assert.equal(reviewEligibility({ status, amountPaidCents: 50_000 }), "not_completed", status);
+      assert.equal(reviewEligibility({ status, paidOnce: true }), "not_completed", status);
     }
+  });
+
+  it("ร้านยกเลิกการยืนยันทีหลังไม่ได้ทำให้ลูกค้าหมดสิทธิ์รีวิว — แถวที่ void ยังมี verifiedAt", () => {
+    // แถวที่ void แล้ว: verifiedAt ยังอยู่ (เก็บไว้เป็นหลักฐาน) — ต้องนับว่าเคยยืนยัน
+    assert.equal(paidOnce([{ verifiedAt: at }]), true);
+    assert.equal(paidOnce([{ verifiedAt: "2026-09-01T00:00:00Z" }]), true);
+    assert.equal(
+      reviewEligibility({ status: "completed", paidOnce: paidOnce([{ verifiedAt: at }]) }),
+      "ok",
+    );
+  });
+
+  it("แจ้งโอนที่ร้านยังไม่ยืนยัน หรือถูกปฏิเสธ (verifiedAt = null) ไม่นับ", () => {
+    assert.equal(paidOnce([]), false);
+    assert.equal(paidOnce([{ verifiedAt: null }, { verifiedAt: null }]), false);
+    assert.equal(paidOnce([{ verifiedAt: null }, { verifiedAt: at }]), true);
   });
 });
 
@@ -212,32 +231,57 @@ describe("รีวิว — เดือนที่สั่ง", () => {
 describe("กติกาใน SQL ต้องตรงกับกติกาใน JS", () => {
   const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
-  it("ทุกจุดที่อ่านงาน completed ในคิวรีประวัติร้าน/รีวิว ต้องกรองเงินเข้าด้วยเสมอ", () => {
+  it("ทุกจุดที่อ่านงาน completed ในคิวรีประวัติร้าน/รีวิว ต้องกรองด้วย PAID_ONCE_SQL เสมอ", () => {
     for (const file of ["lib/queries/reputation.ts", "lib/reputation/actions.ts"]) {
       const src = read(file);
       const parts = src.split("status = 'completed'");
       assert.ok(parts.length > 1, `${file} ไม่มีเงื่อนไข completed เลย`);
       for (const after of parts.slice(1)) {
         assert.match(
-          after.slice(0, 120),
-          /amount_paid_cents > 0/,
-          `${file}: งาน completed ที่ไม่ได้กรอง amount_paid_cents > 0 — ออเดอร์ไม่มีเงินจะหลุดเข้าสถิติ`,
+          after.slice(0, 80),
+          /\$\{PAID_ONCE_SQL\}/,
+          `${file}: งาน completed ที่ไม่ได้กรอง PAID_ONCE_SQL — ออเดอร์ไม่มีเงินจะหลุดเข้าสถิติ`,
         );
       }
     }
   });
 
-  it("ร้านยกเลิก = event ยกเลิกที่ actor เป็น creator บนออเดอร์ที่มีเงินเข้าแล้วเท่านั้น", () => {
+  it("เงื่อนไขเงินต้องไม่ใช่ยอด ณ ตอนอ่าน — ไม่งั้นร้านกด void แล้วรีวิว/สถิติที่ไม่ชอบหายไป", () => {
+    for (const file of ["lib/queries/reputation.ts", "lib/reputation/actions.ts"]) {
+      const code = read(file)
+        .split("\n")
+        .filter((l) => !/^\s*(\*|\/\/|\/\*\*)/.test(l))
+        .join("\n");
+      assert.doesNotMatch(code, /amount_paid_cents/, file);
+    }
+    const once = read("lib/reputation/paid-once-sql.ts");
+    assert.match(once, /pv\.verified_at is not null/);
+    // ⚠️ ห้ามกรอง voided_at — แถวที่ยกเลิกการยืนยันต้องยังนับว่า "เคยยืนยัน"
+    const onceCode = once.slice(once.indexOf("sql`"));
+    assert.doesNotMatch(onceCode, /voided_at/);
+  });
+
+  it("ร้านยกเลิก = event ยกเลิกที่ actor เป็น creator บนออเดอร์ที่ร้านเคยยืนยันเงินเท่านั้น", () => {
     const src = read("lib/queries/reputation.ts");
-    assert.match(src, /o\.status = 'cancelled'\s+and o\.amount_paid_cents > 0/);
+    assert.match(src, /o\.status = 'cancelled'\s+and \$\{PAID_ONCE_SQL\}/);
     assert.match(src, /event_data->>'actor' = 'creator'/);
+  });
+
+  it("เวลาส่งมอบไม่ได้มาจาก event delivered อย่างเดียว — ต้องดูแถว delivery ก่อน", () => {
+    const src = read("lib/queries/reputation.ts");
+    assert.match(src, /from delivery d\s+where d\.order_id = o\.id and d\.released_at is not null/);
+    assert.match(src, /handover_at <= due_at/);
+    assert.doesNotMatch(src, /delivered_at <= due_at/);
   });
 
   it("คิวรี event ระบบมี is_system_event ใน WHERE — ไม่งั้นใช้ partial index ไม่ได้", () => {
     const src = read("lib/queries/reputation.ts");
     const probes = src.split("from message m").slice(1);
     assert.ok(probes.length >= 2);
-    for (const p of probes) assert.match(p.slice(0, 120), /m\.is_system_event/);
+    for (const p of probes) {
+      assert.match(p.slice(0, 120), /m\.is_system_event|\$\{CREATOR_REOPEN\}/);
+    }
+    assert.match(src, /const CREATOR_REOPEN = sql`m\.is_system_event/);
   });
 });
 

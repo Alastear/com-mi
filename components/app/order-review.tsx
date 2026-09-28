@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, MessageSquareReply, Pencil, Star } from "lucide-react";
+import { Eye, EyeOff, Loader2, MessageSquareReply, Pencil, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import {
   createReview,
   editReview,
   replyToReview,
+  setReviewPublic,
   type ReviewResult,
 } from "@/lib/reputation/actions";
 import {
@@ -168,6 +169,21 @@ export function ClientReviewCard({
     });
   }
 
+  /** ซ่อน/เปิดรีวิวบนหน้าร้าน — ไม่ต้องยืนยันซ้ำ เพราะกดกลับได้ทันทีและไม่มีอะไรถูกลบ */
+  function toggleVisibility() {
+    if (!review) return;
+    const next = !review.isPublic;
+    start(async () => {
+      const res = await setReviewPublic({ code, isPublic: next });
+      if (res.ok) {
+        toast.success(next ? t.review.shown : t.review.hidden);
+        router.refresh();
+        return;
+      }
+      toast.error(errorText(t, res.error));
+    });
+  }
+
   function cancelEdit() {
     setRating(review?.rating ?? 0);
     setBody(review?.body ?? "");
@@ -242,6 +258,28 @@ export function ClientReviewCard({
               {fill(t.review.editClosed, { days: REVIEW_EDIT_DAYS })}
             </p>
           )}
+          {/* ทางเดียวที่ลูกค้าเอาคำตอบของร้านลงจากหน้าสาธารณะได้ — คำตอบแก้/ลบไม่ได้ (ดู setReviewPublic) */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={toggleVisibility}
+              disabled={pending}
+            >
+              {pending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : review.isPublic ? (
+                <EyeOff className="size-3.5" />
+              ) : (
+                <Eye className="size-3.5" />
+              )}
+              {review.isPublic ? t.review.hide : t.review.show}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {review.isPublic ? t.review.hideHint : t.review.hiddenNote}
+            </span>
+          </div>
         </>
       ) : null}
     </Card>
@@ -274,6 +312,12 @@ export function CreatorReviewCard({ code, review }: { code: string; review: Orde
   return (
     <Card className="gap-3 p-5">
       <p className="font-medium">{t.review.clientReviewed}</p>
+      {!review.isPublic ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <EyeOff className="size-3.5 shrink-0" />
+          {t.review.creatorHiddenNote}
+        </p>
+      ) : null}
       <ReviewBody review={review} t={t} />
 
       {review.reply !== null ? (

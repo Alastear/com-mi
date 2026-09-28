@@ -7,6 +7,7 @@ import {
   reviewerInitial,
 } from "@/lib/reputation/review-rules";
 import type { TrackRecordRaw } from "@/lib/reputation/track-record";
+import { PAID_ONCE_SQL } from "@/lib/reputation/paid-once-sql";
 
 /**
  * Read model ของประวัติร้านและรีวิวบนหน้าร้าน (`/@handle`)
@@ -18,26 +19,41 @@ import type { TrackRecordRaw } from "@/lib/reputation/track-record";
  * ห้ามอ่าน cookies/headers ในไฟล์นี้ — เหตุผลเดียวกับ creator.ts (เตรียมไว้ใส่ `use cache`)
  *
  * **นิยามของตัวเลขทุกตัว** (ต้องตรงกับข้อความอธิบายใต้สถิติบนหน้าร้าน):
- *   - นับเฉพาะออเดอร์ที่ร้านยืนยันรับเงินแล้วและยังนับอยู่ (`amount_paid_cents > 0`)
- *     — `recomputePaid` คิดค่านี้ใหม่จากแถวเงินใน batch เดียวกับทุกการยืนยัน/ยกเลิกการยืนยัน
- *     ร้านที่ยกเลิกการยืนยันสลิปปลอมทีหลัง ออเดอร์นั้นจึงหลุดจากสถิติเอง
+ *   - นับเฉพาะออเดอร์ที่ร้าน **เคย** ยืนยันรับเงิน (`PAID_ONCE` — มีแถวเงินที่ `verified_at` ไม่ว่าง
+ *     รวมแถวที่ถูกยกเลิกการยืนยันทีหลัง) ไม่ใช่ `amount_paid_cents > 0` ณ ตอนอ่าน
+ *     ⚠️ เดิมใช้ยอด ณ ตอนอ่าน แล้วร้านกด "ยกเลิกการยืนยัน" (`voidPayment` ทำได้แม้ `completed`)
+ *     เพื่อลบรีวิวดาวเดียวออกจากหน้าร้าน ลบงานที่ส่งช้าออกจากตัวหาร หรือลบการยกเลิกหลังรับมัดจำ
+ *     ออกจากตัวเลข "ร้านยกเลิก" ได้ด้วยปุ่มเดียว — การยืนยันที่เคยเกิดขึ้นแล้วย้อนไม่ได้ ตัวเลขจึงไม่ขยับตาม
  *   - งานเสร็จ = `completed`
- *   - ส่งตรงเวลา = ส่งงาน **ครั้งแรก** ≤ `due_at` (ส่งครั้งแรกเพราะรอบแก้ที่ลูกค้าขอหลังส่ง
- *     ไม่ใช่ความช้าของร้าน) ตัวหารคืองานเสร็จที่มีทั้งกำหนดส่งและ event ส่งงาน
- *   - เวลาทำงาน = ค่ากลางของ "เริ่มนับกำหนดส่ง → ส่งงานครั้งแรก" โดยจุดเริ่มคือนิยามเดียวกับ
- *     นาฬิกากำหนดส่งทั้งระบบ: `deposit_met_at` (มัดจำครบ) ถ้ามี / ออเดอร์มัดจำเก่าก่อนมีคอลัมน์นั้น
- *     ใช้การยืนยันเงินครั้งแรก / ออเดอร์ไม่มีมัดจำนับตั้งแต่สั่ง (เหมือน `dueState`)
- *   - ร้านยกเลิก = ออเดอร์ที่มีเงินเข้าแล้วและ event ยกเลิกมี `actor = creator`
+ *   - ส่งมอบ = ไฟล์ชุดแรกที่ลูกค้าได้รับจริง (`handover_at` ดูเหตุผลที่ `handoverSql`)
+ *     ไม่ใช่ event `delivered` — event นั้นเกิดได้หลังลูกค้าจ่ายครบเท่านั้น วันที่ลูกค้าโอนงวดท้ายช้า
+ *     จึงไปนับเป็นความช้าของร้าน รอบแก้ที่ **ลูกค้า** ขอหลังส่งไม่นับ (ไม่ใช่ความช้าของร้าน)
+ *   - ส่งตรงเวลา = ส่งมอบ ≤ กำหนดส่ง **ระดับเวลา ไม่ใช่แค่วันที่** (ตรงกับ `dueState` ทั้งระบบ)
+ *     ตัวหารคืองานเสร็จที่มีทั้งกำหนดส่งและเวลาส่งมอบ
+ *   - เวลาทำงาน = ค่ากลางของ "เริ่มนับ → ส่งมอบ" จุดเริ่ม (`started_at`):
+ *     ออเดอร์มีมัดจำ = ตอนที่ **ลูกค้าแจ้งโอน** จนยอดถึงมัดจำ (ดู `depositReportedSql`)
+ *     ไม่ใช่ตอนร้านกดยืนยัน / ออเดอร์มัดจำเก่าก่อนมีคอลัมน์ `deposit_met_at` ใช้การยืนยันเงินครั้งแรก /
+ *     ออเดอร์ไม่มีมัดจำนับตั้งแต่สั่ง (เหมือน `dueState`)
+ *   - ร้านยกเลิก = ออเดอร์ที่ร้านเคยยืนยันเงินแล้วและ event ยกเลิกมี `actor = creator`
  *     (`transitionOrder` เป็นทางเดียวที่เขียน `cancelled` และมันบันทึก actor จาก session เสมอ)
  *     ยกเลิกก่อนได้เงินไม่นับ — ปฏิเสธงานที่รับไม่ไหวเป็นเรื่องปกติ ยกเลิกหลังรับเงินคือสัญญาณเตือน
+ *     ร้านที่คืนเงินแล้วกดยกเลิกการยืนยันก่อนยกเลิกงานก็ยังนับ — ตัวเลขนี้คือ "ร้านเลิกงานหลังรับเงิน"
+ *     ไม่ใช่ "ร้านไม่คืนเงิน" (ระบบไม่รู้ว่าคืนจริงไหม)
  *
- * ⚠️ **สิ่งที่ยังกันไม่ได้**: คนที่ยอมโอนเงินจริงวนระหว่างบัญชีตัวเองห้ารอบ ก็ปลดล็อกสถิติได้
- * (สั่งร้านตัวเองจากบัญชีเดียวกันไม่ได้ — `insertNewOrder` กัน `own_shop` ไว้แล้ว)
- * ราคาของการโกงคือเงินจริงห้าก้อนผ่านบัญชีธนาคาร ซึ่งแพงกว่ากดปุ่มฟรี ๆ มาก
- * ถ้าวันหนึ่งเจอจริง ทางต่อไปคือนับเฉพาะลูกค้าที่ไม่ซ้ำกัน (`count(distinct client_user_id)`)
+ * ⚠️ **สิ่งที่ตัวเลขนี้พิสูจน์ไม่ได้: ว่ามีเงินย้ายมือจริง**
+ * "ยืนยันรับเงิน" คือคำพูดของครีเอเตอร์ฝ่ายเดียว — `recordPayment` ที่ครีเอเตอร์กดเองนับทันที
+ * ไม่ต้องมีสลิป และสลิปที่ลูกค้าแนบก็มีแต่ครีเอเตอร์เป็นคนตรวจ ครีเอเตอร์ที่เปิดบัญชีที่สอง (ฟรี)
+ * มาสั่งร้านตัวเองห้าครั้ง แล้วกดบันทึกเงิน/ส่งงาน/ปิดงานเอง จะปลดล็อกสถิติและเขียนรีวิวห้าดาวได้
+ * **โดยไม่มีเงินย้ายเลยสักบาท** (`insertNewOrder` กันแค่ user id เดียวกัน — `own_shop`)
+ * แพลตฟอร์มไม่ถือเงิน (ไม่มี escrow) จึงไม่มีหลักฐานการจ่ายที่ร้านปลอมไม่ได้
+ * นับเฉพาะเงินที่ลูกค้าแจ้งเองก็ไม่ช่วย — ร้านเป็นคนกดยืนยันสลิปรูปอะไรก็ได้อยู่ดี
+ * สิ่งที่เงื่อนไขเงินกันได้จริงมีแค่ "ออเดอร์ที่ร้านไม่เคยอ้างว่าได้เงิน" ซึ่งกันการปั๊มยอดโดยไม่ตั้งใจ
+ * ไม่ได้กันคนตั้งใจโกง ถ้าวันหนึ่งเจอจริง ทางต่อไปคือนับลูกค้าไม่ซ้ำ (`count(distinct client_user_id)`)
+ * บวกอายุบัญชีลูกค้า หรือให้แอดมินตรวจ — อย่าเขียนคำอธิบายบนหน้าจอว่าตัวเลขนี้ "ยืนยันว่าจ่ายจริง"
  *
  * **ต้นทุน**: ต่อหนึ่งร้าน = อ่านออเดอร์ของร้านผ่าน `order_page_status_idx` แล้วต่อออเดอร์หนึ่งใบ
- * probe event สองครั้งผ่าน `message_event_idx` (partial เฉพาะ event ระบบ ไม่ไล่อ่านแชท)
+ * probe แถวเงินผ่าน `payment_order_idx` แถวส่งมอบผ่าน `delivery_order_idx` และ event ผ่าน
+ * `message_event_idx` (partial เฉพาะ event ระบบ ไม่ไล่อ่านแชท) — ทุกตัวเป็นแถวไม่กี่แถวต่อออเดอร์
  * รวมเป็น HTTP round trip เดียวด้วย `db.batch`
  * **จุดที่ต้องกลับมาแก้:** ร้านที่มีงานเสร็จหลักพัน หรือหน้าร้านช้าเกิน 300 ms —
  * ทางแก้ที่เตรียมไว้คือจำกัดเฉพาะ N งานล่าสุด หรือเก็บผลไว้ด้วย `use cache` + tag ของร้าน
@@ -60,16 +76,106 @@ const numOrNull = (v: unknown): number | null => {
 };
 
 /**
+ * event ที่ **ครีเอเตอร์** เปิดรอบแก้เองหลังส่งมอบ (`delivered → revision_requested` โดย creator)
+ * = ร้านบอกเองว่าไฟล์ที่ปล่อยไปก่อนหน้าใช้ไม่ได้ — ต่างจากลูกค้าขอแก้ ซึ่งไม่ใช่ความช้าของร้าน
+ * ⚠️ มี `is_system_event` ใน WHERE เสมอ ไม่งั้นใช้ partial index `message_event_idx` ไม่ได้
+ */
+const CREATOR_REOPEN = sql`m.is_system_event
+  and m.event_type = 'status_changed'
+  and m.event_data->>'to' = 'revision_requested'
+  and m.event_data->>'actor' = 'creator'`;
+
+/**
+ * เวลาส่งมอบที่นับให้ร้าน — ไฟล์ชุดแรกที่ลูกค้าได้รับจริงและร้านไม่ได้ถอนเอง
+ *
+ * ⚠️ **ไม่ใช้ event `status_changed → delivered` เป็นหลัก**: event นั้นเขียนได้ที่ `deliverAndRelease`
+ * ที่เดียว และ `moneyGateSql('delivered')` ให้ผ่านเมื่อจ่ายครบแล้วเท่านั้น ออเดอร์แบ่งจ่าย
+ * (มัดจำ + งวดท้าย) ร้านแนบไฟล์งานจริงไว้ตั้งแต่วันที่ 5 ลูกค้าเห็นว่ามีไฟล์รอ แต่โอนงวดท้ายวันที่ 10
+ * — ถ้าใช้ event วันที่ลูกค้าโอนช้าจะไปนับเป็นความช้าของร้านทั้งหมด
+ *
+ * จึงดูที่แถว `delivery` แทน: แต่ละแถวคือไฟล์ชุดหนึ่งที่ **แก้ไม่ได้หลังปล่อย** (trigger ใน 0008)
+ * และ `attachDelivery` insert เสมอ ไม่มีทางเปลี่ยนไฟล์ในแถวเดิม เวลา `created_at` จึงเป็นเวลาที่ไฟล์ชุดนั้น
+ * พร้อมส่งจริง แนบไฟล์หลอกไว้ก่อนแล้วไม่ปล่อยไม่ได้ประโยชน์ — นับเฉพาะแถวที่ปล่อยแล้ว
+ *
+ * ชุดที่ "ร้านถอนเอง" ไม่นับ: ถัดจากการปล่อยชุดนั้น (ก่อนการปล่อยชุดถัดไป) มี event ร้านเปิดรอบแก้เอง
+ * — ไม่งั้นปล่อยไฟล์ชั่วคราวให้ทันกำหนดแล้วเปิดรอบแก้เองก็ได้ "ตรงเวลา" ฟรี
+ * ชุดที่ปล่อยหลังร้านเคยเปิดรอบแก้เองนับที่เวลา **ปล่อย** ไม่ใช่เวลาแนบ — ออเดอร์เคย `delivered` มาแล้ว
+ * แปลว่าจ่ายครบแล้ว ช่วงระหว่างแนบกับปล่อยจึงเป็นของร้านล้วน ๆ
+ *
+ * ออเดอร์เก่าที่ไม่มีแถว `delivery` ที่ปล่อยแล้ว (ก่อนมี `deliverAndRelease`) ถอยไปใช้ event แรกแบบเดิม
+ */
+const HANDOVER_AT = sql`coalesce(
+  (
+    select case
+      when exists (
+        select 1 from message m
+        where m.order_id = o.id and ${CREATOR_REOPEN} and m.created_at < d.released_at
+      ) then d.released_at
+      else d.created_at
+    end
+    from delivery d
+    where d.order_id = o.id and d.released_at is not null
+      and not exists (
+        select 1 from message m
+        where m.order_id = o.id and ${CREATOR_REOPEN}
+          and m.created_at > d.released_at
+          and not exists (
+            select 1 from delivery d2
+            where d2.order_id = o.id
+              and d2.released_at > d.released_at and d2.released_at < m.created_at
+          )
+      )
+    order by d.released_at asc
+    limit 1
+  ),
+  (
+    select min(m.created_at) from message m
+    where m.order_id = o.id and m.is_system_event
+      and m.event_type = 'status_changed' and m.event_data->>'to' = 'delivered'
+  )
+)`;
+
+/**
+ * เวลาที่ **ลูกค้าแจ้งโอน** จนยอดถึงมัดจำ — ใช้แทน `deposit_met_at` ในประวัติร้าน
+ *
+ * ⚠️ `deposit_met_at` คือเวลาที่ **ร้านกดยืนยัน** และ `recomputePaid` เลื่อน `due_at` ไปนับจากตรงนั้น
+ * ร้านที่ปล่อยรายการแจ้งโอนค้างไว้ 30 วัน (ทำงานไปเงียบ ๆ) แล้วค่อยยืนยันก่อนส่งงานวันเดียว
+ * จะได้ "ตรงเวลา" และ "ไม่ถึง 1 วัน" ทั้งที่ลูกค้ารอมาเดือนหนึ่งหลังโอน ต้องนับจากฝั่งลูกค้า
+ *
+ * วิธีคิด: แถวเงินที่ถูกนับอยู่ ณ ตอนมัดจำครบ (ยืนยันแล้วไม่เกิน `deposit_met_at` และยังไม่ถูกยกเลิก
+ * ก่อนหน้านั้น) เรียงตามเวลาที่แถวถูกสร้าง (= เวลาที่ลูกค้าแจ้ง หรือเวลาที่ร้านบันทึกเอง) แล้วหาแถวที่
+ * ยอดสะสมข้ามมัดจำ — แถวเดียวที่แจ้งทีหลังไม่ดึงเวลาเริ่มให้ช้าลง และแจ้งมัดจำสองงวดก็ไม่นับจากงวดแรก
+ * ไม่มีแถวไหนเข้าเงื่อนไข (ไม่ควรเกิด) = null แล้ว `least()` ใช้ `deposit_met_at` เอง
+ */
+const DEPOSIT_REPORTED_AT = sql`(
+  select min(c.created_at) from (
+    select p.created_at,
+           sum(p.amount_cents) over (order by p.created_at, p.id) as running
+    from payment_record p
+    where p.order_id = o.id
+      and p.verified_at is not null and p.verified_at <= o.deposit_met_at
+      and (p.voided_at is null or p.voided_at > o.deposit_met_at)
+  ) c
+  where c.running >= o.deposit_cents
+)`;
+
+/**
  * ออเดอร์ที่ "นับ" ของร้านนี้ — ใช้ร่วมทุกตัวเลข จะได้ไม่มีตัวไหนนับออเดอร์ไม่มีเงินหลุดเข้ามา
- * ⚠️ ต้องตรงกับ `reviewEligibility()` ใน lib/reputation/review-rules.ts (completed + มีเงินเข้า)
+ * ⚠️ ต้องตรงกับ `reviewEligibility()` ใน lib/reputation/review-rules.ts (completed + `PAID_ONCE_SQL`)
+ *
+ * กำหนดส่งที่ใช้ตัดสิน "ตรงเวลา" ไม่ใช่ `due_at` ตรง ๆ สำหรับออเดอร์ที่มี `deposit_met_at`:
+ * `recomputePaid` เลื่อน `due_at` ไปเป็น `deposit_met_at + ระยะงาน` ตอนร้านกดยืนยัน ที่นี่ถอยกลับ
+ * เท่ากับช่วงที่ร้านปล่อยรายการแจ้งโอนค้างไว้ — ระยะงานเท่าเดิม แค่เริ่มนับจากตอนลูกค้าแจ้งโอน
+ * ⚠️ ผลคือกำหนดส่งในสถิติอาจเร็วกว่าวันที่ที่หน้าออเดอร์โชว์ ถ้าร้านยืนยันเงินช้า — ตั้งใจแบบนั้น
  */
 function trackRecordSql(pageId: string) {
   return sql`
-    with done as (
+    with base as (
       select
         o.due_at,
+        o.deposit_met_at,
         coalesce(
-          o.deposit_met_at,
+          least(o.deposit_met_at, ${DEPOSIT_REPORTED_AT}),
           case when o.deposit_cents > 0 then (
             select min(p.verified_at) from payment_record p
             where p.order_id = o.id
@@ -77,32 +183,41 @@ function trackRecordSql(pageId: string) {
           ) end,
           o.created_at
         ) as started_at,
-        (
-          select min(m.created_at) from message m
-          where m.order_id = o.id and m.is_system_event
-            and m.event_type = 'status_changed' and m.event_data->>'to' = 'delivered'
-        ) as delivered_at
+        ${HANDOVER_AT} as handover_at
       from "order" o
       where o.creator_page_id = ${pageId}
         and o.status = 'completed'
-        and o.amount_paid_cents > 0
+        and ${PAID_ONCE_SQL}
+    ),
+    done as (
+      select
+        started_at,
+        handover_at,
+        -- กำหนดส่งถอยกลับเท่ากับช่วงที่ร้านปล่อยรายการแจ้งโอนค้างไว้ (ดูหมายเหตุเหนือฟังก์ชัน)
+        case when deposit_met_at is not null
+          then due_at - (deposit_met_at - started_at)
+          else due_at
+        end as due_at
+      from base
     ),
     shown_reviews as (
       select r.rating from review r
       join "order" o on o.id = r.order_id
       where r.creator_page_id = ${pageId} and r.is_public
-        and o.status = 'completed' and o.amount_paid_cents > 0
+        and o.status = 'completed' and ${PAID_ONCE_SQL}
     )
     select
       (select count(*) from done)::int as completed,
-      (select count(*) from done where due_at is not null and delivered_at is not null)::int as timed,
-      (select count(*) from done where delivered_at <= due_at)::int as on_time,
-      (select percentile_cont(0.5) within group (order by extract(epoch from delivered_at - started_at))
-         from done where delivered_at >= started_at)::float8 as median_seconds,
+      (select count(*) from done where due_at is not null and handover_at is not null)::int as timed,
+      (select count(*) from done where handover_at <= due_at)::int as on_time,
+      -- แนบไฟล์ไว้ก่อนเริ่มนับ (งานสำเร็จรูป) = 0 วินาที ไม่ใช่ค่าติดลบที่ถูกทิ้งไปเงียบ ๆ
+      (select percentile_cont(0.5) within group (
+          order by extract(epoch from greatest(handover_at - started_at, interval '0'))
+        ) from done where handover_at is not null)::float8 as median_seconds,
       (select count(*) from "order" o
         where o.creator_page_id = ${pageId}
           and o.status = 'cancelled'
-          and o.amount_paid_cents > 0
+          and ${PAID_ONCE_SQL}
           and exists (
             select 1 from message m
             where m.order_id = o.id and m.is_system_event
@@ -120,7 +235,11 @@ function trackRecordSql(pageId: string) {
  *
  * เดือนที่สั่งตัดตั้งแต่ใน SQL ด้วยเวลาไทย — วันที่เต็มไม่ออกจาก DB เลย
  * ชื่อลูกค้าถูกอ่านมาเพื่อทำตัวอักษรแรกใน `getShopReputation` แล้วทิ้ง ไม่อยู่ในค่าที่คืน
- * ซ่อนรีวิวของออเดอร์ที่เงินถูกยกเลิกการยืนยันจนเป็นศูนย์ (สลิปปลอม) — เงื่อนไขเดียวกับสถิติ
+ *
+ * ⚠️ เงื่อนไขเงินคือ `PAID_ONCE_SQL` ไม่ใช่ยอด ณ ตอนอ่าน — รีวิวที่เขียนแล้วต้องไม่หายเพราะร้านกด
+ * "ยกเลิกการยืนยัน" ทีหลัง (ทำได้แม้งาน `completed`) ลูกค้าเห็นรีวิวตัวเองบนหน้าออเดอร์เสมอ
+ * จึงไม่มีทางรู้ว่าถูกซ่อน คนเดียวที่ซ่อนรีวิวได้คือลูกค้าเอง (`is_public` ผ่าน `setReviewPublic`)
+ * กรณีสลิปปลอมจริง ร้านตอบใต้รีวิวอธิบายได้ — ดีกว่าให้ร้านลบรีวิวที่ไม่ชอบได้ด้วยปุ่มเดียว
  */
 function reviewsSql(pageId: string, limit: number) {
   return sql`
@@ -132,7 +251,7 @@ function reviewsSql(pageId: string, limit: number) {
     join "order" o on o.id = r.order_id
     join "user" u on u.id = r.client_user_id
     where r.creator_page_id = ${pageId} and r.is_public
-      and o.status = 'completed' and o.amount_paid_cents > 0
+      and o.status = 'completed' and ${PAID_ONCE_SQL}
     order by r.created_at desc
     limit ${limit}
   `;
@@ -225,6 +344,7 @@ export async function getReviewForOrder(orderId: string) {
       creatorReply: true,
       creatorRepliedAt: true,
       updatedAt: true,
+      isPublic: true,
       createdAt: true,
     },
   });
