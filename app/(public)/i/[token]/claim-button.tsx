@@ -45,7 +45,9 @@ export function ClaimButton({ token, revisionId }: { token: string; revisionId: 
                   ? t.invite.deadTitle
                   : res.error === "conflict"
                     ? t.invite.takenAlready
-                    : t.error.title,
+                    : res.error === "rate_limited"
+                      ? t.invite.claimRateLimited
+                      : t.error.title,
             );
             router.refresh();
           })

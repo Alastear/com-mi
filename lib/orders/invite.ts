@@ -331,7 +331,8 @@ export type ClaimResult =
         | "wrong_account"
         | "closed"
         | "superseded"
-        | "conflict";
+        | "conflict"
+        | "rate_limited";
     };
 
 /**
@@ -352,6 +353,14 @@ export async function claimInvite(token: string, revisionId: string): Promise<Cl
   if (!isInviteToken(token) || !revisionId || revisionId.length > 64) {
     return { ok: false, error: "invalid" };
   }
+
+  // กดรับแล้วส่งอีเมลหาครีเอเตอร์ และวนถอน/กดรับใหม่ได้ — ต้องมีเพดาน (เหตุผลที่ LIMITS.claimInvite)
+  const gate = await rateLimit(
+    `claim:${session.user.id}`,
+    LIMITS.claimInvite.limit,
+    LIMITS.claimInvite.windowSeconds,
+  );
+  if (!gate.ok) return { ok: false, error: "rate_limited" };
 
   const db = getDb();
   const invite = await db.query.orderInvite.findFirst({
