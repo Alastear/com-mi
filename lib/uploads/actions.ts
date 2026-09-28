@@ -215,7 +215,17 @@ const DeliverySchema = z.object({
 });
 
 export type StartDeliveryUploadResult =
-  | { ok: true; intentId: string; partSize: number; urls: string[] }
+  | {
+      ok: true;
+      intentId: string;
+      partSize: number;
+      urls: string[];
+      /**
+       * คำขอนี้ใช้บันทึกได้อีกนานเท่าไร — ให้เบราว์เซอร์รู้ว่าลองบันทึกซ้ำได้ถึงเมื่อไร
+       * ส่งเป็นระยะเวลา ไม่ใช่เวลาปลายทาง: นาฬิกาเครื่องผู้ใช้อาจเพี้ยนไปเป็นนาที
+       */
+      expiresInMs: number;
+    }
   | Fail;
 
 /**
@@ -292,7 +302,7 @@ export async function startDeliveryUpload(
       await abortPrivateMultipart(key, uploadId).catch(() => {});
       return fail("storage_quota_exceeded");
     }
-    return { ok: true, intentId, partSize: PART_SIZE, urls: started.urls };
+    return { ok: true, intentId, partSize: PART_SIZE, urls: started.urls, expiresInMs: DELIVERY_INTENT_TTL_MS };
   } catch (err) {
     console.error("[uploads] start delivery", err instanceof Error ? err.message : err);
     // เปิด multipart ได้แต่บันทึกคำขอไม่ได้ = ไม่มีแถวให้งานเก็บกวาดตามเจอ ต้องยกเลิกเอง

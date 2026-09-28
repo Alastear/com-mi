@@ -3,6 +3,7 @@ import { registerDeliveryFile, type RegisterDeliveryResult } from "@/lib/deliver
 import { clampFilename, partPlan } from "@/lib/storage/keys";
 import { cancelUpload, startDeliveryUpload, startMediaUpload } from "./actions";
 import { isRetryableStatus, MAX_PART_ATTEMPTS, retryDelayMs } from "./errors";
+import { registerWithRetry, type RegisterStatus, type Unconfirmed } from "./register-retry";
 
 /**
  * ฝั่งเบราว์เซอร์ของการอัปโหลด — ขอ URL จากเซิร์ฟเวอร์ แล้ว PUT ตรงไป R2
@@ -42,6 +43,11 @@ export async function uploadPublic(
 export type DeliveryUpload = {
   intentId: string;
   parts: Array<{ partNumber: number; etag: string }>;
+  /**
+   * คำขอหมดอายุเมื่อไร ตามนาฬิกาเครื่องนี้ — คิดจากเวลา **ก่อน** ส่งคำขอ บวกอายุที่เซิร์ฟเวอร์บอก
+   * จึงเร็วกว่าของจริงเสมอ (ปลอดภัยไว้ก่อน) และไม่ขึ้นกับนาฬิกาเครื่องที่อาจเพี้ยน
+   */
+  expiresAt: number;
 };
 
 /**
@@ -65,6 +71,7 @@ export async function uploadDelivery(
   // ไฟล์ 0 ไบต์ประกอบเป็น multipart ไม่ได้ (ต้องมีอย่างน้อยหนึ่งชิ้น) — บอกให้ตรงเรื่องแทน "ลองใหม่"
   if (file.size === 0) throw new Error("empty_file");
 
+  const requestedAt = Date.now();
   const start = await startDeliveryUpload({
     code,
     // เซิร์ฟเวอร์รับชื่อไม่เกิน 200 ตัว — ตัดเองโดยเก็บนามสกุลไว้ ลูกค้าจะได้เปิดไฟล์ได้
@@ -113,33 +120,36 @@ export async function uploadDelivery(
     void cancelUpload(start.intentId).catch(() => {});
     throw failure instanceof Error ? failure : new Error("upload_failed");
   }
-  return { intentId: start.intentId, parts };
+  return { intentId: start.intentId, parts, expiresAt: requestedAt + start.expiresInMs };
 }
 
 /**
- * บันทึกไฟล์ส่งมอบที่อัปครบแล้ว — ลองซ้ำเมื่อเน็ตหลุดหรือเซิร์ฟเวอร์สะดุดชั่วคราว
+ * บันทึกไฟล์ส่งมอบที่อัปครบแล้ว — ลองซ้ำเป็นนาทีเมื่อเน็ตหลุดหรือเซิร์ฟเวอร์สะดุดชั่วคราว
  *
- * ไฟล์ 2 GB อัปเสร็จแล้ว อย่าให้การบันทึกที่ล้มครั้งเดียวทำให้ต้องอัปใหม่ทั้งไฟล์
+ * ไฟล์ 2 GB อัปเสร็จแล้ว อย่าให้การบันทึกที่ล้มชั่วคราวทำให้ต้องอัปใหม่ทั้งไฟล์
  * `registerDeliveryFile` เรียกซ้ำได้ปลอดภัย (ได้แถวเดิม ไม่ได้แถวที่สอง)
- * ล้มจนหมดรอบ = คืนผลสุดท้ายหรือโยนต่อ แล้วยกเลิกคำขอ (คืนพื้นที่ที่จอง)
+ * กติกาเต็ม (นานแค่ไหน อะไรนับว่าชั่วคราว) อยู่ที่ lib/uploads/register-retry.ts
+ *
+ * ⚠️ `cancelUpload` เฉพาะเมื่อล้มถาวรเท่านั้น — หมดรอบลองซ้ำได้ `unconfirmed`
+ * แล้วคำขอถูกปล่อยไว้ (ยังจองพื้นที่ ชิ้น/ไฟล์ที่ประกอบแล้วยังอยู่) เรียกฟังก์ชันนี้ซ้ำด้วย `up`
+ * เดิมได้จนกว่าคำขอจะหมดอายุ หลังจากนั้นงานเก็บกวาดคืนพื้นที่และลบให้ (lib/media/cleanup.ts)
+ * เดิมยกเลิกทันทีหลังลองสี่ครั้งในเจ็ดวินาที ไฟล์ที่ประกอบเสร็จแล้วถูกลบทิ้งเพราะ Neon สะดุดครู่เดียว
  */
-export async function registerDelivery(up: DeliveryUpload): Promise<RegisterDeliveryResult> {
-  let last: RegisterDeliveryResult | null = null;
-  let lastErr: unknown = null;
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      last = await registerDeliveryFile(up);
-      lastErr = null;
-      if (last.ok || last.error !== "retry") return last;
-    } catch (err) {
-      // Server Action เองล้ม (เน็ตหลุดระหว่างทาง หรือ error ที่ถูกซ่อนข้อความ)
-      lastErr = err;
-    }
-    if (attempt < 4) await waitToRetry(attempt);
-  }
-  void cancelUpload(up.intentId).catch(() => {});
-  if (lastErr !== null) throw lastErr;
-  return { ok: false, error: "upload_failed" };
+export async function registerDelivery(
+  up: DeliveryUpload,
+  onStatus?: (s: RegisterStatus) => void,
+): Promise<RegisterDeliveryResult | Unconfirmed> {
+  return registerWithRetry({
+    // ส่งแค่สองช่องที่ action ต้องใช้ — ไม่ส่งเวลาหมดอายุของเครื่องนี้ไปให้เซิร์ฟเวอร์เชื่อ
+    call: () => registerDeliveryFile({ intentId: up.intentId, parts: up.parts }),
+    now: Date.now,
+    sleep: (ms) => sleep(ms),
+    isOnline: () => typeof navigator === "undefined" || navigator.onLine !== false,
+    waitOnline,
+    expiresAt: up.expiresAt,
+    onHardFailure: () => void cancelUpload(up.intentId).catch(() => {}),
+    onStatus,
+  });
 }
 
 async function putPart(url: string, chunk: Blob, signal: AbortSignal): Promise<string> {
@@ -171,19 +181,25 @@ async function putPart(url: string, chunk: Blob, signal: AbortSignal): Promise<s
 async function waitToRetry(attempt: number, signal?: AbortSignal): Promise<void> {
   await sleep(retryDelayMs(attempt), signal);
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        window.removeEventListener("online", done);
-        signal?.removeEventListener("abort", done);
-        clearTimeout(timer);
-        resolve();
-      };
-      const timer = setTimeout(done, 15 * 60 * 1000);
-      window.addEventListener("online", done);
-      signal?.addEventListener("abort", done);
-    });
+    await waitOnline(15 * 60 * 1000, signal);
   }
   if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+}
+
+/** รอจนเบราว์เซอร์กลับมาออนไลน์ ไม่เกิน `maxMs` (หรือจนถูกยกเลิก) */
+function waitOnline(maxMs: number, signal?: AbortSignal): Promise<void> {
+  if (typeof window === "undefined" || navigator.onLine !== false) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      window.removeEventListener("online", done);
+      signal?.removeEventListener("abort", done);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, maxMs);
+    window.addEventListener("online", done);
+    signal?.addEventListener("abort", done);
+  });
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

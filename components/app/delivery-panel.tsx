@@ -19,8 +19,9 @@ import {
 import { canUploadDelivery } from "@/lib/delivery/path";
 import { attachPlan } from "@/lib/delivery/plan";
 import { fill } from "@/lib/i18n/dictionaries";
-import { registerDelivery, uploadDelivery } from "@/lib/uploads/client";
+import { registerDelivery, uploadDelivery, type DeliveryUpload } from "@/lib/uploads/client";
 import { stopsBatch, uploadFailure, type UploadFailure } from "@/lib/uploads/errors";
+import type { RegisterStatus } from "@/lib/uploads/register-retry";
 import type { DeliveryFileRow, DeliveryRow } from "@/lib/delivery/rows";
 import { cn } from "@/lib/utils";
 
@@ -60,13 +61,30 @@ export function DeliveryPanel({
   const t = useDict();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
   /**
-   * ความคืบหน้า: ไฟล์ที่เท่าไรจากกี่ไฟล์ และเปอร์เซ็นต์ของไฟล์นั้น 0–100
+   * สำเนาของ `busy` ที่อ่านได้จากปุ่มใน toast — toast ถือ closure ของตอนที่ถูกสร้าง
+   * ซึ่งอาจเก่ากว่าสถานะจริงเป็นนาที อ่าน state ตรง ๆ จะเห็นค่าเก่า
+   */
+  const busyRef = useRef(false);
+  const setBusy = (v: boolean) => {
+    busyRef.current = v;
+    setBusyState(v);
+  };
+  /**
+   * ความคืบหน้า: ไฟล์ที่เท่าไรจากกี่ไฟล์ เปอร์เซ็นต์ของไฟล์นั้น 0–100 และช่วงที่อยู่
    * ไฟล์ส่งมอบใหญ่ได้ถึง 2 GB ต้องเห็นว่ายังเดินอยู่ — และอัปหลายไฟล์ต้องรู้ว่าถึงไฟล์ไหนแล้ว
    * เดิมมีแค่เปอร์เซ็นต์ วิ่ง 0→100% ซ้ำห้ารอบโดยไม่รู้ว่าเป็นไฟล์ไหน
+   *
+   * `phase` — อัปครบแล้วยังไม่จบ: การบันทึกลองซ้ำได้เป็นนาทีเมื่อเน็ตหรือเซิร์ฟเวอร์สะดุด
+   * ⚠️ ต้องบอกว่ายังบันทึกอยู่ ไม่งั้นจอค้างที่ "100%" นิ่ง ๆ แล้วครีเอเตอร์ปิดแท็บทิ้ง
    */
-  const [progress, setProgress] = useState<{ i: number; n: number; pct: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    i: number;
+    n: number;
+    pct: number;
+    phase: "upload" | RegisterStatus;
+  } | null>(null);
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -110,19 +128,25 @@ export function DeliveryPanel({
    * จะล้มเหมือนกันแน่ (`stopsBatch`: โควตาเต็ม ถี่เกิน สถานะงานเปลี่ยน) หยุดแล้วบอกว่าข้ามกี่ไฟล์
    */
   async function handleFiles(files: FileList | null) {
-    if (!files?.length || busy) return;
+    if (!files?.length || busyRef.current) return;
     setBusy(true);
     const list = Array.from(files).slice(0, 20);
     try {
       for (let i = 0; i < list.length; i++) {
         const file = list[i];
-        setProgress({ i: i + 1, n: list.length, pct: 0 });
+        const n = list.length;
+        setProgress({ i: i + 1, n, pct: 0, phase: "upload" });
         let failure: UploadFailure | null = null;
         try {
           const up = await uploadDelivery(code, file, (f) =>
-            setProgress({ i: i + 1, n: list.length, pct: Math.floor(f * 100) }),
+            setProgress({ i: i + 1, n, pct: Math.floor(f * 100), phase: "upload" }),
           );
-          const res = await registerDelivery(up);
+          const res = await registerDelivery(up, (phase) => setProgress({ i: i + 1, n, pct: 100, phase }));
+          if (!res.ok && res.error === "unconfirmed") {
+            // ไม่ใช่ความล้มเหลวที่ทำให้ไฟล์ถัดไปล้มแน่ — ไปต่อ แล้วเปิดทางให้กดบันทึกซ้ำ
+            notifyUnconfirmed(up, file.name);
+            continue;
+          }
           if (!res.ok) failure = uploadFailure(res.error);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "";
@@ -145,6 +169,64 @@ export function DeliveryPanel({
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
+  }
+
+  /**
+   * ลองบันทึกซ้ำจนหมดเวลาแล้วยังไม่รู้ผล — ⚠️ ห้ามบอกว่าไฟล์หาย
+   * คำขอไม่ถูกยกเลิก ชิ้นที่อัปไปแล้วยังอยู่ และอาจบันทึกไปแล้วด้วยซ้ำ (คำตอบหายกลางทาง)
+   * toast ค้างไว้จนกว่าจะปิดเอง พร้อมปุ่มบันทึกอีกครั้งที่ใช้ `up` เดิม ไม่ต้องอัป 2 GB ใหม่
+   * (`up` อยู่ในหน่วยความจำของหน้านี้เท่านั้น — ปิดหน้าไปแล้วก็ต้องอัปใหม่ ข้อความบอกไว้แล้ว)
+   */
+  function notifyUnconfirmed(up: DeliveryUpload, name: string) {
+    toast.warning(t.delivery.unconfirmed, {
+      description: fill(t.delivery.unconfirmedHint, { name }),
+      duration: Infinity,
+      closeButton: true,
+      action: {
+        label: t.delivery.saveAgain,
+        onClick: (e) => {
+          if (busyRef.current) {
+            // กำลังอัปไฟล์อื่นอยู่ — เก็บ toast ไว้ให้กดใหม่ทีหลัง (Server Action วิ่งทีละตัวอยู่แล้ว)
+            e.preventDefault();
+            toast.info(t.delivery.waitCurrent);
+            return;
+          }
+          void saveAgain(up, name);
+        },
+      },
+    });
+  }
+
+  async function saveAgain(up: DeliveryUpload, name: string) {
+    setBusy(true);
+    setProgress({ i: 1, n: 1, pct: 100, phase: "saving" });
+    try {
+      const res = await registerDelivery(up, (phase) => setProgress({ i: 1, n: 1, pct: 100, phase }));
+      if (res.ok) toast.success(t.delivery.saved, { description: name });
+      else if (res.error === "unconfirmed") notifyUnconfirmed(up, name);
+      else toast.error(failureText(uploadFailure(res.error)), { description: name });
+    } finally {
+      router.refresh();
+      setProgress(null);
+      setBusy(false);
+    }
+  }
+
+  /** ข้อความบนช่องอัปโหลดระหว่างทำงาน */
+  function busyText(): string {
+    if (progress === null) return t.delivery.uploading;
+    if (progress.phase === "upload") {
+      return progress.n > 1
+        ? fill(t.delivery.uploadingOf, { i: progress.i, n: progress.n, p: progress.pct })
+        : `${t.delivery.uploading} ${progress.pct}%`;
+    }
+    const text =
+      progress.phase === "offline"
+        ? t.delivery.savingOffline
+        : progress.phase === "retrying"
+          ? t.delivery.savingRetry
+          : t.delivery.saving;
+    return progress.n > 1 ? `${progress.i}/${progress.n} · ${text}` : text;
   }
 
   /** ข้อความของผลที่ไม่ผ่านซึ่งเกิดจากหน้าจอเก่ากว่าของจริง — โหลดใหม่ให้ด้วยเสมอ */
@@ -361,13 +443,7 @@ export function DeliveryPanel({
                   <FileUp className="size-5 text-muted-foreground" />
                 )}
                 <span className="text-sm font-medium">
-                  {busy
-                    ? progress === null
-                      ? t.delivery.uploading
-                      : progress.n > 1
-                        ? fill(t.delivery.uploadingOf, { i: progress.i, n: progress.n, p: progress.pct })
-                        : `${t.delivery.uploading} ${progress.pct}%`
-                    : t.delivery.upload}
+                  {busy ? busyText() : t.delivery.upload}
                 </span>
                 <span className="text-xs text-muted-foreground">{t.delivery.uploadHint}</span>
               </label>
