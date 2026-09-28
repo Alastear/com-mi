@@ -69,3 +69,11 @@ export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "i
 
 /** ขนาดไฟล์ต้นทางที่ยอมรับก่อนย่อ — กันคนลากไฟล์ PSD 500 MB เข้ามา */
 export const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
+
+/**
+ * เพดานรูป **หลังย่อ** ที่ /api/blob/upload ยอมออก token ให้ — ทุกแพ็กเกจเท่ากัน
+ *
+ * ⚠️ หน้า /pricing โชว์ตัวเลขนี้ (แถว `filesize`) มีเทสต์ผูกไว้ใน lib/billing/plans.test.ts
+ * เปลี่ยนตรงนี้แล้วต้องแก้ข้อความ `compare.values.fileSizeNow` ทั้งสองภาษาด้วย
+ */
+export const MAX_IMAGE_UPLOAD_BYTES = 12 * 1024 * 1024;

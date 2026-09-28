@@ -27,6 +27,18 @@ import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
 const Schema = z.object({
   code: z.string().refine(isOrderCode, "bad_code"),
+  /**
+   * สถานะที่หน้าจอของคนกด **เห็นอยู่ตอนกด** — ไม่ใช่สถานะที่ server อ่านได้ตอนนี้
+   *
+   * ⚠️ เดิม compare-and-set เทียบกับสถานะที่ server เพิ่งอ่านมาเอง ซึ่งตรงกับของจริงเสมอ
+   * แท็บที่เปิดค้างไว้จึงกดผ่านได้ทุกครั้ง: ลูกค้าเปิดหน้า "ส่งงานแล้ว" ค้างไว้ ครีเอเตอร์
+   * เปิดรอบแก้เองแล้วส่ง WIP รอบใหม่ (`in_review`) ลูกค้ากด "ขอแก้ไข" จากแท็บเก่า →
+   * เสียสิทธิ์แก้ไปกับรอบที่ไม่เคยเห็น ส่งค่านี้มาแล้วไม่ตรงของจริง = `stale` ให้รีเฟรชก่อน
+   *
+   * ⚠️ จับได้เฉพาะตอนสถานะต่างกัน ถ้าออเดอร์วนกลับมาสถานะเดิม (in_review รอบ 1 → … →
+   * in_review รอบ 2) ระหว่างที่แท็บเปิดค้าง ค่านี้จะตรงกันและยังผ่าน — ยังไม่มีเลขรอบให้เทียบ
+   */
+  from: z.enum(ORDER_STATUSES),
   to: z.enum(ORDER_STATUSES),
   /** สิ่งที่คนกดยกเลิกเห็นเรื่องเงิน ตอนกด — ดู `MoneyAck` ใน lib/orders/cancel.ts */
   moneyAck: z
@@ -59,6 +71,7 @@ export type TransitionResult =
 
 export async function transitionOrder(input: {
   code: string;
+  from: OrderStatus;
   to: OrderStatus;
   moneyAck?: { rows: number; paidCents: number };
 }): Promise<TransitionResult> {
@@ -67,7 +80,7 @@ export async function transitionOrder(input: {
 
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "invalid" };
-  const { code, to, moneyAck } = parsed.data;
+  const { code, from, to, moneyAck } = parsed.data;
 
   const db = getDb();
 
@@ -98,7 +111,9 @@ export async function transitionOrder(input: {
   // ไม่เกี่ยวข้องกับออเดอร์นี้ = ตอบเหมือนไม่มีอยู่จริง ไม่บอกว่ามีแต่เข้าไม่ได้
   if (!actor) return { ok: false, error: "not_found" };
 
-  const from = order.status as OrderStatus;
+  // หน้าจอของคนกดไม่ได้เห็นสถานะนี้ — ห้ามตัดสินแทนเขาจากของที่เขาไม่เคยเห็น (ดู `from` ใน Schema)
+  if (order.status !== from) return { ok: false, error: "stale" };
+
   try {
     assertTransition(from, to, actor);
   } catch (err) {
@@ -172,7 +187,7 @@ export async function transitionOrder(input: {
   const now = new Date();
 
   /**
-   * เขียนแบบ compare-and-set — `where` มี status เดิมด้วย
+   * เขียนแบบ compare-and-set — `where` มี status ที่หน้าจอของคนกดเห็น (`from`) ด้วย
    *
    * ถ้าครีเอเตอร์เปิดบอร์ดไว้สองแท็บแล้วกดจากทั้งคู่ อันที่สองต้องไม่ทับ
    * เพราะสถานะที่มันเห็นตอนกดไม่ใช่สถานะจริงแล้ว — ตรวจตอนอ่านอย่างเดียวไม่พอ

@@ -715,7 +715,7 @@ describe("บรรทัดราคาที่เป็นศูนย์", (
   it("ระดับที่ไม่บวกเงินขึ้นว่า 'รวมในราคา' ไม่ใช่ '฿0'", () => {
     const q = quoteOrder(svc, { tierId: "full", options: [{ optionId: "bg", quantity: 1 }] });
     const shown = q.lines.map((l) =>
-      formatLineAmount(l.unitPriceCents * l.quantity, "รวมในราคา", "THB", "th"),
+      formatLineAmount(l.unitPriceCents * l.quantity, l.kind, "รวมในราคา", "THB", "th"),
     );
     assert.equal(shown[0], formatMoney(120_000, "THB", "th"));
     assert.deepEqual(shown.slice(1), ["รวมในราคา", "รวมในราคา"]);
@@ -732,7 +732,28 @@ describe("บรรทัดราคาที่เป็นศูนย์", (
   });
 
   it("บรรทัดที่มีเงินยังโชว์เป็นเงินตามปกติ ทั้งสองภาษา", () => {
-    assert.equal(formatLineAmount(80_000, "Included", "THB", "en"), formatMoney(80_000, "THB", "en"));
-    assert.equal(formatLineAmount(0, "Included", "THB", "en"), "Included");
+    assert.equal(
+      formatLineAmount(80_000, "tier", "Included", "THB", "en"),
+      formatMoney(80_000, "THB", "en"),
+    );
+    assert.equal(formatLineAmount(0, "tier", "Included", "THB", "en"), "Included");
+    assert.equal(formatLineAmount(0, "option", "Included", "THB", "en"), "Included");
+  });
+
+  it("บรรทัดศูนย์ที่ไม่ใช่ระดับ/ตัวเลือก ไม่ถูกเรียกว่า 'รวมในราคา'", () => {
+    // บรรทัดหลัก ฿0 ของเมนูแบบเสนอราคา = ยังไม่ได้ตั้งราคา ไม่ใช่รวมอยู่ในอะไร
+    const proposal = quoteOrder({ ...svc, basePriceCents: 0, tiers: [], options: [] }, {
+      tierId: null,
+      options: [],
+    });
+    assert.equal(proposal.lines[0].kind, "base");
+    assert.equal(
+      formatLineAmount(0, proposal.lines[0].kind, "Included", "THB", "en"),
+      formatMoney(0, "THB", "en"),
+    );
+    // ตัวคูณที่ปัดแล้วเหลือ ฿0 คือคิดเพิ่มศูนย์บาทจริง ๆ
+    for (const kind of ["base", "multiplier", "custom"]) {
+      assert.notEqual(formatLineAmount(0, kind, "Included", "THB", "en"), "Included", kind);
+    }
   });
 });

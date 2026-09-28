@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { openSlotsToShow } from "./slots";
 
 describe("ช่องที่เปิดรับบนหน้าร้าน", () => {
@@ -22,5 +24,14 @@ describe("ช่องที่เปิดรับบนหน้าร้า�
     assert.equal(openSlotsToShow("open", -1), null);
     assert.equal(openSlotsToShow("open", Number.NaN), null);
     assert.equal(openSlotsToShow("open", 2.5), null);
+  });
+});
+
+describe("ร้านใหม่", () => {
+  it("ensureShop ตั้งช่องเป็น 0 เอง — ไม่พึ่ง default ของคอลัมน์ (5) ที่เจ้าของไม่เคยเลือก", () => {
+    // ตรวจที่ตัวโค้ดเพราะรันจริงต้องมี DB — ถ้าบรรทัดนี้หาย ร้านใหม่ทุกร้านจะขึ้น "เปิดรับ 5 ช่อง" อีก
+    const src = readFileSync(join(process.cwd(), "lib/shop/ensure.ts"), "utf8");
+    assert.match(src, /slotsTotal: 0,/);
+    assert.equal(openSlotsToShow("open", 0), null);
   });
 });

@@ -90,6 +90,41 @@ export function ServiceOrderFlow({
   const total = quote.totalCents;
   // สูตรเดียวกับที่ `createOrder` เขียนลงออเดอร์ — ลูกค้าเห็นเท่าไหร่ ออเดอร์เรียกเท่านั้น
   const deposit = depositSummary(total, service.depositPercent);
+  const money = (cents: number) => formatMoney(cents, shop.currency, locale);
+
+  /**
+   * ข้อความมัดจำ — เมนูแบบเสนอราคาพูดเป็นเปอร์เซ็นต์ ไม่ใช่จำนวนเงิน
+   *
+   * ⚠️ ยอดรวมของเมนูแบบเสนอราคาคือ "ราคาเริ่มต้น" ราคาจริงมาจากใบเสนอราคาของครีเอเตอร์
+   * (ซึ่งตั้งมัดจำของมันเองได้) เดิมขึ้น "มัดจำ ฿400 ก่อนเริ่มงาน" คิดจากราคาเริ่มต้น
+   * ลูกค้าจำตัวเลขนั้นไว้ แล้วเจอใบเสนอราคาที่เรียกมัดจำคนละก้อน — เหมือนโดนขึ้นราคา
+   * เมนูสั่งได้ทันทียังพูดเป็นเงินเหมือนเดิม เพราะตัวเลขนั้นคือที่ออเดอร์จะเรียกเก็บจริง
+   */
+  const isProposal = service.mode === "proposal";
+  const depositNotice =
+    deposit.kind === "none" ? null : (
+      <div className="rounded-lg bg-muted/60 px-3 py-2">
+        <p className="tabular text-sm font-medium">
+          {isProposal
+            ? service.depositPercent >= 100
+              ? t.service.fullAgreedBeforeStart
+              : fill(t.service.depositPercentBeforeStart, { n: service.depositPercent })
+            : fill(
+                deposit.kind === "full" ? t.service.fullBeforeStart : t.service.depositBeforeStart,
+                { amount: money(deposit.cents) },
+              )}
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {isProposal
+            ? service.depositPercent >= 100
+              ? t.service.proposalFullThen
+              : t.service.proposalDepositThen
+            : deposit.kind === "full"
+              ? t.service.fullThen
+              : t.service.depositThen}
+        </p>
+      </div>
+    );
 
   const briefComplete = BRIEF_FIELDS.filter((f) => f.required).every((f) =>
     (brief[f.key] ?? "").trim(),
@@ -174,12 +209,26 @@ export function ServiceOrderFlow({
         })),
         acceptTos: true,
         isPublicInQueue: !hideFromQueue,
+        // ตัวเลขที่ลูกค้าเห็นอยู่ตอนกด — server เทียบกับที่คิดได้ ไม่ตรง = `changed` ไม่สร้างออเดอร์
+        expectedTotalCents: total,
+        expectedDepositCents: deposit.kind === "none" ? 0 : deposit.cents,
       });
 
       if (res.ok) {
         localStorage.removeItem(draftKey);
         toast.success(t.order.sent, { description: t.order.sentHint });
         router.push(dynamicHref(`/my/requests/${res.code}`));
+        return;
+      }
+
+      /**
+       * ครีเอเตอร์แก้เมนูระหว่างที่ฟอร์มเปิดค้าง — ดึงเมนูล่าสุดมาวาดใหม่ แล้วให้ลูกค้ากดเองอีกครั้ง
+       * ไม่ส่งซ้ำให้อัตโนมัติ: จุดประสงค์ทั้งหมดคือให้เห็นตัวเลขใหม่ก่อนผูกพัน
+       * สิ่งที่กรอกไว้ยังอยู่ครบ (state ของฟอร์มไม่ถูกล้างตอน refresh)
+       */
+      if (res.error === "changed") {
+        toast.error(t.orderError.changed);
+        router.refresh();
         return;
       }
 
@@ -410,6 +459,18 @@ export function ServiceOrderFlow({
 
           {step === 2 && (
             <div className="space-y-5">
+              {/*
+                ยอดที่ต้องจ่ายต้องอยู่เหนือปุ่มส่งเสมอ — บนมือถือการ์ดสรุปราคาไปอยู่ใต้ปุ่มส่ง
+                ลูกค้าจึงติ๊กยอมรับแล้วกดส่งโดยไม่เคยเห็นมัดจำ จอใหญ่ไม่ต้องซ้ำ การ์ดด้านข้างติดจออยู่แล้ว
+              */}
+              <Card className="gap-3 p-4 lg:hidden">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-medium">{t.service.total}</span>
+                  <span className="tabular text-lg font-semibold">{money(total)}</span>
+                </div>
+                {depositNotice}
+              </Card>
+
               <Card className="gap-3 p-4">
                 <p className="text-sm font-medium">{t.order.brief}</p>
                 <dl className="space-y-2 text-sm">
@@ -528,6 +589,7 @@ export function ServiceOrderFlow({
               <span className="tabular shrink-0">
                 {formatLineAmount(
                   line.unitPriceCents * line.quantity,
+                  line.kind,
                   t.service.includedInPrice,
                   shop.currency,
                   locale,
@@ -551,19 +613,7 @@ export function ServiceOrderFlow({
           "มัดจำตามที่ระบุในแต่ละแพ็กเกจ" ตัวเลขจริงมีที่นี่ที่เดียวก่อนออเดอร์เกิด
           ยอดเปลี่ยนตามระดับ/ตัวเลือกที่ติ๊ก เพราะคิดจากยอดรวมสด ๆ
         */}
-        {deposit.kind !== "none" ? (
-          <div className="mt-3 rounded-lg bg-muted/60 px-3 py-2">
-            <p className="tabular text-sm font-medium">
-              {fill(
-                deposit.kind === "full" ? t.service.fullBeforeStart : t.service.depositBeforeStart,
-                { amount: formatMoney(deposit.cents, shop.currency, locale) },
-              )}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {deposit.kind === "full" ? t.service.fullThen : t.service.depositThen}
-            </p>
-          </div>
-        ) : null}
+        {depositNotice ? <div className="mt-3">{depositNotice}</div> : null}
 
         <dl className="mt-4 space-y-1.5 text-xs text-muted-foreground">
           <div className="flex justify-between">

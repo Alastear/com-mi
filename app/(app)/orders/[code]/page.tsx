@@ -185,6 +185,7 @@ export default async function OrderPage({ params }: Props) {
                   <span className="tabular shrink-0">
                     {formatLineAmount(
                       i.unitPriceCents * i.quantity,
+                      i.kind,
                       t.service.includedInPrice,
                       order.currency,
                       locale,
@@ -206,7 +207,12 @@ export default async function OrderPage({ params }: Props) {
                 {formatMoney(order.amountPaidCents, order.currency, locale)}
               </span>
             </div>
-            {remaining > 0 ? (
+            {/*
+              ออเดอร์ที่ยกเลิก/ปฏิเสธ/หมดอายุไม่มียอดค้างให้ใครต้องจ่ายอีก — เดิมขึ้น "คงเหลือ ฿X"
+              สีเตือนบนงานที่ยกเลิกไปแล้ว อ่านเหมือนลูกค้ายังติดเงินอยู่ (แผงเงินฝั่งนี้ก็ไม่โชว์ยอดค้างแล้ว)
+              `completed` ยังโชว์ — งานที่เสร็จแล้วยังเคลียร์ยอดที่เหลือได้ (`paymentMode`)
+            */}
+            {mode === "closed" ? null : remaining > 0 ? (
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">{t.order.remaining}</span>
                 <span className="tabular text-warning">

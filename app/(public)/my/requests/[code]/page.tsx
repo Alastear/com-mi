@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleSlash } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -60,6 +60,16 @@ export default async function ClientRequestPage({ params }: Props) {
   const mode = paymentMode(status);
   const closed = closedText(t, status);
   const payments = toPaymentRows(order.payments);
+  /**
+   * หัวการ์ดบอกว่าออเดอร์อยู่ตรงไหน ไม่ใช่ "ส่งคำขอแล้ว" ตลอดกาล
+   *
+   * เดิมออเดอร์ที่ยกเลิก/ปฏิเสธ/หมดอายุยังขึ้นติ๊กเขียว "ส่งคำขอแล้ว — ครีเอเตอร์จะติดต่อกลับ"
+   * ลูกค้าจึงนั่งรอคนที่ปฏิเสธไปแล้ว ออเดอร์ที่จบแล้วใช้หัวข้อเดียวกับแผงเงิน (`closedText`)
+   * ไอคอนเป็นกลาง ไม่ใช่เครื่องหมายถูก — เสร็จสมบูรณ์เท่านั้นที่ได้ติ๊กเขียว
+   */
+  const header = closed
+    ? { title: closed.title, hint: closed.body, done: status === "completed" }
+    : { title: t.order.sent, hint: t.order.sentHint, done: true };
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -77,10 +87,14 @@ export default async function ClientRequestPage({ params }: Props) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-lg font-semibold">
-              <CheckCircle2 className="size-5 text-success" />
-              {t.order.sent}
+              {header.done ? (
+                <CheckCircle2 className="size-5 text-success" />
+              ) : (
+                <CircleSlash className="size-5 text-muted-foreground" />
+              )}
+              {header.title}
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">{t.order.sentHint}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{header.hint}</p>
           </div>
           <Badge variant="secondary">{t.orderStatus[order.status as OrderStatus]}</Badge>
         </div>
@@ -110,6 +124,7 @@ export default async function ClientRequestPage({ params }: Props) {
               <span className="tabular shrink-0">
                 {formatLineAmount(
                   item.unitPriceCents * item.quantity,
+                  item.kind,
                   t.service.includedInPrice,
                   order.currency,
                   locale,

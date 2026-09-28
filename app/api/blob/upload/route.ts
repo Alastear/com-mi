@@ -1,9 +1,12 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { handleUpload } from "@vercel/blob/client";
 import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { effectivePlan, PLANS, type PlanId } from "@/lib/billing/plans";
-import { isPublicKind, type MediaKind } from "@/lib/media/kinds";
+import { isClientTokenRequest, parseClientPayload } from "@/lib/blob/upload-body";
+import { toUploadError, uploadErrorResponse } from "@/lib/blob/upload-error";
+import { isPublicKind } from "@/lib/media/kinds";
+import { MAX_IMAGE_UPLOAD_BYTES } from "@/lib/media/prepare";
 import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/media/video";
 
 /**
@@ -21,7 +24,19 @@ import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_BYTES } from "@/lib/media/video";
  *    → ให้ client เรียก Server Action `registerMedia` แทน ซึ่งยืนยันขนาดไฟล์จริงด้วย head()
  */
 export async function POST(request: Request): Promise<Response> {
-  const body = (await request.json()) as HandleUploadBody;
+  /**
+   * ⚠️ แกะและตรวจ body เองก่อนส่งให้ `handleUpload` — แบบเดียวกับ /api/blob/delivery-upload
+   * เดิม `await request.json()` อยู่นอก try: body ว่างหรือไม่ใช่ JSON หลุดออกไปเป็น 500 ของ Next
+   * ส่วนใน try ทุก error (รวม Blob/DB ล่มจริง) ถูกตอบเป็น 400 พร้อมข้อความดิบจาก SDK
+   * ตอนนี้ request เสีย = 400, ระบบเสีย = 500, และออกไปได้แค่รหัสใน lib/blob/upload-error.ts
+   */
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return uploadErrorResponse("bad_request");
+  }
+  if (!isClientTokenRequest(body)) return uploadErrorResponse("bad_request");
 
   try {
     const result = await handleUpload({
@@ -29,9 +44,12 @@ export async function POST(request: Request): Promise<Response> {
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
         const session = await getSession();
-        if (!session) throw new Error("unauthorized");
+        if (!session) throw new Error("forbidden");
 
-        const kind = (JSON.parse(clientPayload ?? "{}") as { kind?: MediaKind }).kind;
+        // เดิม JSON.parse ตรง ๆ: "" หรือ "null" โยน error ดิบ แล้วข้อความนั้นถูกส่งกลับไปทั้งดุ้น
+        const payload = parseClientPayload(clientPayload);
+        if (!payload) throw new Error("bad_request");
+        const kind = payload.kind;
         /**
          * ⚠️ ยอมเฉพาะชนิดที่อยู่ store **สาธารณะ** เท่านั้น
          *
@@ -40,7 +58,7 @@ export async function POST(request: Request): Promise<Response> {
          * และจะไม่มี error ให้เห็นเลย — อัปโหลดสำเร็จปกติทุกอย่าง
          * ไฟล์ส่วนตัวมีเส้นทางของตัวเองที่ตรวจสิทธิ์ระดับออเดอร์
          */
-        if (!kind || !isPublicKind(kind)) throw new Error("invalid kind");
+        if (typeof kind !== "string" || !isPublicKind(kind)) throw new Error("bad_request");
 
         const plan = (session.user.plan ?? "free") as PlanId;
         const limits = (PLANS[effectivePlan(plan)] ?? PLANS.free).limits;
@@ -67,7 +85,7 @@ export async function POST(request: Request): Promise<Response> {
             : ["image/webp"],
           maximumSizeInBytes: isPortfolioVideo
             ? Math.min(limits.file_size_bytes * 2, MAX_VIDEO_BYTES)
-            : Math.min(limits.file_size_bytes, 12 * 1024 * 1024),
+            : Math.min(limits.file_size_bytes, MAX_IMAGE_UPLOAD_BYTES),
           addRandomSuffix: true,
           tokenPayload: JSON.stringify({ userId: session.user.id, kind }),
         };
@@ -76,8 +94,8 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "upload_failed";
-    console.error("[blob/upload]", message);
-    return Response.json({ error: message }, { status: 400 });
+    // log ข้อความจริงไว้ฝั่งเรา แต่ตอบ client ด้วยชุดรหัสที่ควบคุมได้เท่านั้น
+    console.error("[blob/upload]", err instanceof Error ? err.message : err);
+    return uploadErrorResponse(toUploadError(err));
   }
 }

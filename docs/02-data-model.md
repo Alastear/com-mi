@@ -264,7 +264,7 @@ Index: `(creatorPageId, status, createdAt)`, `(clientUserId, createdAt)`, `code`
 | `quoted` | ครีเอเตอร์ส่งใบเสนอราคา | `accepted` `declined` `expired` |
 | `accepted` | ลูกค้ายอมรับ + ชำระ (หรือมัดจำ) | `in_progress` `cancelled` |
 | `in_progress` | ครีเอเตอร์เริ่มงาน | `in_review` `cancelled` |
-| `in_review` | ครีเอเตอร์ส่ง WIP ให้ดู | `revision_requested` `delivered` |
+| `in_review` | ครีเอเตอร์ส่ง WIP ให้ดู | `revision_requested` `delivered` `in_progress` (ครีเอเตอร์ถอยกลับเอง ไม่นับสิทธิ์แก้) |
 | `revision_requested` | ลูกค้าขอแก้ | `in_progress` |
 | `delivered` | ครีเอเตอร์ส่งไฟล์จริง | `completed` |
 | `completed` | ลูกค้ายืนยันรับงาน / ผ่านไป 7 วันอัตโนมัติ | — |

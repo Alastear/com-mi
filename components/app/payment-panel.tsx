@@ -70,12 +70,16 @@ function errorText(t: Dictionary, error: Failure): string {
  * `over_outstanding` / `over_total` อยู่ในนี้ด้วย: ยอดคงค้างบนหน้าจอคือเพดานของช่องกรอก
  * และเป็นตัวตัดสินว่าปุ่มยืนยันกดได้ไหม (`fits`) ถ้าไม่รีเฟรช ฟอร์มจะยังยอมให้กดยอดเดิม
  * แล้วได้ error เดิมซ้ำ
+ *
+ * `order_closed` ด้วย: อีกฝ่ายเพิ่งยกเลิกออเดอร์ หน้านี้ยังโชว์ปุ่มเงินของออเดอร์ที่เปิดอยู่
+ * รีเฟรชแล้วแผงจะกลายเป็นประวัติแบบอ่านอย่างเดียวพร้อมบอกว่าออเดอร์จบแบบไหน
  */
 const REFRESH_ON: ReadonlySet<Failure> = new Set<Failure>([
   "stale",
   "pending_exists",
   "over_outstanding",
   "over_total",
+  "order_closed",
 ]);
 
 /**

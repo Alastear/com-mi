@@ -79,9 +79,15 @@ export function OrderActions({
 
   function move(to: OrderStatus) {
     start(async () => {
-      // ยกเลิกต้องบอก server ว่าเห็นเงินเท่าไร — ถ้าไม่ตรงของจริง server ปฏิเสธ (money_changed)
+      /**
+       * ส่งสถานะที่หน้านี้วาดอยู่ไปด้วยเสมอ — server ปฏิเสธ (`stale`) ถ้าของจริงเปลี่ยนไปแล้ว
+       * ไม่งั้นแท็บที่เปิดค้างจะกดขอแก้ไขกับรอบงานที่ลูกค้าไม่เคยเห็น แล้วเสียสิทธิ์ไปฟรี ๆ
+       * ยกเลิกต้องบอก server ด้วยว่าเห็นเงินเท่าไร — ถ้าไม่ตรงของจริง server ปฏิเสธ (money_changed)
+       */
       const res = await transitionOrder(
-        to === "cancelled" ? { code, to, moneyAck: moneyAckFrom(money) } : { code, to },
+        to === "cancelled"
+          ? { code, from: status, to, moneyAck: moneyAckFrom(money) }
+          : { code, from: status, to },
       );
       // ปิด dialog ทั้งตอนสำเร็จและล้มเหลว — ล้มเหลวแล้ว toast บอกเหตุผลอยู่แล้ว
       // ค้าง dialog ไว้จะทำให้คนกดยืนยันซ้ำกับสถานะที่เปลี่ยนไปแล้ว
@@ -107,8 +113,12 @@ export function OrderActions({
                   ? t.order.moveNotAllowed
                   : t.error.title,
         );
-        // สิทธิ์หมดแปลว่าหน้าจอถือเลขเก่าอยู่ — รีเฟรชให้ปุ่มหายและข้อความอธิบายขึ้นแทน
-        if (res.error === "revisions_exhausted" || res.error === "money_changed") router.refresh();
+        /**
+         * ล้มเหลวแบบไหนก็แปลว่าหน้าจอถือของเก่าอยู่ — สถานะ เงิน หรือโควตาเปลี่ยนไปแล้ว
+         * รีเฟรชเสมอ ไม่ใช่แค่บางแบบ: เดิม `stale`/`not_allowed` หลังกดยืนยันยกเลิกใน dialog
+         * ปิด dialog แล้วทิ้งปุ่มเดิมไว้ คนกดซ้ำก็เจอ error เดิมซ้ำ ทั้งที่ของจริงไปไกลแล้ว
+         */
+        if (res.error !== "invalid") router.refresh();
       }
     });
   }
@@ -134,7 +144,7 @@ export function OrderActions({
           onClick={() => press(to)}
           className="text-muted-foreground hover:text-destructive"
         >
-          {actionLabel(t, to, actor)}
+          {actionLabel(t, to, actor, status)}
         </Button>
       ))}
 
@@ -149,7 +159,7 @@ export function OrderActions({
             onClick={() => press(to)}
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-            {actionLabel(t, to, actor)}
+            {actionLabel(t, to, actor, status)}
           </Button>
         ))}
       </div>

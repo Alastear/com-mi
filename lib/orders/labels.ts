@@ -18,6 +18,8 @@ export function actionLabel(
   t: Dictionary,
   to: OrderStatus,
   actor: Actor,
+  /** สถานะตอนนี้ — ปลายทางเดียวกันจากคนละต้นทางอาจต้องใช้คำต่างกัน */
+  from?: OrderStatus,
 ): string {
   const a = t.orderAction;
   switch (to) {
@@ -29,7 +31,8 @@ export function actionLabel(
       // ครีเอเตอร์ = รับงานเข้าคิว · ลูกค้า = ตอบรับใบเสนอราคา
       return actor === "creator" ? a.acceptOrder : a.markComplete;
     case "in_progress":
-      return a.startWork;
+      // ถอยจากรอบตรวจกลับมาทำต่อ ไม่ใช่ "เริ่มทำงาน" — งานเริ่มไปนานแล้ว
+      return from === "in_review" ? a.backToWork : a.startWork;
     case "in_review":
       return a.submitWip;
     case "delivered":

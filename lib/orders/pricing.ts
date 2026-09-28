@@ -337,11 +337,24 @@ export function depositSummary(totalCents: number, percent: number): DepositSumm
 /**
  * แปลงมัดจำที่เป็นเงินกลับเป็นเปอร์เซ็นต์ — ใช้ตั้งต้นปุ่มในตัวเขียนใบเสนอราคา
  *
- * ย้อนกลับได้ไม่เป๊ะเพราะ `depositFor()` ปัดเป็นบาทเต็ม (เพี้ยนได้ไม่ถึง 1% บนยอดปกติ)
- * `Math.round` จึงคืนปุ่มเดิมที่ตั้งไว้ ค่าเพี้ยนหรือยอดรวมไม่บวกคืน 0 ไม่ใช่ NaN
+ * ⚠️ `Math.round(มัดจำ / ยอดรวม)` อย่างเดียวย้อนกลับไม่ได้บนยอดน้อย เพราะ `depositFor()`
+ * ปัดเป็นบาทเต็ม: ฿90 ที่ 25% = ฿22.50 ปัดเป็น ฿23 → 23/90 = 25.6% → ได้ 26
+ * ซึ่งไม่มีปุ่มไหนตรง ตัวเขียนใบจึงขึ้นโดยไม่มีปุ่มถูกเลือกสักปุ่ม ทั้งที่เงินมาจากปุ่ม 25% พอดี
+ *
+ * จึงถามกลับด้านก่อน: "ปุ่มไหนคิดแล้วได้เงินก้อนนี้เป๊ะ" (ถ้าหลายปุ่มได้เท่ากัน — ยอดน้อยมาก
+ * จนปัดชนกัน — เลือกปุ่มที่ใกล้สัดส่วนจริงที่สุด) ไม่มีปุ่มไหนตรงเลย = ข้อมูลที่ไม่ได้มาจากปุ่ม
+ * (ตั้งผ่านทางอื่น/ของเก่า) คืนค่าที่ปัดแล้วเหมือนเดิม ไม่แอบเปลี่ยนเป็นปุ่มที่ใกล้สุด
+ * เพราะนั่นคือการเปลี่ยนมัดจำที่ครีเอเตอร์ไม่ได้เลือกเอง
+ *
+ * ค่าเพี้ยนหรือยอดรวมไม่บวกคืน 0 ไม่ใช่ NaN
  */
 export function depositPercentOf(depositCents: number, totalCents: number): number {
   if (!Number.isFinite(depositCents) || !Number.isFinite(totalCents)) return 0;
   if (totalCents <= 0 || depositCents <= 0) return 0;
-  return Math.min(100, Math.round((depositCents / totalCents) * 100));
+  const ratio = (depositCents / totalCents) * 100;
+  const exact = DEPOSIT_PERCENTS.filter((p) => depositFor(totalCents, p) === depositCents);
+  if (exact.length > 0) {
+    return exact.reduce((best, p) => (Math.abs(p - ratio) < Math.abs(best - ratio) ? p : best));
+  }
+  return Math.min(100, Math.round(ratio));
 }

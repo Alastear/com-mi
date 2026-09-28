@@ -67,6 +67,38 @@ describe("depositPercentOf — กู้ปุ่มเปอร์เซ็น�
   it("ข้อมูลเก่าที่มัดจำเกินยอดรวมไม่เกิน 100", () => {
     assert.equal(depositPercentOf(200_000, 80_000), 100);
   });
+
+  it("ยอดต่ำกว่า ฿100 — ฿90 ที่ 25% ปัดเป็น ฿23 ต้องได้ปุ่ม 25 กลับมา ไม่ใช่ 26", () => {
+    // เดิม Math.round(2300 / 9000 * 100) = 26 ซึ่งไม่มีปุ่มไหนตรง ตัวเขียนใบขึ้นโดยไม่มีปุ่มถูกเลือก
+    assert.equal(depositFor(9_000, 25), 2_300);
+    assert.equal(depositPercentOf(2_300, 9_000), 25);
+  });
+
+  it("ทุกยอดตั้งแต่ ฿1 ถึง ฿150 ทุกปุ่ม: คืนปุ่มที่มีจริง และคิดกลับได้เงินก้อนเดิมเป๊ะ", () => {
+    for (let baht = 1; baht <= 150; baht++) {
+      const total = baht * 100;
+      for (const pct of DEPOSIT_PERCENTS) {
+        const deposit = depositFor(total, pct);
+        const back = depositPercentOf(deposit, total);
+        assert.ok(
+          (DEPOSIT_PERCENTS as readonly number[]).includes(back),
+          `฿${baht} @ ${pct}% → ${back} ไม่ใช่ปุ่ม`,
+        );
+        assert.equal(depositFor(total, back), deposit, `฿${baht} @ ${pct}% → ${back}`);
+      }
+    }
+  });
+
+  it("หลายปุ่มได้เงินเท่ากัน (ยอดน้อยจนปัดชน) เลือกปุ่มที่ใกล้สัดส่วนจริงที่สุด", () => {
+    // ฿1: 50% กับ 100% ปัดแล้วได้ ฿1 เท่ากัน — มัดจำเต็มยอดจึงควรกลับเป็น 100
+    assert.equal(depositFor(100, 50), 100);
+    assert.equal(depositPercentOf(100, 100), 100);
+  });
+
+  it("มัดจำที่ไม่ได้มาจากปุ่มไหนเลย คืนสัดส่วนที่ปัดแล้ว ไม่แอบเปลี่ยนเป็นปุ่มใกล้สุด", () => {
+    // 30% ของ ฿1,000 — ไม่มีปุ่ม 30 ถ้าปัดเป็น 25 ครีเอเตอร์ที่กดส่งโดยไม่ดูจะได้มัดจำที่ไม่ได้เลือก
+    assert.equal(depositPercentOf(30_000, 100_000), 30);
+  });
 });
 
 describe("มัดจำของออเดอร์จากเมนู", () => {

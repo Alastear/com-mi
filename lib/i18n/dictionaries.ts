@@ -601,8 +601,13 @@ const th = {
     freeLimitA:
       "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 2 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องจนเกินเพดานเหล่านี้",
     downgradeQ: "ถ้ายกเลิก Pro ข้อมูลหายไหม",
+    /**
+     * ⚠️ พูดเฉพาะสิ่งที่โค้ดทำจริง — เดิมสัญญาว่า "ของที่เกินโควตาจะถูกซ่อน แล้วแสดงกลับเมื่อสมัครใหม่"
+     * ซึ่งไม่มีโค้ดไหนทำ ลิมิตทุกตัวเช็คตอน "เพิ่มใหม่" เท่านั้น ของเดิมจึงไม่ถูกแตะเลย
+     * ส่วนพื้นที่เก็บเช็คตอนอัปไฟล์ส่งมอบด้วย (lib/delivery/register.ts) ต้องบอกไว้ เพราะกระทบงานที่ค้างอยู่
+     */
     downgradeA:
-      "ไม่หายครับ งานที่รับอยู่ทำต่อจนจบได้ตามปกติ ส่วนเมนูและผลงานที่เกินโควตาจะถูกซ่อนไว้เฉย ๆ กลับมาสมัคร Pro เมื่อไหร่ก็แสดงกลับทันที",
+      "ไม่หายครับ ไม่มีอะไรถูกลบหรือซ่อน เมนูและผลงานที่มีอยู่ยังแสดงบนหน้าร้านตามเดิม แค่เพิ่มใหม่เกินโควตาแพ็กเกจฟรีไม่ได้ รับงานใหม่ได้เมื่องานที่ทำอยู่เหลือไม่ถึง 5 งาน และถ้าพื้นที่ที่ใช้เกิน 2 GB จะอัปไฟล์ใหม่ไม่ได้ (รวมไฟล์ส่งมอบ) จนกว่าจะลบไฟล์ให้อยู่ในโควตา",
     freeBullets: {
       orders: "รับงานพร้อมกัน 5 งาน",
       services: "เมนูรับงาน 5 รายการ",
@@ -639,7 +644,8 @@ const th = {
       services: "จำนวนเมนูรับงาน",
       active: "งานที่รับพร้อมกัน",
       form: "ฟอร์มบรีฟ",
-      milestone: "งวดงาน / มัดจำแบ่งจ่าย",
+      deposit: "มัดจำก่อนเริ่มงาน + จ่ายส่วนที่เหลือก่อนรับไฟล์",
+      milestone: "แบ่งงานเป็นหลายงวด",
       inapp: "แจ้งเตือนในเว็บ",
       email: "อีเมลทันทีเมื่อมีงานใหม่และการโอนเงิน",
       push: "Web Push บนเบราว์เซอร์",
@@ -649,7 +655,7 @@ const th = {
       waitlist: "ยิงแจ้งเตือนรายชื่อรอทั้งหมด",
       crm: "CRM ลูกค้า (แท็ก โน้ต blacklist)",
       storage: "พื้นที่เก็บไฟล์",
-      filesize: "ขนาดไฟล์ต่อชิ้น",
+      filesize: "ขนาดรูป/คลิปบนหน้าร้าน ต่อชิ้น",
       retention: "เก็บไฟล์ส่งมอบ",
       analytics: "สถิติและ export ข้อมูล",
     },
@@ -659,6 +665,8 @@ const th = {
       fullyCustom: "สร้างเอง",
       days90: "90 วัน",
       forever: "ถาวร",
+      /** ⚠️ ตัวเลขต้องตรง `MAX_IMAGE_UPLOAD_BYTES` / `MAX_VIDEO_BYTES` — มีเทสต์ผูกไว้ */
+      fileSizeNow: "รูป 12 MB · คลิป 40 MB",
     },
   },
 
@@ -768,6 +776,12 @@ const th = {
     depositThen: "โอนหลังครีเอเตอร์ตอบรับ ส่วนที่เหลือจ่ายก่อนรับไฟล์งาน",
     fullBeforeStart: "ชำระเต็ม {amount} ก่อนเริ่มงาน",
     fullThen: "โอนหลังครีเอเตอร์ตอบรับงานแล้ว",
+    /** เมนูแบบเสนอราคา — ราคาจริงมาจากใบเสนอราคา จึงพูดเป็นเปอร์เซ็นต์ ไม่ใช่เงินจากราคาเริ่มต้น */
+    depositPercentBeforeStart: "มัดจำ {n}% ของราคาที่ตกลงกัน ก่อนเริ่มงาน",
+    fullAgreedBeforeStart: "ชำระเต็มราคาที่ตกลงกันก่อนเริ่มงาน",
+    proposalDepositThen:
+      "ราคาจริงอาจต่างจากราคาเริ่มต้น ครีเอเตอร์จะยืนยันราคาและมัดจำก่อนคุณโอน ส่วนที่เหลือจ่ายก่อนรับไฟล์งาน",
+    proposalFullThen: "ราคาจริงอาจต่างจากราคาเริ่มต้น ครีเอเตอร์จะยืนยันราคาก่อนคุณโอน",
     cover: "รูปหน้าปก",
     includesLabel: "สิ่งที่ลูกค้าจะได้รับ",
     includesHint: "กรอกบรรทัดละข้อ",
@@ -873,6 +887,7 @@ const th = {
     ownShop: "สั่งงานร้านของตัวเองไม่ได้",
     creatorFull: "คิวของครีเอเตอร์เต็มแล้ว ลองใหม่อีกครั้งภายหลัง",
     rateLimited: "ส่งคำขอถี่เกินไป ลองใหม่ในอีก {n} นาที",
+    changed: "ครีเอเตอร์เพิ่งแก้ราคาหรือมัดจำของเมนูนี้ — ยังไม่ได้ส่งคำขอ ตรวจยอดล่าสุดแล้วกดส่งอีกครั้ง",
     signInFirst: "เข้าสู่ระบบก่อนส่งคำขอ — ข้อมูลที่กรอกไว้จะถูกเก็บไว้ให้",
   },
 
@@ -907,6 +922,8 @@ const th = {
     decline: "ปฏิเสธคำขอ",
     editQuote: "แก้ไขใบเสนอราคา",
     startWork: "เริ่มทำงาน",
+    /** ครีเอเตอร์ถอยจาก "รอลูกค้าตรวจ" กลับไปทำต่อ — ไม่นับสิทธิ์แก้ของลูกค้า */
+    backToWork: "กลับไปทำต่อ (ไม่นับสิทธิ์ลูกค้า)",
     submitWip: "ส่งงานให้ตรวจ",
     submitRevision: "ส่งงานที่แก้แล้ว",
     deliver: "ส่งไฟล์จริง",
@@ -1745,7 +1762,7 @@ const en: Dictionary = {
       "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 2 GB of storage — enough room for video clips. Pro is for people taking work continuously who outgrow those limits.",
     downgradeQ: "If I cancel Pro, do I lose my data?",
     downgradeA:
-      "No. Orders in progress finish normally. Menu items and portfolio pieces over the quota are just hidden, and reappear the moment you resubscribe.",
+      "No. Nothing is deleted or hidden — your menu items and portfolio stay on your shop as they are. You just can't add more than the free plan allows, new orders come in once you have fewer than 5 in progress, and if you are using more than 2 GB you can't upload new files (delivery files included) until you are back under it.",
     freeBullets: {
       orders: "5 concurrent orders",
       services: "5 menu items",
@@ -1780,7 +1797,8 @@ const en: Dictionary = {
       services: "Commission menu items",
       active: "Concurrent orders",
       form: "Brief form",
-      milestone: "Milestones and split deposits",
+      deposit: "Deposit before work, the rest before delivery",
+      milestone: "Multi-stage milestones",
       inapp: "In-app notifications",
       email: "Instant email for new orders and payments",
       push: "Browser push",
@@ -1790,7 +1808,7 @@ const en: Dictionary = {
       waitlist: "Broadcast to your waitlist",
       crm: "Client CRM (tags, notes, blacklist)",
       storage: "File storage",
-      filesize: "Max file size",
+      filesize: "Max size per shop image / clip",
       retention: "Delivery file retention",
       analytics: "Analytics and data export",
     },
@@ -1800,6 +1818,7 @@ const en: Dictionary = {
       fullyCustom: "Fully custom",
       days90: "90 days",
       forever: "Forever",
+      fileSizeNow: "Images 12 MB · clips 40 MB",
     },
   },
 
@@ -1901,6 +1920,12 @@ const en: Dictionary = {
     depositThen: "Paid once the creator accepts. The rest is due before you get the files.",
     fullBeforeStart: "Full {amount} due before work starts",
     fullThen: "Paid once the creator accepts.",
+    depositPercentBeforeStart: "{n}% of the agreed price as a deposit before work starts",
+    fullAgreedBeforeStart: "The full agreed price is due before work starts",
+    proposalDepositThen:
+      "The final price may differ from the starting price. The creator confirms the price and deposit before you pay. The rest is due before you get the files.",
+    proposalFullThen:
+      "The final price may differ from the starting price. The creator confirms it before you pay.",
     cover: "Cover image",
     includesLabel: "What the client gets",
     includesHint: "One per line",
@@ -2004,6 +2029,8 @@ const en: Dictionary = {
     ownShop: "You cannot order from your own shop",
     creatorFull: "The creator's queue is full. Try again later.",
     rateLimited: "Too many requests. Try again in {n} minutes.",
+    changed:
+      "The creator just changed this menu's price or deposit. Your request was not sent — check the new total and send again.",
     signInFirst: "Sign in to send your request — what you filled in will be kept",
   },
 
@@ -2037,6 +2064,7 @@ const en: Dictionary = {
     decline: "Decline request",
     editQuote: "Edit quote",
     startWork: "Start work",
+    backToWork: "Back to work (does not use the client's revisions)",
     submitWip: "Submit for review",
     submitRevision: "Submit revision",
     deliver: "Deliver final files",

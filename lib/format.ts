@@ -18,22 +18,30 @@ export function formatMoney(cents: number, currency = "THB", locale: Locale = "t
 }
 
 /**
- * ยอดของหนึ่งบรรทัดในสรุปราคา — บรรทัดที่เป็นศูนย์ขึ้นว่า "รวมในราคา" แทน "฿0"
+ * ยอดของหนึ่งบรรทัดในสรุปราคา — ระดับ/ตัวเลือกที่เป็นศูนย์ขึ้นว่า "รวมในราคา" แทน "฿0"
  *
  * ระดับที่ไม่บวกเงินเพิ่ม (เช่น "ลงสีเต็ม +0") ถูกเก็บเป็นบรรทัดของตัวเองเสมอ
  * เพราะออเดอร์ต้องจำว่าลูกค้าเลือกระดับไหน พอแสดงเป็น "Full render ฿0"
  * คนอ่านเข้าใจว่าได้งานนั้นฟรี หรือราคาหลักไม่ได้รวมมันไว้ ทั้งที่ยอดอยู่ในบรรทัดแรกแล้ว
+ *
+ * ⚠️ เฉพาะ `tier` / `option` เท่านั้น — สองชนิดนี้คือ "ของที่เลือกแล้วรวมอยู่ในราคาหลัก"
+ * บรรทัดอื่นที่เป็นศูนย์ไม่ได้แปลว่ารวมในราคา: บรรทัดหลัก ฿0 ของเมนูแบบเสนอราคาคือ
+ * "ยังไม่ได้ตั้งราคา" และบรรทัดตัวคูณที่ปัดแล้วเหลือ ฿0 คือคิดเพิ่มศูนย์บาทจริง ๆ
+ * ถ้าเขียนว่า "รวมในราคา" ทั้งสองกรณี ลูกค้าจะอ่านว่ามีราคาอยู่แล้วทั้งที่ไม่มี
  *
  * ⚠️ แตะแค่การแสดงผล — บรรทัดและยอดที่เก็บไม่เปลี่ยน ผลรวมของบรรทัดยังเท่ากับยอดรวมเสมอ
  * ใช้ทุกที่ที่เรนเดอร์บรรทัดราคา ไม่งั้นลูกค้าเห็นคำหนึ่งตอนสั่ง อีกคำหนึ่งหลังสั่ง
  */
 export function formatLineAmount(
   cents: number,
+  /** `PriceLine.kind` / `order_item.kind` */
+  kind: string,
   includedLabel: string,
   currency = "THB",
   locale: Locale = "th",
 ): string {
-  return cents === 0 ? includedLabel : formatMoney(cents, currency, locale);
+  const includable = kind === "tier" || kind === "option";
+  return cents === 0 && includable ? includedLabel : formatMoney(cents, currency, locale);
 }
 
 export function formatNumber(value: number, locale: Locale = "th"): string {

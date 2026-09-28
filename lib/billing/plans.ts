@@ -261,9 +261,16 @@ const UNLIMITED_CELL = { t: "unlimited" } as const;
  *   theme      คอลัมน์ `creator_page.theme` มีแต่ไม่มีใครเขียนหรืออ่าน ปุ่มสีในตั้งค่ากดแล้วไม่มีผล
  *   badge      บรรทัด "สร้างด้วย com-mi" แสดงทุกร้านเสมอ ไม่มีสวิตช์
  *   form       ฟอร์มบรีฟเป็นชุดเดียวที่เขียนตายไว้ใน service-order-flow.tsx ไม่มีทั้ง 3 ชุดและแบบสร้างเอง
- *   milestone  มีแค่มัดจำก้อนเดียว ไม่มีงวดงาน
+ *   milestone  งวดงานหลายงวด — ที่มีจริงคือมัดจำก้อนเดียว + ส่วนที่เหลือก่อนรับไฟล์ ซึ่งแยกเป็นแถว
+ *              `deposit` ที่ใช้ได้ทั้งสองแพ็กเกจ (เดิมแถวนี้ชื่อ "งวดงาน / มัดจำแบ่งจ่าย" ติด Pro + เร็ว ๆ นี้
+ *              ทั้งแถว ทำเหมือนมัดจำยังไม่มีและจะเป็นของ Pro ทั้งที่ทุกคนใช้อยู่แล้ว)
  *   push / discord / listing / auction / waitlist / crm / analytics
  *              ไม่มีโค้ดเลย หน้า /listings /clients /analytics เป็นภาพตัวอย่างใต้ป้าย "กำลังพัฒนา"
+ *
+ * แถว `filesize` เดิมบอก Free 50 MB / Pro 200 MB ต่อไฟล์ — ไม่มีโค้ดไหนแยกตามแพ็กเกจจริง
+ * route อัปโหลดตัด `file_size_bytes` ด้วยเพดานคงที่ (รูปหลังย่อ `MAX_IMAGE_UPLOAD_BYTES`,
+ * คลิป `MAX_VIDEO_BYTES`) ทุกแพ็กเกจจึงได้เท่ากัน และไฟล์ส่งมอบไม่มีเพดานต่อไฟล์เลย
+ * (นับรวมในพื้นที่เก็บเท่านั้น) แถวนี้จึงโชว์ตัวเลขที่บังคับจริงของรูปและคลิปหน้าร้าน
  *
  * แถวอีเมลเดิมบอกว่า Free ได้ "สรุปวันละครั้ง" Pro ได้ "ทันที" — ระบบ digest ไม่เคยถูกสร้าง
  * ของจริงคือทุกแพ็กเกจได้อีเมลทันทีเฉพาะงานใหม่กับเรื่องเงิน (lib/email/notify.ts)
@@ -285,6 +292,7 @@ export const COMPARISON: ComparisonGroup[] = [
       { key: "services", free: "5", pro: UNLIMITED_CELL },
       { key: "active", free: "5", pro: UNLIMITED_CELL },
       { key: "form", free: { t: "presets3" }, pro: { t: "fullyCustom" }, soon: true },
+      { key: "deposit", free: true, pro: true },
       { key: "milestone", free: false, pro: true, soon: true },
     ],
   },
@@ -310,7 +318,7 @@ export const COMPARISON: ComparisonGroup[] = [
     key: "other",
     rows: [
       { key: "storage", free: "2 GB", pro: "20 GB" },
-      { key: "filesize", free: "50 MB", pro: "200 MB" },
+      { key: "filesize", free: { t: "fileSizeNow" }, pro: { t: "fileSizeNow" } },
       { key: "retention", free: { t: "days90" }, pro: { t: "forever" } },
       { key: "analytics", free: false, pro: true, soon: true },
     ],

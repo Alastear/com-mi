@@ -2,6 +2,7 @@
 
 import { useMemo, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, Clock, LayoutGrid, List, MoveRight } from "lucide-react";
 import { toast } from "sonner";
 import { ArtImage } from "@/components/art-image";
@@ -55,6 +56,7 @@ export type BoardOrder = {
  */
 export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
   const { t, locale } = useLocale();
+  const router = useRouter();
   const [view, setView] = useState<"board" | "list">("board");
   const [dragging, setDragging] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<BoardColumn | null>(null);
@@ -84,9 +86,15 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
   );
 
   function move(code: string, to: OrderStatus) {
+    /**
+     * สถานะที่การ์ดใบนี้วาดอยู่ — มาจาก `orders` (ข้อมูลจาก server) ไม่ใช่ `items` ที่ถูกขยับล่วงหน้าแล้ว
+     * server ปฏิเสธเป็น `stale` ถ้าของจริงเปลี่ยนไปจากที่บอร์ดนี้เห็น ดู `from` ใน transitionOrder
+     */
+    const from = orders.find((o) => o.code === code)?.status;
+    if (!from) return;
     startMove(async () => {
       moveOptimistic({ code, to });
-      const res = await transitionOrder({ code, to });
+      const res = await transitionOrder({ code, from, to });
       if (res.ok) {
         toast.success(`#${code} → ${t.orderStatus[to]}`);
       } else {
@@ -98,6 +106,8 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
               ? t.order.moveNotAllowed
               : t.error.title,
         );
+        // บอร์ดถือ snapshot เก่าอยู่ — ดึงของจริงมาวาดใหม่ ไม่งั้นลากซ้ำก็เจอ error เดิม
+        router.refresh();
       }
     });
   }

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { consumesRevision, revisionHint, revisionQuota } from "./revisions";
-import { canTransition } from "./state-machine";
-import { eventText } from "./labels";
+import { allowedNext, canTransition } from "./state-machine";
+import { actionLabel, eventText } from "./labels";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { ORDER_STATUSES } from "@/lib/types";
 
@@ -70,6 +70,29 @@ describe("การเปลี่ยนสถานะที่กินโค�
      */
     assert.equal(canTransition("delivered", "revision_requested", "creator"), true);
     assert.equal(canTransition("in_review", "revision_requested", "creator"), false);
+  });
+});
+
+describe("ครีเอเตอร์ถอยจากรอบตรวจกลับไปทำต่อ", () => {
+  it("in_review → in_progress กดได้เฉพาะครีเอเตอร์ และไม่กินโควตาของลูกค้า", () => {
+    /**
+     * ไม่มีเส้นนี้ in_review เป็นทางเดียว: ลูกค้าใช้สิทธิ์ครบ ปุ่มขอแก้หาย ครีเอเตอร์ยอมแก้ให้ตามที่ทักในแชท
+     * แต่ออกได้แค่ส่งไฟล์จริง (ต้องจ่ายครบ) หรือยกเลิก — สถานะค้าง "รอลูกค้าตรวจ" ทั้งที่กำลังแก้อยู่
+     */
+    assert.equal(canTransition("in_review", "in_progress", "creator"), true);
+    assert.equal(canTransition("in_review", "in_progress", "client"), false);
+    assert.ok(allowedNext("in_review", "creator").includes("in_progress"));
+    assert.equal(consumesRevision("in_progress", "creator"), false);
+  });
+
+  it("ปุ่มบอกว่ากลับไปทำต่อ ไม่ใช่ 'เริ่มทำงาน' และบอกว่าไม่นับสิทธิ์ลูกค้า ทั้งสองภาษา", () => {
+    for (const t of [th, en]) {
+      assert.equal(actionLabel(t, "in_progress", "creator", "in_review"), t.orderAction.backToWork);
+      assert.notEqual(t.orderAction.backToWork, t.orderAction.startWork);
+      // จากสถานะอื่นยังเป็น "เริ่มทำงาน" เหมือนเดิม
+      assert.equal(actionLabel(t, "in_progress", "creator", "accepted"), t.orderAction.startWork);
+      assert.equal(actionLabel(t, "in_progress", "creator"), t.orderAction.startWork);
+    }
   });
 });
 

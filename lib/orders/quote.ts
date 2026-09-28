@@ -318,13 +318,63 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
   const lines = quote.lines ?? [];
   if (lines.length === 0) return { ok: false, error: "not_found" };
 
-  await db.batch([
+  const at = now.toISOString();
+
+  /**
+   * "ใบนี้ถูกยอมรับโดย request นี้จริง" — accepted_at ตรงกับเวลาของ request นี้ถึงมิลลิวินาที
+   *
+   * batch ไม่มี if: คำสั่งทุกตัวรันเสมอ ถ้าไม่ผูกทุกการเขียนที่ตามมาไว้กับเงื่อนไขนี้
+   * การกดที่แพ้ (กดซ้ำ ใบถูกแทนที่ระหว่างทาง ลูกค้ายกเลิกไปก่อน) จะยังลบบรรทัดราคาของออเดอร์
+   * แล้วเขียนบรรทัดของใบที่ไม่ได้ถูกยอมรับลงไปแทน และทิ้ง event "ยอมรับใบเสนอราคา" ซ้ำในเธรด
+   */
+  const acceptedHere = sql`select 1 from order_quote q
+    where q.id = ${quoteId} and q.accepted_at = ${at}::timestamptz`;
+
+  const itemRows = sql.join(
+    lines.map(
+      (line, i) =>
+        sql`(${newId("oitm")}::text, ${order.id}::text, ${line.label}::text, 'custom'::text,
+             ${line.amountCents}::int, 1, null::text, ${i}::int)`,
+    ),
+    sql`, `,
+  );
+
+  const [, acceptedQuote, updatedOrder] = await db.batch([
     /**
-     * ⚠️ เงื่อนไขท้ายบรรทัดคือด่านกันกดซ้ำ
+     * ล็อกแถวออเดอร์ก่อนทุกอย่าง — สถานะที่คำสั่งถัดไปเห็นจะไม่เปลี่ยนจนจบ batch
+     * ลำดับการล็อกเหมือนทุก batch ที่แตะออเดอร์: ออเดอร์ก่อน แล้วค่อยแถวลูก
+     */
+    db
+      .select({ id: schema.order.id })
+      .from(schema.order)
+      .where(eq(schema.order.id, order.id))
+      .for("update"),
+
+    /**
+     * ⚠️ แถวใบคือตัวตัดสิน — compare-and-set ว่าใบยังเปิดอยู่ ยังไม่หมดอายุ และออเดอร์ยัง `quoted`
      *
-     * `status = quoted` และ `accepted_at is null` ทำให้การกดครั้งที่สอง
-     * อัปเดตศูนย์แถว แทนที่จะเขียนราคาทับรอบสอง — ซึ่งถ้าเป็นใบคนละใบ
-     * จะกลายเป็นเปลี่ยนราคาออเดอร์ที่ตกลงกันไปแล้ว
+     * เดิม UPDATE ออเดอร์เช็คแค่ `status = quoted` ไม่ได้เช็คใบ: ครีเอเตอร์ออกใบใหม่ทับพอดี
+     * ระหว่างที่เราอ่านกับเขียน ออเดอร์ก็ยังเป็น `quoted` อยู่ UPDATE จึงผ่านและเขียนราคาของใบที่ตายแล้ว
+     * ใบที่ถูกแทนที่แล้วถูกล็อกโดย `issueQuote` อยู่ = คำสั่งนี้รอ แล้วเช็คใหม่กับค่าที่ commit แล้วเอง
+     */
+    db
+      .update(schema.orderQuote)
+      .set({ acceptedAt: now })
+      .where(
+        and(
+          eq(schema.orderQuote.id, quoteId),
+          eq(schema.orderQuote.orderId, order.id),
+          isNull(schema.orderQuote.acceptedAt),
+          isNull(schema.orderQuote.supersededAt),
+          sql`(${schema.orderQuote.expiresAt} is null or ${schema.orderQuote.expiresAt} > ${at}::timestamptz)`,
+          sql`exists (select 1 from "order" o where o.id = ${order.id} and o.status = ${from})`,
+        ),
+      )
+      .returning({ id: schema.orderQuote.id }),
+
+    /**
+     * ราคาจากใบลงออเดอร์ — เฉพาะเมื่อคำสั่งข้างบนเพิ่งยอมรับใบนี้จริง
+     * ออเดอร์ถูกล็อกไว้แล้ว `status = quoted` จึงยังจริงเสมอถ้าคำสั่งข้างบนผ่าน สองคำสั่งนี้ผ่านหรือตกด้วยกัน
      */
     db
       .update(schema.order)
@@ -336,45 +386,63 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
         depositCents: quote.depositCents,
         updatedAt: now,
       })
-      .where(and(eq(schema.order.id, order.id), eq(schema.order.status, from))),
-
-    db
-      .update(schema.orderQuote)
-      .set({ acceptedAt: now })
       .where(
         and(
-          eq(schema.orderQuote.id, quoteId),
-          isNull(schema.orderQuote.acceptedAt),
-          isNull(schema.orderQuote.supersededAt),
+          eq(schema.order.id, order.id),
+          eq(schema.order.status, from),
+          sql`exists (${acceptedHere})`,
         ),
-      ),
+      )
+      .returning({ id: schema.order.id }),
 
     // บรรทัดเดิมมาจากเมนูตอนสั่ง ตอนนี้ราคาไม่ได้มาจากเมนูแล้ว — ต้องหายไปทั้งชุด
-    db.delete(schema.orderItem).where(eq(schema.orderItem.orderId, order.id)),
+    db
+      .delete(schema.orderItem)
+      .where(and(eq(schema.orderItem.orderId, order.id), sql`exists (${acceptedHere})`)),
 
-    db.insert(schema.orderItem).values(
-      lines.map((line, i) => ({
-        id: newId("oitm"),
-        orderId: order.id,
-        label: line.label,
-        kind: "custom",
-        unitPriceCents: line.amountCents,
-        quantity: 1,
-        sourceId: null,
-        sortOrder: i,
-      })),
-    ),
+    /**
+     * `insert ... select ... where exists` แทน `insert().values()` เพื่อให้มีเงื่อนไขได้
+     * ทุกพารามิเตอร์มี cast — ใน select list Postgres เดาชนิดไม่ได้และจะถือเป็น text
+     */
+    db.execute(sql`
+      insert into order_item (id, order_id, label, kind, unit_price_cents, quantity, source_id, sort_order)
+      select v.id, v.order_id, v.label, v.kind, v.unit_price_cents, v.quantity, v.source_id, v.sort_order
+      from (values ${itemRows})
+        as v (id, order_id, label, kind, unit_price_cents, quantity, source_id, sort_order)
+      where exists (${acceptedHere})
+    `),
 
-    db.insert(schema.message).values({
-      id: newId("msg"),
-      orderId: order.id,
-      senderUserId: session.user.id,
-      isSystemEvent: true,
-      eventType: "quote_accepted",
-      eventData: { actor: "client" },
-      createdAt: now,
-    }),
+    db.execute(sql`
+      insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
+      select ${newId("msg")}::text, ${order.id}::text, ${session.user.id}::text, true,
+             'quote_accepted'::text, ${JSON.stringify({ actor: "client" })}::jsonb, ${at}::timestamptz
+      where exists (${acceptedHere})
+    `),
   ]);
+
+  /**
+   * ไม่มีแถวไหนถูกเขียน = แพ้การแข่ง ต้องไม่แจ้งเตือน (ซึ่งตอนนี้ส่งอีเมลด้วย) และตอบให้ตรงเรื่อง
+   * หน้าจอรีเฟรชจาก error เหล่านี้อยู่แล้ว จะได้เห็นใบใหม่หรือสถานะล่าสุด
+   */
+  if (acceptedQuote.length === 0 || updatedOrder.length === 0) {
+    const [freshQuote, freshOrder] = await Promise.all([
+      db.query.orderQuote.findFirst({
+        where: eq(schema.orderQuote.id, quoteId),
+        columns: { acceptedAt: true, supersededAt: true, expiresAt: true },
+      }),
+      db.query.order.findFirst({
+        where: eq(schema.order.id, order.id),
+        columns: { status: true },
+      }),
+    ]);
+    // กดซ้ำหลังสำเร็จไปแล้ว — ไม่ใช่ error และห้ามแจ้งเตือนซ้ำ
+    if (freshQuote?.acceptedAt && freshOrder?.status === "accepted") return { ok: true };
+    if (freshOrder?.status !== "quoted") return { ok: false, error: "wrong_status" };
+    if (freshQuote?.expiresAt && freshQuote.expiresAt.getTime() <= Date.now()) {
+      return { ok: false, error: "expired" };
+    }
+    return { ok: false, error: "superseded" };
+  }
 
   await notify({
     userId: order.page.userId,

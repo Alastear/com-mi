@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { canPay } from "@/lib/orders/release";
+import { canPay, PAYABLE_STATUSES } from "@/lib/orders/release";
 import type { OrderStatus } from "@/lib/types";
 import { isOrderCode } from "@/lib/orders/code";
 import { notify } from "@/lib/notifications/create";
@@ -137,6 +137,38 @@ function verifiedSumSql(orderId: string): SQL {
       and p.verified_at is not null
       and p.voided_at is null
       and p.rejected_at is null`;
+}
+
+/**
+ * ออเดอร์ยังรับเรื่องเงินอยู่ไหม — `canPay()` ในรูป SQL ใส่ใน WHERE ของทุกการเขียนเงิน
+ *
+ * ⚠️ เช็คสถานะใน JS ก่อนเขียนอย่างเดียวไม่พอ: ระหว่างอ่านกับเขียน อีกฝ่ายกดยกเลิกได้
+ * แล้วรายการแจ้งโอน/การยืนยันจะไปตกบนออเดอร์ที่ยกเลิกแล้ว ซึ่งแผงเงินเป็นแบบอ่านอย่างเดียว
+ * — แถวที่ลงไปตอนนั้นค้างอยู่ตลอดกาลโดยไม่มีปุ่มไหนตอบมันได้ และ Server Action ก็ยิงตรงได้
+ * โดยไม่ผ่านหน้าจอเลย ยืนยัน/ปฏิเสธ/ยกเลิกการยืนยันบนออเดอร์ที่ปิดแล้วจึงต้องไม่ผ่านที่นี่
+ *
+ * ปลอดภัยต่อการแข่งเพราะทุก batch เริ่มด้วย `lockOrder()` — `transitionOrder` ที่จะเปลี่ยนสถานะ
+ * ต้องรอ lock เดียวกัน คำสั่งนี้จึงเห็นสถานะล่าสุดที่ commit แล้ว และมันเปลี่ยนไม่ได้จนจบ batch
+ *
+ * รายการสถานะมาจาก `PAYABLE_STATUSES` ตัวเดียวกับ `canPay()` — ห้ามเขียนซ้ำตรงนี้
+ */
+function orderPayableSql(orderId: string): SQL {
+  const statuses = sql.join(
+    PAYABLE_STATUSES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql`exists (
+    select 1 from "order" o where o.id = ${orderId} and o.status in (${statuses})
+  )`;
+}
+
+/** อ่านสถานะล่าสุดหลังเขียนไม่ผ่าน — แยก "ออเดอร์ปิดไปแล้ว" ออกจาก error อื่น */
+async function orderClosedNow(orderId: string): Promise<boolean> {
+  const fresh = await getDb().query.order.findFirst({
+    where: eq(schema.order.id, orderId),
+    columns: { status: true },
+  });
+  return !fresh || !canPay(fresh.status as OrderStatus);
 }
 
 /**
@@ -295,6 +327,8 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
    *
    *   ต้องไม่มีแถวที่ยังไม่ถูกตอบ (ไม่ verified และไม่ rejected) — ทั้งสองฝ่าย
    *   ยอดต้องไม่เกินราคางาน − ที่ยืนยันแล้ว
+   *   ออเดอร์ยังรับเงินอยู่ (`orderPayableSql`) — ไม่งั้นแจ้งโอนที่กดพร้อมกับอีกฝ่ายกดยกเลิก
+   *   จะลงไปค้างบนออเดอร์ที่ยกเลิกแล้วโดยไม่มีใครตอบได้
    */
   const noPending = sql`not exists (
     select 1 from payment_record p
@@ -314,6 +348,7 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
       where ${v.amountCents}::int <= (select o.total_cents from "order" o where o.id = ${order.id})
                                      - (${verifiedSumSql(order.id)})
         and ${noPending}
+        and ${orderPayableSql(order.id)}
       on conflict (id) do nothing
       returning id
     `),
@@ -332,6 +367,7 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
     // แพ้การแข่งกับอีก request — ดูของจริงอีกรอบแล้วตอบให้ตรงเรื่อง
     const fresh = await loadPayments(order.id);
     if (fresh.some((r) => r.id === id)) return { ok: true };
+    if (await orderClosedNow(order.id)) return { ok: false, error: "order_closed" };
     if (fresh.some((r) => r.state === "pending")) {
       return { ok: false, error: "pending_exists" };
     }
@@ -371,6 +407,14 @@ async function resolveForCreator(code: string, paymentId: string, userId: string
   const order = await resolveOrder(code, userId);
   if (!order) return { ok: false as const, error: "not_found" as const };
   if (!order.isCreator) return { ok: false as const, error: "forbidden" as const };
+  /**
+   * ออเดอร์ที่ยกเลิก/ปฏิเสธ/หมดอายุแล้ว ตอบรายการเงินไม่ได้ทั้งสามทาง — ตรงกับแผงเงินที่เป็นแบบอ่านอย่างเดียว
+   * ตรงนี้แค่ตอบให้ตรงเรื่อง ด่านจริงคือ `orderPayableSql` ใน WHERE ของแต่ละ action
+   * (`completed` ยังผ่าน — สลิปปลอมที่เพิ่งพบหลังปิดงานต้องยกเลิกการยืนยันได้ ดู `paymentMode`)
+   */
+  if (!canPay(order.status as OrderStatus)) {
+    return { ok: false as const, error: "order_closed" as const };
+  }
 
   const rows = await loadPayments(order.id);
   // ผูกกับออเดอร์ด้วยเสมอ ไม่งั้นรู้ id แล้วไปตอบแถวของออเดอร์อื่นได้
@@ -423,6 +467,7 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
           isNull(schema.paymentRecord.voidedAt),
           sql`${schema.paymentRecord.amountCents} + (${verifiedSumSql(order.id)})
               <= (select o.total_cents from "order" o where o.id = ${order.id})`,
+          orderPayableSql(order.id),
         ),
       )
       .returning({ id: schema.paymentRecord.id }),
@@ -440,7 +485,8 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
   if (updated.length === 0) {
     const fresh = (await loadPayments(order.id)).find((r) => r.id === row.id);
     if (fresh?.state === "verified") return { ok: true };
-    // ยังรออยู่แต่เขียนไม่ผ่าน = เงื่อนไขที่เหลือข้อเดียวคือเพดาน
+    if (await orderClosedNow(order.id)) return { ok: false, error: "order_closed" };
+    // ยังรออยู่แต่เขียนไม่ผ่าน และออเดอร์ยังเปิด = เงื่อนไขที่เหลือข้อเดียวคือเพดาน
     return { ok: false, error: fresh?.state === "pending" ? "over_total" : "stale" };
   }
 
@@ -499,6 +545,7 @@ export async function rejectPayment(
           eq(schema.paymentRecord.orderId, order.id),
           isNull(schema.paymentRecord.verifiedAt),
           isNull(schema.paymentRecord.rejectedAt),
+          orderPayableSql(order.id),
         ),
       )
       .returning({ id: schema.paymentRecord.id }),
@@ -516,7 +563,8 @@ export async function rejectPayment(
 
   if (updated.length === 0) {
     const fresh = (await loadPayments(order.id)).find((r) => r.id === row.id);
-    return fresh?.state === "rejected" ? { ok: true } : { ok: false, error: "stale" };
+    if (fresh?.state === "rejected") return { ok: true };
+    return { ok: false, error: (await orderClosedNow(order.id)) ? "order_closed" : "stale" };
   }
 
   await notify({
@@ -574,6 +622,7 @@ export async function voidPayment(input: z.input<typeof RespondSchema>): Promise
           isNotNull(schema.paymentRecord.verifiedAt),
           isNull(schema.paymentRecord.voidedAt),
           isNull(schema.paymentRecord.rejectedAt),
+          orderPayableSql(order.id),
         ),
       )
       .returning({ id: schema.paymentRecord.id }),
@@ -590,7 +639,8 @@ export async function voidPayment(input: z.input<typeof RespondSchema>): Promise
 
   if (updated.length === 0) {
     const fresh = (await loadPayments(order.id)).find((r) => r.id === row.id);
-    return fresh?.state === "voided" ? { ok: true } : { ok: false, error: "stale" };
+    if (fresh?.state === "voided") return { ok: true };
+    return { ok: false, error: (await orderClosedNow(order.id)) ? "order_closed" : "stale" };
   }
 
   await notify({

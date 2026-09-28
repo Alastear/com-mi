@@ -59,7 +59,11 @@ export function moneyBlock(
  *
  * `completed` ยังจ่ายได้ เพราะงานที่แบ่งจ่ายมักเคลียร์ยอดหลังรับงาน
  */
-const PAYABLE_STATUSES: readonly OrderStatus[] = [
+/**
+ * ⚠️ lib/payments/actions.ts ใช้รายการนี้ตัวเดียวกันใน WHERE ของทุกการเขียนเงิน (`orderPayableSql`)
+ * แก้ที่นี่ = เปลี่ยนด่านใน SQL ไปด้วย ห้ามไปเขียนรายการสถานะซ้ำที่นั่น
+ */
+export const PAYABLE_STATUSES: readonly OrderStatus[] = [
   "accepted",
   "in_progress",
   "in_review",

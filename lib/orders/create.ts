@@ -34,6 +34,16 @@ const CreateOrderSchema = z.object({
   answers: z.array(BriefAnswerSchema).max(20),
   acceptTos: z.literal(true),
   isPublicInQueue: z.boolean(),
+  /**
+   * ยอดรวมกับมัดจำที่ลูกค้า **เห็นบนฟอร์ม** ตอนกดส่ง — ใช้เทียบอย่างเดียว ไม่เคยใช้คิดเงิน
+   *
+   * ⚠️ ราคาจริงยังคิดใหม่จากเมนูใน DB เสมอ (ด้านล่าง) แต่ถ้าครีเอเตอร์แก้เมนูระหว่างที่ลูกค้า
+   * เปิดฟอร์มค้างไว้ ออเดอร์จะถูกบันทึกด้วยราคา/มัดจำที่ลูกค้าไม่เคยเห็น แล้วลูกค้ามารู้ตอนจ่าย
+   * ส่งสองค่านี้มาแล้วไม่ตรงกับที่คิดได้ = ตอบ `changed` ให้หน้าจอรีเฟรชราคาใหม่ก่อนส่งอีกครั้ง
+   * ส่งเลขปลอมมาก็ได้แค่ส่งคำขอไม่ผ่าน ราคาที่บันทึกไม่มีทางมาจากค่านี้
+   */
+  expectedTotalCents: z.number().int().min(0).max(1_000_000_000),
+  expectedDepositCents: z.number().int().min(0).max(1_000_000_000),
 });
 
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
@@ -49,7 +59,9 @@ export type CreateOrderResult =
         | "shop_closed"
         | "own_shop"
         | "creator_full"
-        | "rate_limited";
+        | "rate_limited"
+        /** ราคาหรือมัดจำบนเมนูเปลี่ยนไปจากที่ลูกค้าเห็นบนฟอร์ม — ไม่ได้สร้างออเดอร์ */
+        | "changed";
       retryAfterSeconds?: number;
     };
 
@@ -133,6 +145,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
    * ตัวเลขที่ลูกค้าเห็นก่อนกดส่งต้องเท่ากับที่ออเดอร์เรียกเก็บจริงเสมอ
    */
   const depositCents = depositFor(quote.totalCents, service.depositPercent);
+
+  // ลูกค้าเห็นคนละตัวเลขกับที่จะบันทึก = ไม่สร้างออเดอร์ ให้กลับไปดูราคาใหม่ก่อน (ดู `expectedTotalCents`)
+  if (quote.totalCents !== v.expectedTotalCents || depositCents !== v.expectedDepositCents) {
+    return { ok: false, error: "changed" };
+  }
 
   const created = await insertNewOrder({
     page,

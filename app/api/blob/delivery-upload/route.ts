@@ -4,6 +4,7 @@ import { getDb, schema } from "@/lib/db";
 import { getSession } from "@/lib/auth-guard";
 import { privateBlobToken } from "@/lib/blob/stores";
 import { isClientTokenRequest, parseClientPayload } from "@/lib/blob/upload-body";
+import { toUploadError, uploadErrorResponse as fail } from "@/lib/blob/upload-error";
 import { isOrderCode } from "@/lib/orders/code";
 import { isDeliveryPath } from "@/lib/delivery/path";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -21,24 +22,10 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
  * ครีเอเตอร์ต้องเตรียมไฟล์ไว้ก่อนแล้วค่อยกดส่งมอบได้
  */
 
-/** ข้อความผิดพลาดที่ยอมให้ออกไปถึงเบราว์เซอร์ — ห้ามส่งข้อความดิบจาก SDK */
-type UploadError = "bad_request" | "forbidden" | "invalid_state" | "upload_failed";
-
 /**
- * ⚠️ 500 สงวนไว้ให้ความล้มเหลวของฝั่งเราจริง ๆ เท่านั้น (Blob, DB, env หาย)
- * body เพี้ยนเป็นความผิดของผู้เรียก ต้องได้ 4xx — ไม่งั้นบอตที่ยิงขยะเข้ามา
- * จะทำให้ log/alert ของ 500 ดูเหมือน Blob ล่ม ทั้งที่ไม่มีอะไรพัง
+ * รหัสผิดพลาดและ HTTP status อยู่ที่ lib/blob/upload-error.ts — ใช้ร่วมกับ /api/blob/upload
+ * ห้ามส่งข้อความดิบจาก SDK ออกไป และ 500 สงวนไว้ให้ความล้มเหลวของฝั่งเราเท่านั้น
  */
-const STATUS: Record<UploadError, number> = {
-  bad_request: 400,
-  forbidden: 403,
-  invalid_state: 403,
-  upload_failed: 500,
-};
-
-function fail(error: UploadError): Response {
-  return Response.json({ error }, { status: STATUS[error] });
-}
 
 export async function POST(request: Request): Promise<Response> {
   /**
@@ -132,12 +119,9 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json(result);
   } catch (err) {
-    const raw = err instanceof Error ? err.message : "";
     // log ข้อความจริงไว้ฝั่งเรา แต่ตอบ client ด้วยชุดคำที่ควบคุมได้
     // ข้อความจาก SDK เคยมี pathname ของ blob อื่นติดมาด้วย
-    console.error("[delivery-upload]", raw);
-    const code: UploadError =
-      raw === "forbidden" || raw === "invalid_state" || raw === "bad_request" ? raw : "upload_failed";
-    return fail(code);
+    console.error("[delivery-upload]", err instanceof Error ? err.message : "");
+    return fail(toUploadError(err));
   }
 }
