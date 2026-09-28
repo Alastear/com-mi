@@ -555,6 +555,9 @@ const th = {
       "เพิ่ม {n} ไฟล์นี้เข้ารอบที่เตรียมไว้?\n{names}\n\nลูกค้าจะเห็นชื่อไฟล์ทันที (ยังดาวน์โหลดไม่ได้จนกว่าจะกดส่งมอบ)",
     takeOut: "เอาออกจากรอบนี้",
     takenOut: "เอาออกจากรอบแล้ว — ไฟล์ยังอยู่ ลบทิ้งหรือเพิ่มกลับได้",
+    takenOutClosed: "เอาออกจากรอบแล้ว — ลบทิ้งเพื่อคืนพื้นที่ได้",
+    /** หัวข้อรอบที่เตรียมไว้บนงานที่จบแล้ว — รอบนี้ไม่มีวันถูกส่ง บอกทางคืนพื้นที่ (เอาออก แล้วลบ) */
+    roundNotSent: "เตรียมไว้แต่ไม่ได้ส่งให้ลูกค้า — เอาออกจากรอบ แล้วลบทิ้งเพื่อคืนพื้นที่ได้",
   },
 
   portfolioVideo: {
@@ -1853,6 +1856,8 @@ const en: Dictionary = {
       "Add these {n} file(s) to the prepared round?\n{names}\n\nThe client sees the file names right away (downloads unlock when you deliver).",
     takeOut: "Take out of this round",
     takenOut: "Taken out of the round — the file is kept, delete it or add it back",
+    takenOutClosed: "Taken out of the round — delete it to free the space",
+    roundNotSent: "Prepared but never sent to the client — take files out of the round, then delete them to free the space",
   },
 
   portfolioVideo: {

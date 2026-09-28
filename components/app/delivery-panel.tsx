@@ -19,6 +19,8 @@ import {
   takeOutOfRound,
 } from "@/lib/delivery/actions";
 import { canUploadDelivery } from "@/lib/delivery/path";
+import { isTerminal } from "@/lib/orders/state-machine";
+import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 import { attachPlan, namesPreview } from "@/lib/delivery/plan";
 import { fill } from "@/lib/i18n/dictionaries";
 import { registerDelivery, uploadDelivery, type DeliveryUpload } from "@/lib/uploads/client";
@@ -110,6 +112,12 @@ export function DeliveryPanel({
   const [removing, setRemoving] = useState<string | null>(null);
 
   const uploadable = canUploadDelivery(orderStatus);
+  /**
+   * งานจบแล้ว (เสร็จ/ยกเลิก/ปฏิเสธ/หมดอายุ) — รอบที่เตรียมไว้แต่ยังไม่ปล่อยจะไม่มีวันถูกส่ง
+   * ⚠️ ไม่ใช่ `!uploadable` — `delivered` ที่ยังมีรอบค้าง (ออเดอร์เก่า) ยังกดปล่อยได้อยู่
+   */
+  const closed =
+    (ORDER_STATUSES as readonly string[]).includes(orderStatus) && isTerminal(orderStatus as OrderStatus);
   // ไฟล์ค้างไปทางไหน: เตรียมรอบใหม่ หรือเติมเข้ารอบที่เตรียมไว้ (กติกาและเหตุผลอยู่ใน plan.ts)
   const plan = viewer === "creator" ? attachPlan(pendingFiles.map((f) => f.mediaId), openRound !== null, uploadable) : null;
 
@@ -327,7 +335,8 @@ export function DeliveryPanel({
     setRemoving(f.mediaId);
     try {
       const res = await takeOutOfRound(code, f.mediaId);
-      if (res.ok) toast.success(t.delivery.takenOut);
+      // งานจบแล้วเพิ่มกลับเข้ารอบไม่ได้ — บอกทางเดียวที่เหลือ (ลบทิ้งคืนพื้นที่)
+      if (res.ok) toast.success(uploadable ? t.delivery.takenOut : t.delivery.takenOutClosed);
       else toast.error(staleText(res.error));
       router.refresh();
     } catch {
@@ -469,14 +478,21 @@ export function DeliveryPanel({
       {/* รอบที่เตรียมไว้ ยังไม่ปล่อย */}
       {roundFiles.length > 0 ? (
         <>
-          {releasedFiles.length > 0 ? (
+          {/* งานจบแล้วห้ามเรียก "รอบถัดไป" — ไม่มีรอบถัดไปให้ส่ง (เหตุผลเดียวกับหัวข้อไฟล์ค้างข้างล่าง) */}
+          {viewer === "creator" && closed ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.roundNotSent}</p>
+          ) : releasedFiles.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
           ) : loose.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.files}</p>
           ) : null}
-          {/* เอาออกจากรอบได้เฉพาะครีเอเตอร์และตอนงานยังเปิด — ลูกค้าเห็นแค่ไฟล์ที่ล็อกไว้ */}
+          {/*
+            เอาออกจากรอบได้เฉพาะครีเอเตอร์ — ลูกค้าเห็นแค่ไฟล์ที่ล็อกไว้
+            ⚠️ **ไม่ว่างานจะอยู่สถานะไหน** — เดิมมีปุ่มเฉพาะตอนยังอัปไฟล์ได้ รอบที่ค้างตอนงานถูกยกเลิก
+            จึงลบไม่ได้และกินพื้นที่ตลอดกาล เอาออกแล้วไฟล์ไปอยู่กองไฟล์ค้างซึ่งมีปุ่มลบทุกสถานะ
+          */}
           <ul className="space-y-2">
-            {roundFiles.map((f) => fileRow(f, false, viewer === "creator" && uploadable ? "takeOut" : null))}
+            {roundFiles.map((f) => fileRow(f, false, viewer === "creator" ? "takeOut" : null))}
           </ul>
         </>
       ) : null}

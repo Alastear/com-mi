@@ -318,14 +318,20 @@ export async function takeOutOfRound(code: string, mediaId: string): Promise<Rem
 
   const order = await resolve(code, userId);
   if (!order || !order.isCreator) return { ok: false, error: "forbidden" };
-  // งานปิดแล้วรอบที่ค้างอยู่ไม่มีวันถูกปล่อย — คำตอบให้ตรงเรื่อง ด่านจริงอยู่ใน batch
-  if (!canUploadDelivery(order.status)) return { ok: false, error: "not_allowed" };
+  /**
+   * ⚠️ **ไม่มีด่านสถานะออเดอร์** — เอาออกได้แม้งานปิดไปแล้ว (เหตุผลเดียวกับ `removeDeliveryFile`)
+   * เดิมเอาออกได้เฉพาะช่วงที่ยังอัปไฟล์ได้ รอบที่เตรียมไว้แต่ยังไม่ปล่อยตอนออเดอร์ถูกยกเลิก
+   * (หรือลูกค้าปิดงานด้วยไฟล์ที่ได้ไปแล้ว) จึงค้างตลอดกาล: ไฟล์ในรอบลบไม่ได้ (`notInAnyRoundSql`)
+   * เอาออกก็ไม่ได้ กินโควตา (ไฟล์ส่วนตัวไม่มีงานเก็บกวาดแตะ) ทั้งที่หน้าจอบอกว่าไฟล์ที่ยังไม่ส่งลบได้
+   * ด่านที่สำคัญจริงคือ `released_at is null` ใต้ lock — รอบที่ปล่อยแล้วแตะไม่ได้ไม่ว่าสถานะไหน
+   * (trigger ใน 0008 กันอีกชั้น) ส่วนการตัดไฟล์ออกจากรอบที่ยังไม่ส่ง ลูกค้าไม่เสียอะไร
+   */
 
   const db = getDb();
   const idJson = JSON.stringify([mediaId]);
 
   /**
-   * คำสั่งที่ 2 ตัด id ออก (`jsonb - text` ตัดทุกตัวที่ตรง) เฉพาะรอบที่ยังไม่ปล่อยและงานยังเปิด
+   * คำสั่งที่ 2 ตัด id ออก (`jsonb - text` ตัดทุกตัวที่ตรง) เฉพาะรอบที่ยังไม่ปล่อย
    * คำสั่งที่ 3 ลบรอบที่ว่างแล้ว · คำสั่งที่ 4 คืนสถานะไฟล์เป็น orphan แบบตอนเพิ่งอัป
    * (ไฟล์ส่วนตัวไม่เคยถูกเก็บกวาดด้วยสถานะนี้ — `orphanUnreferenced` / `dueOrphanSql` แตะแค่ public)
    * คำสั่งหลังเห็นผลของคำสั่งก่อนหน้าในทรานแซกชันเดียวกัน
@@ -336,7 +342,6 @@ export async function takeOutOfRound(code: string, mediaId: string): Promise<Rem
       update delivery d set media_ids = d.media_ids - ${mediaId}::text
       where d.order_id = ${order.id} and d.released_at is null
         and d.media_ids @> ${idJson}::jsonb
-        and ${orderAcceptsFilesSql(order.id)}
       returning d.id
     `),
     db.execute(sql`
@@ -349,11 +354,8 @@ export async function takeOutOfRound(code: string, mediaId: string): Promise<Rem
     `),
   ]);
 
-  if (affectedRows(out) === 0) {
-    // รอบถูกปล่อยไปแล้ว ไฟล์ถูกเอาออกไปแล้ว หรือสถานะเปลี่ยนระหว่างทาง — ให้หน้าจอโหลดใหม่
-    const fresh = await resolve(code, userId);
-    return { ok: false, error: fresh && !canUploadDelivery(fresh.status) ? "not_allowed" : "stale" };
-  }
+  // รอบถูกปล่อยไปแล้ว หรือไฟล์ถูกเอาออกไปแล้วจากอีกแท็บ — ให้หน้าจอโหลดใหม่
+  if (affectedRows(out) === 0) return { ok: false, error: "stale" };
 
   revalidatePath(`/orders/${code}`);
   revalidatePath(`/my/requests/${code}`);
