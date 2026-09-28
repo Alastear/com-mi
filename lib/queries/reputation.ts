@@ -33,7 +33,9 @@ import { PAID_ONCE_SQL } from "@/lib/reputation/paid-once-sql";
  *   - เวลาทำงาน = ค่ากลางของ "เริ่มนับ → ส่งมอบ" จุดเริ่ม (`started_at`):
  *     ออเดอร์มีมัดจำ = ตอนที่ **ลูกค้าแจ้งโอน** จนยอดถึงมัดจำ (ดู `depositReportedSql`)
  *     ไม่ใช่ตอนร้านกดยืนยัน / ออเดอร์มัดจำเก่าก่อนมีคอลัมน์ `deposit_met_at` ใช้การยืนยันเงินครั้งแรก /
- *     ออเดอร์ไม่มีมัดจำนับตั้งแต่สั่ง (เหมือน `dueState`)
+ *     ออเดอร์ไม่มีมัดจำ = ตอนตอบรับงาน (`deposit_met_at` ที่ `startClockOnAcceptSet` ตั้งพร้อมสถานะ
+ *     `accepted` และเลื่อน `due_at` ไปพร้อมกัน — เหมือน `dueState`) / ออเดอร์ไม่มีมัดจำที่ตอบรับก่อนมีกติกานี้
+ *     (`deposit_met_at` ว่าง) นับตั้งแต่สั่ง ซึ่งตรงกับ `due_at` ของมันที่ไม่เคยถูกเลื่อน
  *   - ร้านยกเลิก = ออเดอร์ที่ร้านเคยยืนยันเงินแล้วและ event ยกเลิกมี `actor = creator`
  *     (`transitionOrder` เป็นทางเดียวที่เขียน `cancelled` และมันบันทึก actor จาก session เสมอ)
  *     ยกเลิกก่อนได้เงินไม่นับ — ปฏิเสธงานที่รับไม่ไหวเป็นเรื่องปกติ ยกเลิกหลังรับเงินคือสัญญาณเตือน
@@ -167,6 +169,8 @@ const DEPOSIT_REPORTED_AT = sql`(
  * กำหนดส่งที่ใช้ตัดสิน "ตรงเวลา" ไม่ใช่ `due_at` ตรง ๆ สำหรับออเดอร์ที่มี `deposit_met_at`:
  * `recomputePaid` เลื่อน `due_at` ไปเป็น `deposit_met_at + ระยะงาน` ตอนร้านกดยืนยัน ที่นี่ถอยกลับ
  * เท่ากับช่วงที่ร้านปล่อยรายการแจ้งโอนค้างไว้ — ระยะงานเท่าเดิม แค่เริ่มนับจากตอนลูกค้าแจ้งโอน
+ * ออเดอร์ไม่มีมัดจำ `started_at = deposit_met_at` พอดี ช่วงที่ถอยจึงเป็นศูนย์ = `due_at` ที่เลื่อนตอนตอบรับ
+ * (ร้านเลือกเวลาตอบรับเองได้ก็จริง แต่ก่อนตอบรับงานยังไม่ใช่ของร้าน — กติกาเดียวกับหน้าออเดอร์)
  * ⚠️ ผลคือกำหนดส่งในสถิติอาจเร็วกว่าวันที่ที่หน้าออเดอร์โชว์ ถ้าร้านยืนยันเงินช้า — ตั้งใจแบบนั้น
  */
 function trackRecordSql(pageId: string) {
@@ -176,7 +180,13 @@ function trackRecordSql(pageId: string) {
         o.due_at,
         o.deposit_met_at,
         coalesce(
-          least(o.deposit_met_at, ${DEPOSIT_REPORTED_AT}),
+          -- ไม่มีมัดจำ = deposit_met_at คือตอนตอบรับงานตรง ๆ ไม่ถอยไปหาเวลาแจ้งโอน
+          -- ⚠️ ห้ามผ่าน DEPOSIT_REPORTED_AT: เส้นมัดจำ 0 ทำให้แถวเงินแถวแรกข้ามเส้นเสมอ ถ้าวันหนึ่ง
+          -- มีทางจ่ายก่อนตอบรับ จุดเริ่มจะถอยไปก่อนตอบรับ ทั้งที่ due_at นับจากตอนตอบรับ
+          case when o.deposit_cents > 0
+            then least(o.deposit_met_at, ${DEPOSIT_REPORTED_AT})
+            else o.deposit_met_at
+          end,
           case when o.deposit_cents > 0 then (
             select min(p.verified_at) from payment_record p
             where p.order_id = o.id

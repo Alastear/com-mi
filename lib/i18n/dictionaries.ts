@@ -781,7 +781,7 @@ const th = {
     reviewCountOne: "{n} รีวิว",
     reviewCountMany: "{n} รีวิว",
     footnote:
-      "นับเฉพาะงานที่ร้านเคยยืนยันรับเงิน (ยกเลิกการยืนยันทีหลังก็ยังนับ) · ส่งงาน = ตอนที่ร้านแนบไฟล์ชุดแรกที่ลูกค้าได้รับ ไม่ใช่ตอนลูกค้าโอนงวดท้าย · ตรงกำหนด = ส่งงานไม่เกินเวลากำหนดส่ง (เทียบถึงชั่วโมง ไม่ใช่แค่วันที่) · กำหนดส่งและเวลาทำงานเริ่มนับตอนลูกค้าแจ้งโอนมัดจำที่ร้านยืนยันแล้ว (หรือตอนสั่งถ้าไม่มีมัดจำ) · ร้านยกเลิกหลังรับเงิน นับทุกครั้งที่ร้านยกเลิกงานหลังเคยยืนยันเงิน",
+      "นับเฉพาะงานที่ร้านเคยยืนยันรับเงิน (ยกเลิกการยืนยันทีหลังก็ยังนับ) · ส่งงาน = ตอนที่ร้านแนบไฟล์ชุดแรกที่ลูกค้าได้รับ ไม่ใช่ตอนลูกค้าโอนงวดท้าย · ตรงกำหนด = ส่งงานไม่เกินเวลากำหนดส่ง (เทียบถึงชั่วโมง ไม่ใช่แค่วันที่) · กำหนดส่งและเวลาทำงานเริ่มนับตอนลูกค้าแจ้งโอนมัดจำที่ร้านยืนยันแล้ว (ไม่มีมัดจำ = ตอนตอบรับงาน) · ร้านยกเลิกหลังรับเงิน นับทุกครั้งที่ร้านยกเลิกงานหลังเคยยืนยันเงิน",
     reviewsTitle: "รีวิวจากลูกค้า",
     noReviews: "ยังไม่มีรีวิว",
     /** ลูกค้าที่ไม่มีตัวอักษรในชื่อให้ใช้ */
@@ -972,6 +972,10 @@ const th = {
     overdueDays: "เลยกำหนด {n} วัน",
     /** รอมัดจำอยู่ กำหนดส่งยังไม่เริ่มนับ — ตัวเลขคือระยะเวลาทำงานที่ตกลงกันไว้ */
     dueAfterDeposit: "ส่งงานภายใน {n} วันหลังได้รับมัดจำ",
+    /** ยังไม่ตอบรับงาน (ไม่มีมัดจำ) — กำหนดส่งเริ่มนับตอนตอบรับ ตัวเลขคือระยะเวลาทำงานที่ตกลงไว้ */
+    dueAfterAccept: "ส่งงานภายใน {n} วันหลังตอบรับงาน",
+    /** หน้าลูกค้าตอนงานรอลูกค้าตรวจพรีวิว — ตาเดินอยู่ที่ลูกค้า ไม่ขึ้น "เลยกำหนด" แดงใส่ลูกค้า */
+    dueAwaitingYourReview: "รอคุณตรวจงาน",
     dueDate: "กำหนดส่ง",
     sent: "ส่งคำขอแล้ว",
     sentHint: "ครีเอเตอร์จะได้รับแจ้งเตือนและติดต่อกลับ",
@@ -2039,7 +2043,7 @@ const en: Dictionary = {
     reviewCountOne: "{n} review",
     reviewCountMany: "{n} reviews",
     footnote:
-      "Counts only orders where the shop has confirmed a payment, even if it later withdrew the confirmation · Delivery = when the shop attached the first files the client received, not when the balance was paid · On time = delivered no later than the due time (to the hour, not just the date) · The due time and turnaround start when the client reported the deposit the shop confirmed (or when the order was placed, if there is no deposit) · Cancelled by shop counts every cancellation by the shop after it had confirmed a payment",
+      "Counts only orders where the shop has confirmed a payment, even if it later withdrew the confirmation · Delivery = when the shop attached the first files the client received, not when the balance was paid · On time = delivered no later than the due time (to the hour, not just the date) · The due time and turnaround start when the client reported the deposit the shop confirmed (or when the order was accepted, if there is no deposit) · Cancelled by shop counts every cancellation by the shop after it had confirmed a payment",
     reviewsTitle: "Client reviews",
     noReviews: "No reviews yet",
     anonymous: "Client",
@@ -2222,6 +2226,8 @@ const en: Dictionary = {
     daysLeft: "{n}d left",
     overdueDays: "Overdue {n}d",
     dueAfterDeposit: "Due {n} days after the deposit arrives",
+    dueAfterAccept: "Due {n} days after the order is accepted",
+    dueAwaitingYourReview: "Waiting for your review",
     dueDate: "Due",
     sent: "Request sent",
     sentHint: "The creator will be notified and will get back to you",

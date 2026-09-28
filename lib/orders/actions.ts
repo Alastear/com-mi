@@ -12,6 +12,7 @@ import { isOrderCode } from "./code";
 import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
 import { moneyBlock } from "./release";
 import { moneyGateSql } from "./release-sql";
+import { startClockOnAcceptSet } from "./due-clock-sql";
 import { consumesRevision, revisionQuota } from "./revisions";
 import { lockOrder } from "./lock";
 import { orderVersion, versionIso } from "./version";
@@ -267,6 +268,11 @@ export async function transitionOrder(input: {
         updatedAt: now,
         ...(to === "completed" ? { completedAt: now } : null),
         ...(consuming ? { revisionsUsed: sql`${schema.order.revisionsUsed} + 1` } : null),
+        /**
+         * ตอบรับงานที่ไม่มีมัดจำ = เริ่มนับกำหนดส่งจากตอนนี้ (ครั้งเดียว) — เหตุผลอยู่ที่
+         * `clockStartsOnAccept()` ⚠️ ต้องอยู่ใน UPDATE เดียวกับสถานะ ไม่ใช่คำสั่งตามหลัง
+         */
+        ...(to === "accepted" ? startClockOnAcceptSet(now) : null),
       })
       .where(
         and(

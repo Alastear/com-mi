@@ -11,7 +11,7 @@ import { markThreadRead } from "@/lib/orders/actions";
 import { toThreadEntries } from "@/lib/orders/thread";
 import { toPaymentRows } from "@/lib/payments/rows";
 import { paymentMode } from "@/lib/orders/release";
-import { closedText, completedByOf, dueLabel } from "@/lib/orders/labels";
+import { closedText, completedByOf, dueHasDate, dueLabel } from "@/lib/orders/labels";
 import { moneyMoved } from "@/lib/orders/cancel";
 import { dueNowCents } from "@/lib/payments/money";
 import { PaymentPanel } from "@/components/app/payment-panel";
@@ -78,9 +78,11 @@ export default async function ClientRequestPage({ params }: Props) {
   /**
    * กำหนดส่งฝั่งลูกค้า — ตัวเดียวกับบอร์ดของครีเอเตอร์ (`dueLabel`) สองฝั่งจึงเห็นตรงกันเสมอ
    * ว่างานเลยกำหนดหรือยัง ถ้าฝั่งหนึ่งขึ้นแดงอีกฝั่งไม่ขึ้น จะเถียงกันจากหน้าจอคนละแบบ
-   * รอมัดจำอยู่ = บอกเป็นจำนวนวันหลังได้มัดจำ ไม่ใช่วันที่ (วันที่ยังเลื่อนได้)
+   * รอมัดจำ/รอตอบรับ = บอกเป็นจำนวนวัน ไม่ใช่วันที่ (วันที่ยังเลื่อนได้)
+   * ⚠️ `"client"` — งานรอลูกค้าตรวจพรีวิว (`in_review`) ขึ้นข้อความรอเฉย ๆ ไม่ขึ้นเลยกำหนดแดงใส่ลูกค้า
+   * ต่างจากครีเอเตอร์โดยตั้งใจแค่จุดนี้ (เหตุผลอยู่ที่ `dueState`)
    */
-  const due = dueLabel(t, { ...order, status });
+  const due = dueLabel(t, { ...order, status }, new Date(), "client");
   /**
    * รีวิวมีได้เฉพาะงานที่ `completed` (สถานะปลายทาง ย้อนไม่ได้) — สถานะอื่นไม่ต้องเสีย query
    * ฟอร์มเขียนใหม่โชว์เมื่อมีสิทธิ์ตามกติกาเดียวกับ server (`reviewEligibility`) ส่วนรีวิวที่มีแล้ว
@@ -133,8 +135,8 @@ export default async function ClientRequestPage({ params }: Props) {
             <>
               <dt className="text-muted-foreground">{t.order.dueDate}</dt>
               <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {/* รอมัดจำ = วันที่ยังเลื่อนได้ บอกแค่จำนวนวันหลังได้มัดจำ */}
-                {due.kind !== "after_deposit" && order.dueAt ? (
+                {/* รอมัดจำ/รอตอบรับ = วันที่ยังเลื่อนได้ · รอลูกค้าตรวจ = ไม่ชี้วันที่ให้ดูเหมือนครีเอเตอร์ช้า */}
+                {dueHasDate(due) && order.dueAt ? (
                   <span className="tabular">{formatDate(order.dueAt, locale)}</span>
                 ) : null}
                 <span

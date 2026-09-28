@@ -12,6 +12,7 @@ import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { isOrderCode } from "./code";
 import { depositFor, quoteFromLines } from "./pricing";
 import type { OrderStatus } from "@/lib/types";
+import { startClockOnAcceptSet } from "./due-clock-sql";
 
 /**
  * ใบเสนอราคาที่ครีเอเตอร์เขียนเอง
@@ -422,6 +423,11 @@ export async function acceptQuote(input: z.input<typeof AcceptSchema>): Promise<
         totalCents: quote.totalCents,
         depositCents: quote.depositCents,
         updatedAt: now,
+        /**
+         * ใบไม่มีมัดจำ = ลูกค้ากดยอมรับตอนนี้คือตอนที่ครีเอเตอร์ได้รับกำหนดส่ง (เหตุผลที่ `clockStartsOnAccept`)
+         * ⚠️ ส่งมัดจำ **ของใบ** — SET อ่านค่าก่อนเขียน `deposit_cents` ของแถวยังเป็นมัดจำก่อนเสนอราคา
+         */
+        ...startClockOnAcceptSet(now, quote.depositCents),
       })
       .where(
         and(

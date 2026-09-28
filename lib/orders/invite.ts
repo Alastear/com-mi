@@ -13,6 +13,7 @@ import { assertCanAcceptNewOrder, insertNewOrder } from "./new-order";
 import { generateInviteToken, isInviteToken } from "./invite-token";
 import { notify } from "@/lib/notifications/create";
 import { sql } from "drizzle-orm";
+import { startClockOnAcceptSet } from "./due-clock-sql";
 
 /**
  * ใบเชิญลูกค้า — ฝั่งครีเอเตอร์
@@ -570,10 +571,14 @@ export async function confirmInviteClaim(claimId: string): Promise<ConfirmResult
      * และบอร์ดจะเอาไปวางในคอลัมน์คำขอใหม่ให้กดรับสิ่งที่รับไปแล้ว
      *
      * เขียนแบบมีเงื่อนไข — ถ้าพลาด ออเดอร์ค้างที่ `requested` แล้วกดปุ่มปกติต่อได้
+     *
+     * ใบเชิญไม่มีมัดจำ = เริ่มนับกำหนดส่งตรงนี้ (`clockStartsOnAccept`) — ออเดอร์เพิ่งเกิดไม่กี่ ms ก่อน
+     * วันที่แทบไม่ขยับ แต่ตั้ง `deposit_met_at` ไว้ให้ทุกออเดอร์ไม่มีมัดจำที่ตอบรับแล้วมีจุดเริ่มนับเหมือนกัน
+     * (ประวัติร้านอ่านจุดเริ่มจากคอลัมน์นี้) `now` ถูกจับไว้ก่อนสร้างออเดอร์ — `greatest()` ในตัวช่วยกันไว้แล้ว
      */
     db
       .update(schema.order)
-      .set({ status: "accepted", updatedAt: now })
+      .set({ status: "accepted", updatedAt: now, ...startClockOnAcceptSet(now) })
       .where(and(eq(schema.order.id, created.orderId), eq(schema.order.status, "requested"))),
     db
       .update(schema.orderInviteRevision)

@@ -187,7 +187,7 @@ export function decideLifecycle(o: LifecycleOrder, now: Date): LifecycleDecision
  *
  * ดูที่ "ข้ามเส้น" (เดิมต่ำกว่า ตอนนี้ถึง) ไม่ใช่แค่ "ถึงแล้ว" — ออเดอร์ที่มัดจำครบไปก่อนมีระบบนี้
  * (`depositMetAt` เป็น null) ห้ามถูกเลื่อนกำหนดส่งตอนลูกค้าโอนงวดสุดท้าย
- * ออเดอร์ไม่มีมัดจำ (0) ไม่เคยข้ามเส้น — นาฬิกาเดินตั้งแต่สั่ง เหมือนเดิม
+ * ออเดอร์ไม่มีมัดจำ (0) ไม่เคยข้ามเส้น — นาฬิกาของมันเริ่มตอนตอบรับงาน (`clockStartsOnAccept`)
  */
 export function depositJustMet(o: {
   depositCents: number;
@@ -219,6 +219,35 @@ export function dueAfterDeposit(
   return new Date(metAt.getTime() + (o.dueAt.getTime() - o.createdAt.getTime()));
 }
 
+/* ── ไม่มีมัดจำ = ตอบรับงานแล้วเริ่มนับกำหนดส่ง ─────────────────────── */
+
+/**
+ * การเขียนที่ทำให้ออเดอร์เป็น `accepted` ครั้งนี้ต้องเริ่มนาฬิกากำหนดส่งไหม
+ *
+ * `dueAt` ถูกตั้งตั้งแต่ลูกค้ากดสั่ง (`insertNewOrder`) แต่ก่อนตอบรับ ครีเอเตอร์ยังไม่ได้รับงาน
+ * — คำขอที่รอคุยราคา 5 วัน หรือใบเสนอราคาที่ลูกค้านั่งดูอยู่ 5 วัน กินเวลาทำงาน 7 วันไปแล้ว 5 วัน
+ * ออเดอร์มีมัดจำแก้เรื่องนี้ไว้แล้วด้วย "มัดจำครบ = เริ่มนับ" (`depositJustMet`) ออเดอร์ไม่มีมัดจำ
+ * ใช้ตัวคั่นเดียวกันคือ `depositMetAt` — ความหมายคือ "เริ่มนับกำหนดส่งเมื่อไร" ไม่ต้องมีคอลัมน์ใหม่
+ *
+ * ⚠️ ต้องตรงกับ `startClockOnAcceptSet()` ใน lib/orders/due-clock-sql.ts ทุกเงื่อนไข
+ *   - `depositCents` คือมัดจำ **หลัง** การเขียนครั้งนี้ — ยอมรับใบเสนอราคาเปลี่ยนมัดจำใน UPDATE เดียวกัน
+ *   - `depositMetAt === null` คือด่าน "ครั้งเดียว": ตั้งแล้วไม่มีอะไรเลื่อนซ้ำ
+ *   - ออเดอร์มีมัดจำ = false เสมอ ปล่อยให้ `recomputePaid` เลื่อนตอนมัดจำครบตามเดิม
+ */
+export function clockStartsOnAccept(o: { depositCents: number; depositMetAt: Date | null }): boolean {
+  return o.depositMetAt === null && o.depositCents <= 0;
+}
+
+/**
+ * เวลาเริ่มนับ = ตอนตอบรับ แต่ไม่ก่อนตอนสร้างออเดอร์
+ *
+ * ⚠️ ใบเชิญสร้างออเดอร์แล้วตอบรับในคำสั่งถัดไปด้วย `now` ที่จับไว้ **ก่อน** สร้าง — ช้ากว่ากันไม่กี่ ms
+ * ถ้าไม่กันไว้ `depositMetAt` จะมาก่อน `createdAt` แล้วกำหนดส่งหดลงเล็กน้อยแบบไม่มีเหตุผล
+ */
+export function clockStartAt(o: { createdAt: Date }, acceptedAt: Date): Date {
+  return acceptedAt.getTime() > o.createdAt.getTime() ? acceptedAt : o.createdAt;
+}
+
 /* ── เลยกำหนด (คำนวณตอนแสดง ไม่เก็บ) ─────────────────────────────── */
 
 /**
@@ -248,20 +277,38 @@ export type DueOrder = {
 };
 
 /**
+ * ยังไม่ตอบรับงาน — ครีเอเตอร์ยังไม่ได้รับกำหนดส่งจริง `dueAt` ตอนนี้เป็นแค่ตัวเลขชั่วคราว
+ * (ออเดอร์ไม่มีมัดจำจะถูกตั้งใหม่ตอนตอบรับ มีมัดจำจะถูกตั้งใหม่ตอนมัดจำครบ)
+ */
+const BEFORE_ACCEPT: readonly OrderStatus[] = ["requested", "reviewing", "quoted"];
+
+/**
+ * ใครเป็นคนดู — กำหนดส่งเป็นของครีเอเตอร์ แต่บางช่วงตาเดินอยู่ที่ลูกค้า
+ * ⚠️ ค่าเริ่มต้นเป็นครีเอเตอร์ (เห็นทุกอย่าง) หน้าของลูกค้าต้องส่ง "client" เอง
+ */
+export type DueViewer = "creator" | "client";
+
+/**
  * สถานะของกำหนดส่ง
  *
- *   none          — ไม่มีอะไรให้นับ (ไม่มีกำหนด / ส่งแล้ว / จบแล้ว)
- *   after_deposit — ยังไม่เริ่มนับ รอมัดจำ: `dueAt` ตอนนี้เป็นแค่ตัวเลขชั่วคราว
- *                   จะถูกตั้งใหม่ตอนมัดจำครบ (`days` = ระยะเวลาทำงานที่ตกลงไว้)
- *   overdue       — เลยกำหนดแล้ว
- *   running       — ยังไม่ถึงกำหนด
+ *   none           — ไม่มีอะไรให้นับ (ไม่มีกำหนด / ส่งแล้ว / จบแล้ว)
+ *   after_deposit  — ยังไม่เริ่มนับ รอมัดจำ: `dueAt` ตอนนี้เป็นแค่ตัวเลขชั่วคราว
+ *                    จะถูกตั้งใหม่ตอนมัดจำครบ (`days` = ระยะเวลาทำงานที่ตกลงไว้)
+ *   after_accept   — ยังไม่เริ่มนับ รอตอบรับงาน (ไม่มีมัดจำ): จะถูกตั้งใหม่ตอนตอบรับ
+ *   awaiting_review — (เฉพาะลูกค้า) งานรอลูกค้าตรวจพรีวิวอยู่ ไม่ขึ้นเลยกำหนดแดงใส่ลูกค้า
+ *   overdue        — เลยกำหนดแล้ว
+ *   running        — ยังไม่ถึงกำหนด
  *
- * ⚠️ after_deposit ต้องไม่ขึ้นเลยกำหนด — ครีเอเตอร์ลงมือไม่ได้จนกว่ามัดจำจะเข้า
- * (ด่าน `depositSatisfied` ใน transitionOrder) เวลาที่รอลูกค้าโอนไม่ใช่ความผิดของครีเอเตอร์
+ * ⚠️ after_deposit / after_accept ต้องไม่ขึ้นเลยกำหนด — ครีเอเตอร์ลงมือไม่ได้จนกว่าจะตอบรับ
+ * และมัดจำเข้า (ด่าน `depositSatisfied` ใน transitionOrder) เวลาที่รอลูกค้าตัดสินใจราคาหรือรอโอน
+ * ไม่ใช่ความผิดของครีเอเตอร์ — เดิม `quoted` ของออเดอร์ไม่มีมัดจำขึ้น "เลยกำหนด" ได้
+ * ทั้งที่งานยังไม่เคยถูกรับด้วยซ้ำ
  */
 export type DueState =
   | { kind: "none" }
   | { kind: "after_deposit"; days: number }
+  | { kind: "after_accept"; days: number }
+  | { kind: "awaiting_review" }
   | { kind: "overdue" }
   | { kind: "running" };
 
@@ -272,16 +319,28 @@ export function awaitingDeposit(o: Pick<DueOrder, "depositCents" | "amountPaidCe
   return o.depositCents > 0 && o.amountPaidCents < o.depositCents && !o.depositMetAt;
 }
 
-export function dueState(o: DueOrder, now: Date = new Date()): DueState {
+/**
+ * ⚠️ ตัดสินที่นี่ที่เดียว — บอร์ด แดชบอร์ด หน้างานครีเอเตอร์ และหน้าลูกค้า ใช้ตัวนี้ (ผ่าน `dueLabel`)
+ *
+ * `viewer = "client"` ต่างจากครีเอเตอร์แค่ตอน `in_review`: ครีเอเตอร์ส่งพรีวิวแล้ว ตาเดินอยู่ที่ลูกค้า
+ * ขึ้น "เลยกำหนด" แดง ๆ ใส่ลูกค้าตอนที่คนที่ต้องขยับคือตัวเขาเอง อ่านเหมือนครีเอเตอร์ทิ้งงาน
+ * ครีเอเตอร์ยังเห็นสถานะจริง (งานยังไม่ส่งมอบ กำหนดส่งยังเดินอยู่ — `in_review` ไม่หยุดนาฬิกา)
+ */
+export function dueState(o: DueOrder, now: Date = new Date(), viewer: DueViewer = "creator"): DueState {
   if (!o.dueAt || !DUE_TRACKED.includes(o.status)) return { kind: "none" };
   const due = toDate(o.dueAt);
-  if (awaitingDeposit(o)) {
-    const days = Math.max(0, Math.round((due.getTime() - toDate(o.createdAt).getTime()) / DAY_MS));
-    return { kind: "after_deposit", days };
-  }
+  const days = () => Math.max(0, Math.round((due.getTime() - toDate(o.createdAt).getTime()) / DAY_MS));
+  if (awaitingDeposit(o)) return { kind: "after_deposit", days: days() };
+  /**
+   * ยังไม่ตอบรับ = ยังไม่เริ่มนับ ไม่ว่าออเดอร์เก่าหรือใหม่
+   * ไม่ต้องดู `depositMetAt`: ไม่มีเส้นถอยจาก `accepted` กลับมาสถานะพวกนี้ (state-machine.ts)
+   * ออเดอร์ที่ยังอยู่ตรงนี้จึงยังไม่เคยเริ่มนับแน่นอน
+   */
+  if (BEFORE_ACCEPT.includes(o.status)) return { kind: "after_accept", days: days() };
+  if (viewer === "client" && o.status === "in_review") return { kind: "awaiting_review" };
   return due.getTime() < now.getTime() ? { kind: "overdue" } : { kind: "running" };
 }
 
-export function isOverdue(o: DueOrder, now: Date = new Date()): boolean {
-  return dueState(o, now).kind === "overdue";
+export function isOverdue(o: DueOrder, now: Date = new Date(), viewer: DueViewer = "creator"): boolean {
+  return dueState(o, now, viewer).kind === "overdue";
 }

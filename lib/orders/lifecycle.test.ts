@@ -13,6 +13,8 @@ import {
   REQUEST_TTL_MS,
   decideLifecycle,
   deliveredAnchor,
+  clockStartAt,
+  clockStartsOnAccept,
   depositJustMet,
   dueAfterDeposit,
   dueState,
@@ -22,7 +24,7 @@ import {
   type LifecycleOrder,
 } from "./lifecycle";
 import { canTransition } from "./state-machine";
-import { dueLabel, eventText } from "./labels";
+import { dueHasDate, dueLabel, eventText } from "./labels";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { ORDER_STATUSES, type OrderStatus } from "@/lib/types";
 
@@ -425,6 +427,42 @@ describe("มัดจำครบ = เริ่มนับกำหนดส�
   });
 });
 
+describe("ไม่มีมัดจำ = ตอบรับงานแล้วเริ่มนับกำหนดส่ง", () => {
+  it("เริ่มนับเฉพาะออเดอร์ไม่มีมัดจำที่ยังไม่เคยเริ่ม", () => {
+    assert.equal(clockStartsOnAccept({ depositCents: 0, depositMetAt: null }), true);
+    assert.equal(clockStartsOnAccept({ depositCents: 50_000, depositMetAt: null }), false,
+      "มีมัดจำ = รอ recomputePaid ตอนมัดจำครบ");
+    assert.equal(clockStartsOnAccept({ depositCents: 0, depositMetAt: at(DAY_MS) }), false, "ครั้งเดียว");
+  });
+
+  it("กำหนดส่งใหม่ = ตอนตอบรับ + ระยะงานเดิม และไม่เริ่มก่อนตอนสร้างออเดอร์", () => {
+    const createdAt = at(0);
+    const dueAt = at(7 * DAY_MS);
+    const accepted = at(5 * DAY_MS + 3 * HOUR);
+    const start = clockStartAt({ createdAt }, accepted);
+    assert.equal(start.getTime(), accepted.getTime());
+    assert.equal(dueAfterDeposit({ dueAt, createdAt }, start)!.getTime(), accepted.getTime() + 7 * DAY_MS);
+    // ใบเชิญ: `now` ถูกจับไว้ก่อนสร้างออเดอร์ไม่กี่ ms
+    assert.equal(clockStartAt({ createdAt }, at(-5)).getTime(), createdAt.getTime());
+  });
+
+  it("ตอบรับวันที่ 5 ของงาน 7 วัน → วันที่ 11 ยังไม่เลยกำหนด (เดิมเลยไปแล้ว 4 วัน)", () => {
+    const createdAt = at(0);
+    const accepted = at(5 * DAY_MS);
+    const newDue = dueAfterDeposit({ dueAt: at(7 * DAY_MS), createdAt }, clockStartAt({ createdAt }, accepted))!;
+    const o: DueOrder = {
+      status: "in_progress",
+      dueAt: newDue,
+      createdAt,
+      depositCents: 0,
+      amountPaidCents: 0,
+      depositMetAt: accepted,
+    };
+    assert.deepEqual(dueState(o, at(11 * DAY_MS)), { kind: "running" });
+    assert.deepEqual(dueState(o, at(12 * DAY_MS + 1)), { kind: "overdue" });
+  });
+});
+
 describe("เลยกำหนด (คำนวณตอนแสดง)", () => {
   const now = at(10 * DAY_MS);
   const due = (over: Partial<DueOrder> = {}): DueOrder => ({
@@ -437,17 +475,48 @@ describe("เลยกำหนด (คำนวณตอนแสดง)", () =
     ...over,
   });
 
-  it("งานที่ยังอยู่ในมือครีเอเตอร์และเลยวันกำหนด = เลยกำหนด", () => {
-    for (const status of [
-      "requested",
-      "reviewing",
-      "quoted",
-      "accepted",
-      "in_progress",
-      "in_review",
-      "revision_requested",
-    ] as const) {
+  it("งานที่ตอบรับแล้วและยังอยู่ในมือครีเอเตอร์ เลยวันกำหนด = เลยกำหนด", () => {
+    for (const status of ["accepted", "in_progress", "in_review", "revision_requested"] as const) {
       assert.equal(isOverdue(due({ status }), now), true, status);
+    }
+  });
+
+  it("ยังไม่ตอบรับ = ยังไม่เริ่มนับ ไม่ขึ้นเลยกำหนดเด็ดขาด — ทั้งสองฝั่ง (เดิม quoted ขึ้นแดงได้)", () => {
+    for (const status of ["requested", "reviewing", "quoted"] as const) {
+      for (const viewer of ["creator", "client"] as const) {
+        const o = due({ status, dueAt: at(7 * DAY_MS) });
+        assert.equal(isOverdue(o, at(400 * DAY_MS), viewer), false, `${status}/${viewer}`);
+        assert.deepEqual(dueState(o, now, viewer), { kind: "after_accept", days: 7 }, `${status}/${viewer}`);
+      }
+    }
+  });
+
+  it("ยังไม่ตอบรับแต่มีมัดจำ = บอกว่านับหลังมัดจำ (นาฬิกาเริ่มตอนมัดจำครบ ไม่ใช่ตอนตอบรับ)", () => {
+    assert.deepEqual(dueState(due({ status: "quoted", depositCents: 50_000 }), now), {
+      kind: "after_deposit",
+      days: 7,
+    });
+  });
+
+  it("รอลูกค้าตรวจพรีวิว: ลูกค้าเห็นข้อความรอ ครีเอเตอร์ยังเห็นเลยกำหนดตามจริง", () => {
+    const o = due({ status: "in_review" });
+    assert.deepEqual(dueState(o, now, "client"), { kind: "awaiting_review" });
+    assert.equal(isOverdue(o, now, "client"), false);
+    assert.deepEqual(dueState(o, now, "creator"), { kind: "overdue" });
+    assert.deepEqual(dueState(o, now), { kind: "overdue" }, "ค่าเริ่มต้น = มุมครีเอเตอร์");
+    // ลูกค้าเห็นข้อความรอแม้ยังไม่เลย — ป้ายไม่กระโดดจาก "อีก N วัน" เป็นอย่างอื่นกลางทาง
+    assert.deepEqual(dueState(due({ status: "in_review", dueAt: at(20 * DAY_MS) }), now, "client"), {
+      kind: "awaiting_review",
+    });
+  });
+
+  it("มุมลูกค้าต่างจากครีเอเตอร์แค่ in_review — สถานะอื่นเหมือนกันทุกตัว", () => {
+    for (const status of ORDER_STATUSES) {
+      if (status === "in_review") continue;
+      for (const dueAt of [at(7 * DAY_MS), at(20 * DAY_MS)]) {
+        const o = due({ status, dueAt });
+        assert.deepEqual(dueState(o, now, "client"), dueState(o, now, "creator"), status);
+      }
     }
   });
 
@@ -525,6 +594,38 @@ describe("ป้ายกำหนดส่ง (บอร์ด + สองห�
   it("ส่งงานแล้ว = ไม่มีป้าย (เดิมขึ้น 'เลย N วัน' แดงบนการ์ดที่ส่งไปแล้ว)", () => {
     assert.equal(dueLabel(th, { ...base, status: "delivered" }, now), null);
   });
+
+  it("รอตอบรับ (ไม่มีมัดจำ) = บอกจำนวนวันหลังตอบรับ ไม่มีวันที่ ไม่แดง — ทั้งสองภาษา", () => {
+    for (const t of [th, en]) {
+      const l = dueLabel(t, { ...base, status: "quoted" }, now, "client")!;
+      assert.equal(l.kind, "after_accept");
+      assert.equal(l.tone, "normal");
+      assert.match(l.text, /7/);
+      assert.equal(/\{\w+\}/.test(l.text), false);
+      assert.equal(dueHasDate(l), false);
+    }
+    assert.equal(dueLabel(th, { ...base, status: "quoted" }, now)!.text, "ส่งงานภายใน 7 วันหลังตอบรับงาน");
+  });
+
+  it("in_review: ลูกค้าเห็น 'รอคุณตรวจงาน' สีปกติ ครีเอเตอร์เห็นเลยกำหนด — ทั้งสองภาษา", () => {
+    const o = { ...base, status: "in_review" as const };
+    assert.deepEqual(dueLabel(th, o, now, "client"), {
+      kind: "awaiting_review",
+      text: "รอคุณตรวจงาน",
+      tone: "normal",
+    });
+    assert.equal(dueLabel(en, o, now, "client")!.text, "Waiting for your review");
+    assert.equal(dueHasDate(dueLabel(th, o, now, "client")), false);
+    assert.equal(dueLabel(th, o, now, "creator")!.tone, "overdue");
+    assert.equal(dueLabel(th, o, now)!.tone, "overdue");
+  });
+
+  it("วันที่โชว์ได้เฉพาะตอนนับจริง (running/overdue)", () => {
+    assert.equal(dueHasDate(dueLabel(th, base, now)), true);
+    assert.equal(dueHasDate(dueLabel(th, { ...base, dueAt: at(15 * DAY_MS) }, now)), true);
+    assert.equal(dueHasDate(dueLabel(th, { ...base, status: "accepted", depositCents: 50_000 }, now)), false);
+    assert.equal(dueHasDate(null), false);
+  });
 });
 
 describe("event ของระบบบน timeline", () => {
@@ -576,6 +677,28 @@ describe("ด่านใน SQL ที่เทสต์นี้รันไ�
 
   it("การย้ายสถานะผ่าน assertTransition ของ system เสมอ", () => {
     assert.match(run, /assertTransition\(from, to, "system"\)/);
+  });
+
+  it("ตอบรับงาน (ไม่มีมัดจำ) เริ่มนับใน UPDATE เดียวกับสถานะ accepted — ครบทั้งสามทาง", () => {
+    const clock = read("lib/orders/due-clock-sql.ts");
+    // ตรงกับ `clockStartsOnAccept` + `clockStartAt` + `dueAfterDeposit`
+    assert.match(clock, /\$\{o\.depositMetAt\} is null and \$\{depositAfter\} <= 0/);
+    assert.match(clock, /greatest\(\$\{at\.toISOString\(\)\}::timestamptz, \$\{o\.createdAt\}\)/);
+    assert.match(clock, /\$\{start\} \+ \(\$\{o\.dueAt\} - \$\{o\.createdAt\}\)/);
+
+    // ครีเอเตอร์ตอบรับคำขอ: อยู่ใน .set() ของ UPDATE ที่เขียน status
+    const act = read("lib/orders/actions.ts");
+    const actSet = act.slice(act.indexOf(".set({\n        status: to,"), act.indexOf(".returning({ id: schema.order.id, revisionsUsed"));
+    assert.match(actSet, /to === "accepted" \? startClockOnAcceptSet\(now\)/);
+
+    // ลูกค้ายอมรับใบเสนอราคา: ต้องส่งมัดจำของใบ (SET อ่านค่าก่อนเขียน)
+    const quote = read("lib/orders/quote.ts");
+    const qSet = quote.slice(quote.indexOf('status: "accepted",'), quote.indexOf("sql`exists (${acceptedHere})`,"));
+    assert.match(qSet, /\.\.\.startClockOnAcceptSet\(now, quote\.depositCents\)/);
+
+    // ครีเอเตอร์ยืนยันใบเชิญ
+    const inv = read("lib/orders/invite.ts");
+    assert.match(inv, /\.set\(\{ status: "accepted", updatedAt: now, \.\.\.startClockOnAcceptSet\(now\) \}\)/);
   });
 
   it("เลื่อนกำหนดส่งตอนมัดจำครบอยู่ใน UPDATE เดียวกับยอดเงิน และเช็ค 'ข้ามเส้น' + 'ครั้งเดียว'", () => {

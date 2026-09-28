@@ -3,7 +3,7 @@ import type { Locale } from "@/lib/i18n/config";
 import { daysUntil, formatDate, formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import type { Actor } from "./state-machine";
-import { dueState, type DueOrder } from "./lifecycle";
+import { dueState, type DueOrder, type DueViewer } from "./lifecycle";
 import type { AcceptQuoteResult, IssueQuoteResult } from "./quote";
 
 /**
@@ -203,16 +203,31 @@ export function actorText(t: Dictionary, actor: string | undefined): string {
  *
  * คืน null = ไม่ต้องแสดงอะไร (ไม่มีกำหนด / ส่งแล้ว / จบแล้ว)
  * จำนวนวันนับแบบวันปฏิทินด้วย `daysUntil` เหมือนเดิม — เลยมาไม่กี่ชั่วโมงในวันเดียวกันขึ้นแค่ "เลยกำหนด"
+ *
+ * ⚠️ หน้าของลูกค้าต้องส่ง `viewer = "client"` — ไม่ส่ง = มุมของครีเอเตอร์ (ดู `dueState`)
  */
 export type DueLabel = {
-  /** รอมัดจำอยู่ = `dueAt` เป็นตัวเลขชั่วคราว ห้ามโชว์เป็นวันที่ */
-  kind: "after_deposit" | "overdue" | "running";
+  /**
+   * `running` / `overdue` เท่านั้นที่ `dueAt` เป็นวันที่จริงที่โชว์ได้
+   * รอมัดจำ / รอตอบรับ = ตัวเลขชั่วคราว (จะถูกตั้งใหม่) ห้ามโชว์เป็นวันที่
+   */
+  kind: "after_deposit" | "after_accept" | "awaiting_review" | "overdue" | "running";
   text: string;
   tone: "overdue" | "soon" | "normal";
 };
 
-export function dueLabel(t: Dictionary, o: DueOrder, now: Date = new Date()): DueLabel | null {
-  const state = dueState(o, now);
+/** ป้ายนี้มีวันที่กำหนดส่งจริงให้โชว์ไหม — ใช้ตัดสินว่าจะพิมพ์วันที่ข้างป้ายหรือไม่ */
+export function dueHasDate(l: DueLabel | null): boolean {
+  return l !== null && (l.kind === "running" || l.kind === "overdue");
+}
+
+export function dueLabel(
+  t: Dictionary,
+  o: DueOrder,
+  now: Date = new Date(),
+  viewer: DueViewer = "creator",
+): DueLabel | null {
+  const state = dueState(o, now, viewer);
   switch (state.kind) {
     case "none":
       return null;
@@ -222,6 +237,14 @@ export function dueLabel(t: Dictionary, o: DueOrder, now: Date = new Date()): Du
         text: fill(t.order.dueAfterDeposit, { n: state.days }),
         tone: "normal",
       };
+    case "after_accept":
+      return {
+        kind: state.kind,
+        text: fill(t.order.dueAfterAccept, { n: state.days }),
+        tone: "normal",
+      };
+    case "awaiting_review":
+      return { kind: state.kind, text: t.order.dueAwaitingYourReview, tone: "normal" };
     case "overdue": {
       const late = -daysUntil(o.dueAt!, now);
       return {

@@ -274,6 +274,20 @@ describe("กติกาใน SQL ต้องตรงกับกติก�
     assert.doesNotMatch(src, /delivered_at <= due_at/);
   });
 
+  it("จุดเริ่มนับของงานไม่มีมัดจำ = deposit_met_at (ตอนตอบรับ) ตรงกับ due_at ที่เลื่อนตอนตอบรับ", () => {
+    const src = read("lib/queries/reputation.ts");
+    // มีมัดจำเท่านั้นที่ถอยไปหาเวลาแจ้งโอน — ไม่มีมัดจำใช้เวลาตอบรับตรง ๆ
+    assert.match(
+      src,
+      /case when o\.deposit_cents > 0\s+then least\(o\.deposit_met_at, \$\{DEPOSIT_REPORTED_AT\}\)\s+else o\.deposit_met_at\s+end/,
+    );
+    // ช่วงที่ถอยกำหนดส่ง = deposit_met_at − started_at ซึ่งเป็นศูนย์เมื่อไม่มีมัดจำ
+    assert.match(src, /then due_at - \(deposit_met_at - started_at\)/);
+    // ตัวที่ตั้ง deposit_met_at ตอนตอบรับใช้เงื่อนไขเดียวกัน (ไม่มีมัดจำ + ยังไม่เคยตั้ง)
+    const clock = read("lib/orders/due-clock-sql.ts");
+    assert.match(clock, /depositMetAt\} is null and \$\{depositAfter\} <= 0/);
+  });
+
   it("คิวรี event ระบบมี is_system_event ใน WHERE — ไม่งั้นใช้ partial index ไม่ได้", () => {
     const src = read("lib/queries/reputation.ts");
     const probes = src.split("from message m").slice(1);
