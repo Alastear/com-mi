@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { allowedNext, canTransition, needsRelease, requiresAction } from "./state-machine";
+import { allowedNext, canTransition, closedEarly, needsRelease, requiresAction } from "./state-machine";
 import { actionLabel, isPrimaryAction } from "./labels";
 import { consumesRevision } from "./revisions";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -39,6 +39,16 @@ describe("ลูกค้าปิดงานหลังเคยได้ไ�
     }
     assert.equal(needsRelease("delivered", "completed", "client"), false);
     assert.ok(allowedNext("delivered", "client").includes("completed"));
+  });
+
+  it("closedEarly: จริงเฉพาะเส้นลูกค้าปิดระหว่างรอบแก้ — ไม่ใช่กดรับงานที่ส่งมอบแล้ว", () => {
+    for (const from of REWORK) assert.equal(closedEarly(from, "completed"), true, from);
+    assert.equal(closedEarly("delivered", "completed"), false);
+    // ปลายทางอื่น / ต้นทางที่ไม่มีเส้นนี้ / ค่าดิบที่ไม่รู้จักจากแถวเก่า = false ไม่ throw
+    assert.equal(closedEarly("revision_requested", "cancelled"), false);
+    assert.equal(closedEarly("requested", "completed"), false);
+    assert.equal(closedEarly("", "completed"), false);
+    assert.equal(closedEarly("toString", "completed"), false);
   });
 
   it("ไม่กินสิทธิ์แก้", () => {

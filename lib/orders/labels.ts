@@ -2,7 +2,7 @@ import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/config";
 import { daysUntil, formatDate, formatMoney } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
-import type { Actor } from "./state-machine";
+import { closedEarly, type Actor } from "./state-machine";
 import { dueState, type DueOrder, type DueViewer } from "./lifecycle";
 import type { AcceptQuoteResult, IssueQuoteResult } from "./quote";
 
@@ -82,11 +82,11 @@ export function closedText(
   t: Dictionary,
   status: OrderStatus,
   /**
-   * ใครปิดงาน (`completed`) — จาก `completedByOf()` ไม่รู้ = ใช้ข้อความเดิม
+   * ใครปิดงาน (`completed`) และปิดจากสถานะไหน — จาก `completionOf()` ไม่รู้ = ใช้ข้อความเดิม
    * ⚠️ ระบบปิดให้ (cron หลังส่งงาน 7 วัน) ห้ามขึ้นว่า "ยืนยันรับงานแล้ว" — ลูกค้าไม่ได้กดอะไรเลย
    * ข้อความนี้อยู่บนหน้าของทั้งสองฝ่าย ถ้าเถียงกันทีหลังว่าลูกค้ารับงานหรือยัง หน้าจอต้องไม่พูดแทนเขา
    */
-  completedBy?: string | null,
+  completion?: Completion | null,
 ): { title: string; body: string } | null {
   const c = t.orderClosed;
   switch (status) {
@@ -97,33 +97,48 @@ export function closedText(
     case "expired":
       return { title: c.expired, body: c.expiredBody };
     case "completed":
-      return {
-        title: c.completed,
-        body: completedBy === "system" ? c.completedAutoBody : c.completedBody,
-      };
+      return { title: c.completed, body: completedBody(c, completion) };
     default:
       return null;
   }
 }
 
+/** ใครปิดงานและปิดจากสถานะไหน — อ่านจาก event `status_changed` → `completed` (ดู `completionOf`) */
+export type Completion = { by: string | null; from: string | null };
+
+function completedBody(c: Dictionary["orderClosed"], completion: Completion | null | undefined): string {
+  if (completion?.by === "system") return c.completedAutoBody;
+  /**
+   * ⚠️ ลูกค้าปิดงานระหว่างรอบแก้ (`CLIENT_CLOSES_AFTER_RELEASE` — ปุ่ม "ปิดงานด้วยไฟล์ที่ได้รับแล้ว")
+   * ห้ามขึ้น "ยืนยันรับงานแล้ว" — รอบแก้ที่ค้างอยู่ไม่ได้ถูกส่ง ถ้าเถียงกันทีหลังเรื่องงานแก้ที่ไม่เสร็จ
+   * หน้าจอต้องไม่บอกว่าลูกค้ารับงานที่ส่งมอบครบแล้ว
+   * ไม่รู้ต้นทาง (event เก่า/ไม่มี `from`) = ข้อความเดิม ไม่เดา
+   */
+  if (completion?.from && closedEarly(completion.from, "completed")) return c.completedEarlyBody;
+  return c.completedBody;
+}
+
 /**
- * ใครเป็นคนปิดงาน — อ่านจาก event `status_changed` → `completed` ตัวล่าสุดบน timeline
+ * ใครเป็นคนปิดงาน และปิดจากสถานะไหน — อ่านจาก event `status_changed` → `completed` ตัวล่าสุดบน timeline
  *
  * `completed` เป็นสถานะปลายทาง (ย้อนไม่ได้) จึงมี event แบบนี้ได้ตัวเดียว แต่หาตัวล่าสุดไว้ก่อน
- * ไม่เจอ/ไม่มี actor = null ให้ `closedText` ใช้ข้อความเดิม ไม่เดาว่าระบบปิด
+ * ไม่เจอ event = null · ไม่มี actor/from = ช่องนั้น null ให้ `closedText` ใช้ข้อความเดิม ไม่เดาว่าระบบปิด
  */
-export function completedByOf(
+export function completionOf(
   messages: readonly {
     isSystemEvent: boolean;
     eventType: string | null;
     eventData: Record<string, string | number> | null;
   }[],
-): string | null {
+): Completion | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.isSystemEvent && m.eventType === "status_changed" && m.eventData?.to === "completed") {
-      const actor = m.eventData.actor;
-      return typeof actor === "string" ? actor : null;
+      const { actor, from } = m.eventData;
+      return {
+        by: typeof actor === "string" ? actor : null,
+        from: typeof from === "string" ? from : null,
+      };
     }
   }
   return null;

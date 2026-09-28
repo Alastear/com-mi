@@ -161,6 +161,18 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
   expired: [],
 };
 
+/**
+ * การปิดงานครั้งนี้เป็นเส้น "ลูกค้าปิดงานด้วยไฟล์ที่ได้ไปแล้ว" (`CLIENT_CLOSES_AFTER_RELEASE`) หรือไม่
+ * — คือปิดระหว่างที่งานกลับมาทำต่อหลังส่งมอบ ไม่ใช่กดรับงานที่เพิ่งส่งมอบ (`delivered`)
+ *
+ * รับ string ดิบเพราะอ่านจากข้อมูลที่เก็บไว้แล้ว (แจ้งเตือน/event) — ค่าที่ไม่รู้จัก = false ไม่ throw
+ * ⚠️ ใช้ตัดสินข้อความ/อีเมลถึงครีเอเตอร์ ไม่ใช่สิทธิ์ — สิทธิ์อยู่ที่ `assertTransition` + `needsRelease`
+ */
+export function closedEarly(from: string, to: string): boolean {
+  if (to !== "completed" || !Object.hasOwn(TRANSITIONS, from)) return false;
+  return TRANSITIONS[from as OrderStatus].includes(CLIENT_CLOSES_AFTER_RELEASE);
+}
+
 /** สถานะปลายทาง — ไปต่อไม่ได้แล้ว */
 export function isTerminal(status: OrderStatus): boolean {
   return TRANSITIONS[status].length === 0;

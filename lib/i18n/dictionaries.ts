@@ -1109,6 +1109,8 @@ const th = {
     completed: "งานนี้เสร็จสมบูรณ์แล้ว",
     completedBody: "ยืนยันรับงานแล้ว ออเดอร์นี้ปิดแล้ว",
     completedAutoBody: "ระบบปิดงานให้อัตโนมัติ เพราะส่งงานครบแล้วและไม่มีการขอแก้ไขภายในเวลาที่กำหนด",
+    /** ลูกค้าปิดงานระหว่างรอบแก้ — ไม่ใช่ "ยืนยันรับงาน" เพราะรอบแก้ที่ค้างอยู่ไม่ได้ถูกส่ง */
+    completedEarlyBody: "ลูกค้าปิดงานด้วยไฟล์ที่ได้รับไปแล้ว — รอบแก้ที่ค้างอยู่ไม่ได้ส่ง ออเดอร์นี้ปิดแล้ว",
   },
 
   /** ข้อความบน timeline — DB เก็บเป็น key ไม่ใช่ข้อความ จะได้แปลตามภาษาของคนอ่าน */
@@ -2375,6 +2377,7 @@ const en: Dictionary = {
     completed: "This order is complete",
     completedBody: "Delivery was confirmed and this order is closed.",
     completedAutoBody: "Closed automatically: the work was delivered and no revision was requested in time.",
+    completedEarlyBody: "The client closed this order with the files already delivered. The pending revision was not delivered.",
   },
 
   invite: {
