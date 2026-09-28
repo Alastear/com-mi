@@ -55,7 +55,18 @@ const RecordSchema = z.object({
   // บาทเต็มเท่านั้น เหมือนช่องกรอก — เศษสตางค์ทิ้งยอดค้างที่ไม่มีฟอร์มไหนจ่ายได้ (ดู `isWholeBaht`)
   amountCents: z.number().int().positive().max(100_000_000).refine(isWholeBaht, "whole_baht"),
   method: z.enum(METHODS),
-  proofMediaId: z.string().max(60).nullable(),
+  /**
+   * ⚠️ **รับได้แค่ null** จนกว่าจะมีหน้าอัปสลิปจริง — หน้าจอส่ง null ทุกครั้งอยู่แล้ว
+   *
+   * เดิมรับสตริงอะไรก็ได้แล้วเขียนลง `proof_media_id` ตรง ๆ ไม่เช็คเจ้าของ ชนิด ถัง หรือออเดอร์ (มีแค่ FK)
+   * id ของไฟล์ผลงานอยู่ใน RSC payload ของหน้าร้านสาธารณะ (`seed` ของ ArtMedia) ใครที่บันทึกเงิน
+   * ออเดอร์ไหนก็ได้ (เช่นร้านที่สั่งงานตัวเองจากบัญชีที่สอง) จึงยิง action ตรงแล้ว "ตรึง" ไฟล์ของร้านอื่นได้:
+   * `mediaReferencedSql` นับแถวเงินทุกแถวเป็นผู้ใช้ (แถวเงินไม่เคยถูกลบ) เจ้าของลบผลงานแล้วไฟล์ยังอยู่
+   * ในถังสาธารณะและกินโควตาของเขาตลอดไป
+   * วันที่เปิดอัปสลิป: รับเฉพาะ media ที่ owner = ผู้กด, kind = 'payment_proof', access = 'private',
+   * order_id = ออเดอร์นี้ — และเช็คใน WHERE ของ insert เดียวกัน ไม่ใช่อ่านก่อนแล้วค่อยเขียน
+   */
+  proofMediaId: z.null(),
   note: z.string().trim().max(500),
   /**
    * id ของแถวที่จะสร้าง — ส่งมาจากฟอร์ม ใช้เป็น idempotency key
@@ -373,7 +384,7 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
         (id, order_id, method, amount_cents, paid_at, proof_media_id, note,
          verified_by_user_id, verified_at, created_at)
       select ${id}::text, ${order.id}::text, ${v.method}::text, ${v.amountCents}::int,
-             ${at}::timestamptz, ${v.proofMediaId}::text, ${v.note}::text,
+             ${at}::timestamptz, null::text, ${v.note}::text,
              ${byCreator ? session.user.id : null}::text,
              ${byCreator ? at : null}::timestamptz, ${at}::timestamptz
       where ${v.amountCents}::int <= (select o.total_cents from "order" o where o.id = ${order.id})
