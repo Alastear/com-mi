@@ -41,10 +41,21 @@ export function isOnBoard(status: OrderStatus): boolean {
  * คอลัมน์หนึ่งรับได้หลายสถานะ จึงต้องหาว่าสถานะปลายทางตัวไหนใน คอลัมน์นั้น
  * ที่ครีเอเตอร์เดินไปได้จริง — ไม่ใช่แค่ดูว่าคอลัมน์ต่างกัน
  */
+/**
+ * ⚠️ ออเดอร์ที่ส่งมอบแล้วไม่ย้ายจากบอร์ด — รอลูกค้ายืนยันรับงาน
+ *
+ * ครีเอเตอร์มีทางเดียวออกจาก delivered คือ "เปิดรอบแก้" เมื่อส่งไฟล์ผิด ซึ่งเป็นการแก้ความผิดพลาด
+ * ต้องทำจากหน้าออเดอร์ที่เห็นไฟล์และเธรด ไม่ใช่ลากการ์ดพลาดไปคอลัมน์ข้าง ๆ
+ */
+function boardMoves(from: OrderStatus): OrderStatus[] {
+  if (from === "delivered") return [];
+  return allowedNext(from, "creator");
+}
+
 export function boardDropTarget(from: OrderStatus, column: BoardColumn): OrderStatus | null {
   if (COLUMN_OF[from] === column) return null; // ลงคอลัมน์เดิม ไม่ต้องทำอะไร
 
-  const candidates = allowedNext(from, "creator").filter((to) => COLUMN_OF[to] === column);
+  const candidates = boardMoves(from).filter((to) => COLUMN_OF[to] === column);
   return candidates[0] ?? null;
 }
 
@@ -55,8 +66,7 @@ export function boardDropTarget(from: OrderStatus, column: BoardColumn): OrderSt
  * revision_requested→in_progress) เกิดขึ้นภายในคอลัมน์เดียวกัน ลากไม่ได้เลย
  * ถ้ามีแต่ drag-and-drop ครีเอเตอร์จะทำสามอย่างนี้ไม่ได้ทั้งที่เป็นงานประจำวัน
  * และเมนูยังเป็นทางเดียวที่ใช้คีย์บอร์ดหรือมือถือได้
- */
-/**
+ *
  * ⚠️ ไม่มี "ยกเลิก" ในเมนูบนบอร์ด — ยกเลิกได้จากหน้าออเดอร์เท่านั้น
  *
  * หน้าออเดอร์มี dialog ที่บอกยอดที่จ่ายแล้วและบอกว่าแพลตฟอร์มคืนเงินให้ไม่ได้
@@ -64,7 +74,7 @@ export function boardDropTarget(from: OrderStatus, column: BoardColumn): OrderSt
  * (`moneyAck` ใน transitionOrder) ก็ไม่ควรให้ปุ่มทำลายอยู่ในเมนูย้ายคอลัมน์ตั้งแต่แรก
  */
 export function boardMenuTargets(from: OrderStatus): OrderStatus[] {
-  return allowedNext(from, "creator").filter((to) => to !== "cancelled");
+  return boardMoves(from).filter((to) => to !== "cancelled");
 }
 
 /** คอลัมน์ที่ลากไปลงได้จากสถานะนี้ — ใช้ไฮไลต์ช่องที่รับของตอนเริ่มลาก */

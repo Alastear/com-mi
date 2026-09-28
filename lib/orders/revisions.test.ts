@@ -45,13 +45,17 @@ describe("นับสิทธิ์ขอแก้ไข", () => {
 });
 
 describe("การเปลี่ยนสถานะที่กินโควตา", () => {
-  it("เข้า revision_requested = นับ สถานะอื่นไม่นับ", () => {
+  it("ลูกค้าเข้า revision_requested = นับ สถานะอื่นไม่นับ", () => {
     for (const s of ORDER_STATUSES) {
-      assert.equal(consumesRevision(s), s === "revision_requested", s);
+      assert.equal(consumesRevision(s, "client"), s === "revision_requested", s);
     }
   });
 
-  it("ทางเข้า revision_requested มีแค่ in_review กับ delivered และลูกค้าเป็นคนกด — ทั้งสองทางนับ", () => {
+  it("ครีเอเตอร์เปิดรอบแก้เอง ไม่นับสิทธิ์ลูกค้า", () => {
+    assert.equal(consumesRevision("revision_requested", "creator"), false);
+  });
+
+  it("ทางเข้า revision_requested: ลูกค้าจาก in_review/delivered และครีเอเตอร์จาก delivered เท่านั้น", () => {
     // ⚠️ ถ้ามีทางเข้าใหม่ ชุดนี้จะพังเพื่อบังคับให้ตัดสินใหม่ว่าทางนั้นควรนับโควตาไหม
     const into = ORDER_STATUSES.filter((s) =>
       (["creator", "client", "system"] as const).some((a) => canTransition(s, "revision_requested", a)),
@@ -59,8 +63,13 @@ describe("การเปลี่ยนสถานะที่กินโค�
     assert.deepEqual(into, ["in_review", "delivered"]);
     for (const from of into) {
       assert.equal(canTransition(from, "revision_requested", "client"), true, from);
-      assert.equal(canTransition(from, "revision_requested", "creator"), false, from);
     }
+    /**
+     * ครีเอเตอร์ออกจาก delivered ได้ — ไม่งั้นไฟล์ผิดที่ส่งหลังลูกค้าใช้สิทธิ์ครบจะค้างตลอดกาล
+     * แต่ไม่ใช่จาก in_review: ตรงนั้นครีเอเตอร์ยังส่งงาน/ย้ายเองได้ตามปกติอยู่แล้ว
+     */
+    assert.equal(canTransition("delivered", "revision_requested", "creator"), true);
+    assert.equal(canTransition("in_review", "revision_requested", "creator"), false);
   });
 });
 

@@ -136,7 +136,7 @@ export async function transitionOrder(input: {
    * นี่แค่ตอบให้ตรงเหตุผล ด่านจริงคือ `where` ของ update ข้างล่าง — อ่านตรงนี้แล้ว
    * กดสองแท็บพร้อมกันยังผ่านที่นี่ได้ทั้งคู่
    */
-  const consuming = consumesRevision(to);
+  const consuming = consumesRevision(to, actor);
   if (consuming && revisionQuota(order.revisionsUsed, order.revisionsAllowed).exhausted) {
     return { ok: false, error: "revisions_exhausted" };
   }

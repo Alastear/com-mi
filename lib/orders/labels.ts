@@ -35,7 +35,8 @@ export function actionLabel(
     case "delivered":
       return a.deliver;
     case "revision_requested":
-      return a.requestRevision;
+      // ครีเอเตอร์กด = เปิดรอบแก้เอง (ไม่นับสิทธิ์ลูกค้า) ต้องใช้คำที่ไม่ฟังเหมือนขอแก้แทนลูกค้า
+      return actor === "creator" ? a.reopenForFix : a.requestRevision;
     case "completed":
       return a.markComplete;
     case "declined":

@@ -1,5 +1,6 @@
 import { fill, type Dictionary } from "@/lib/i18n/dictionaries";
 import type { OrderStatus } from "@/lib/types";
+import type { Actor } from "./state-machine";
 
 /**
  * โควตารอบแก้ของออเดอร์ — ด่านฝั่ง server กับปุ่มบนหน้าจอใช้ฟังก์ชันชุดนี้ชุดเดียว
@@ -43,8 +44,9 @@ export function revisionQuota(used: number, allowed: number): RevisionQuota {
  * - กันลูกค้าตกใจด้วยการบอกก่อนกดเสมอ: ข้างปุ่มเขียนว่าเหลือกี่ครั้งและกดแล้วนับ 1 ครั้ง
  *   (`revisionHint`) ติชมในแชทไม่ผ่านปุ่มนี้จึงไม่ถูกนับ — จะทำตามหรือไม่เป็นเรื่องที่ตกลงกันเอง
  */
-export function consumesRevision(to: OrderStatus): boolean {
-  return to === "revision_requested";
+export function consumesRevision(to: OrderStatus, actor: Actor): boolean {
+  // ครีเอเตอร์เปิดรอบแก้เอง (แก้ไฟล์ผิดของตัวเอง) ไม่นับสิทธิ์ของลูกค้า — ดู state-machine.ts
+  return to === "revision_requested" && actor === "client";
 }
 
 /**

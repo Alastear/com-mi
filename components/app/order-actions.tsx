@@ -71,11 +71,11 @@ export function OrderActions({
 
   // ข้อความโควตาขึ้นเฉพาะตอนที่ปุ่มขอแก้ไขมีอยู่จริงในสถานะนี้ — สถานะอื่นไม่ต้องรก
   const revision =
-    revisions && next.some(consumesRevision)
+    revisions && next.some((to) => consumesRevision(to, actor))
       ? revisionHint(t, revisionQuota(revisions.used, revisions.allowed))
       : null;
   // สิทธิ์หมด = ไม่มีปุ่มให้กดแล้วโดนปฏิเสธ — ข้อความข้างล่างอธิบายแทน
-  const targets = revision?.blocked ? next.filter((to) => !consumesRevision(to)) : next;
+  const targets = revision?.blocked ? next.filter((to) => !consumesRevision(to, actor)) : next;
 
   function move(to: OrderStatus) {
     start(async () => {
