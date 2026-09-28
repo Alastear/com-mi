@@ -31,7 +31,30 @@ type Transition = {
    * กรองที่หน้าจอคือมีความจริงสองที่ แล้วมันจะเพี้ยนออกจากกันในที่สุด
    */
   viaAction?: string;
+  /**
+   * เส้นนี้มีได้เฉพาะเมื่อลูกค้า **ได้ไฟล์ไปแล้วอย่างน้อยหนึ่งรอบ** (มีแถว `delivery` ที่ปล่อยแล้ว)
+   *
+   * ข้อเท็จจริงนี้ตารางไม่รู้ (ขึ้นกับข้อมูลของออเดอร์ใบนั้น) — `allowedNext` ซ่อนเส้นนี้จนกว่าผู้เรียก
+   * จะบอกว่า `released` และด่านจริงอยู่ใน WHERE ของ `transitionOrder` (ดู `needsRelease`)
+   */
+  afterRelease?: true;
 };
+
+/**
+ * ลูกค้าปิดงานด้วยไฟล์ที่ได้ไปแล้ว — จากทุกสถานะที่งานกลับมาทำต่อหลังส่งมอบ
+ *
+ * ⚠️ ต้องมี ไม่งั้นครีเอเตอร์ขังออเดอร์ไว้ได้ด้วยคลิกเดียว: งานส่งแล้ว ลูกค้าจ่ายครบ ครีเอเตอร์กด
+ * "เปิดรอบแก้" (ไม่กินสิทธิ์ลูกค้า) แล้วไม่ส่งอีกเลย — จาก revision_requested ลูกค้าไปได้แค่ยกเลิก
+ * (ครีเอเตอร์ยังกดไป in_progress / in_review ต่อได้อีก ซึ่งลูกค้าก็ไปได้แค่ยกเลิกเหมือนกัน)
+ * cron ปิดงานเองดูแค่ `delivered` ลูกค้าจึงไม่มีทางถึง `completed` = รีวิวไม่ได้ตลอดกาล
+ * และการยกเลิกของลูกค้าไม่นับเป็น "ร้านยกเลิก" ในประวัติร้าน — ร้านเลี่ยงรีวิวแย่ได้ทุกออเดอร์
+ * ลูกค้าที่ขอแก้เองแล้วร้านเงียบไปก็ติดแบบเดียวกัน เส้นนี้จึงไม่ดูว่าใครเปิดรอบแก้
+ *
+ * ไฟล์ที่ปล่อยแล้วโหลดได้ต่อตลอด (`requestDeliveryDownload` ไม่ดูสถานะ) — ปิดงานไม่ทำให้ลูกค้าเสียอะไร
+ * ⚠️ `afterRelease` คือหัวใจ: ก่อนเคยได้ไฟล์ (ช่วง WIP ก่อนส่งจริง) ห้ามปิดงาน — จะได้งาน
+ * "เสร็จ" ที่ไม่มีไฟล์ส่งมอบสักไฟล์ และยังค้างเงินอยู่ได้
+ */
+const CLIENT_CLOSES_AFTER_RELEASE: Transition = { to: "completed", by: ["client"], afterRelease: true };
 
 /**
  * ⚠️ **ไม่มีเส้นไหนเข้าสู่ `quoted` เลย และห้ามเพิ่ม**
@@ -93,6 +116,7 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
     // ส่งไฟล์จริงเลยโดยไม่ผ่านรอบ WIP ก็ได้ — งานเล็ก ๆ ไม่จำเป็นต้องมี
     { to: "delivered", by: ["creator"], viaAction: "deliverAndRelease" },
     { to: "cancelled", by: ["creator", "client"] },
+    CLIENT_CLOSES_AFTER_RELEASE,
   ],
   in_review: [
     // ขอแก้ตอนดูงานระหว่างทำ **นับโควตารอบแก้** เหมือนหลังส่งไฟล์จริง — เหตุผลอยู่ที่ `consumesRevision()`
@@ -110,10 +134,12 @@ const TRANSITIONS: Record<OrderStatus, readonly Transition[]> = {
     { to: "in_progress", by: ["creator"] },
     { to: "delivered", by: ["creator"], viaAction: "deliverAndRelease" },
     { to: "cancelled", by: ["creator", "client"] },
+    CLIENT_CLOSES_AFTER_RELEASE,
   ],
   revision_requested: [
     { to: "in_progress", by: ["creator"] },
     { to: "cancelled", by: ["creator", "client"] },
+    CLIENT_CLOSES_AFTER_RELEASE,
   ],
   delivered: [
     { to: "completed", by: ["client", "system"] },
@@ -144,10 +170,16 @@ export function isTerminal(status: OrderStatus): boolean {
  * สถานะที่ไปต่อได้จากตรงนี้ สำหรับ actor คนนี้ — ใช้ตัดสินว่าจะโชว์ปุ่มอะไรบ้าง
  *
  * ตัดเส้นที่มี `viaAction` ออก เพราะปุ่มพวกนั้นต้องมาจากหน้าจอเฉพาะของมัน
+ * เส้น `afterRelease` โผล่เฉพาะเมื่อผู้เรียกบอกว่ามีรอบที่ปล่อยแล้ว — ไม่บอก = ถือว่ายังไม่มี
+ * (ปุ่มที่หายไปผิด ๆ ดีกว่าปุ่มที่กดแล้ว server ปฏิเสธ)
  */
-export function allowedNext(from: OrderStatus, actor: Actor): OrderStatus[] {
+export function allowedNext(
+  from: OrderStatus,
+  actor: Actor,
+  facts: { released?: boolean } = {},
+): OrderStatus[] {
   return TRANSITIONS[from]
-    .filter((t) => t.by.includes(actor) && !t.viaAction)
+    .filter((t) => t.by.includes(actor) && !t.viaAction && (!t.afterRelease || facts.released === true))
     .map((t) => t.to);
 }
 
@@ -166,6 +198,11 @@ function routeFor(from: OrderStatus, to: OrderStatus, actor: Actor): Transition 
 /** เส้นทางนี้ (ของคนกดคนนี้) ต้องเดินผ่าน action เฉพาะไหม — คืนชื่อ action ถ้าใช่ */
 export function requiresAction(from: OrderStatus, to: OrderStatus, actor: Actor): string | null {
   return routeFor(from, to, actor)?.viaAction ?? null;
+}
+
+/** เส้นทางนี้ (ของคนกดคนนี้) ต้องมีรอบที่ปล่อยแล้วก่อนไหม — ด่านจริงอยู่ใน WHERE ของ `transitionOrder` */
+export function needsRelease(from: OrderStatus, to: OrderStatus, actor: Actor): boolean {
+  return routeFor(from, to, actor)?.afterRelease === true;
 }
 
 export function canTransition(from: OrderStatus, to: OrderStatus, actor: Actor): boolean {

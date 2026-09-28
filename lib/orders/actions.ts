@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
@@ -9,7 +9,7 @@ import { getSession } from "@/lib/auth-guard";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { notify } from "@/lib/notifications/create";
 import { isOrderCode } from "./code";
-import { assertTransition, requiresAction, TransitionError, type Actor } from "./state-machine";
+import { assertTransition, needsRelease, requiresAction, TransitionError, type Actor } from "./state-machine";
 import { moneyBlock } from "./release";
 import { moneyGateSql } from "./release-sql";
 import { insertClockStartedEvent, startClockOnAcceptSet } from "./due-clock-sql";
@@ -181,6 +181,23 @@ export async function transitionOrder(input: {
   if (needsAction) return { ok: false, error: "use_dedicated_action" };
 
   /**
+   * ลูกค้าปิดงานระหว่างรอบแก้ได้ก็ต่อเมื่อเคยได้ไฟล์ไปแล้ว (เหตุผลที่ `CLIENT_CLOSES_AFTER_RELEASE`)
+   * ปุ่มซ่อนไว้แล้วจนกว่าจะมีรอบที่ปล่อย แต่ Server Action ถูกเรียกตรงได้ — ตรงนี้ตอบให้ตรงเรื่อง
+   * ด่านจริงอยู่ใน WHERE ข้างล่าง (`released_at` ย้อนกลับไม่ได้อยู่แล้ว — trigger ใน 0008)
+   */
+  const afterRelease = needsRelease(from, to, actor);
+  const releasedSql = sql`exists (
+    select 1 from delivery d where d.order_id = ${order.id} and d.released_at is not null
+  )`;
+  if (afterRelease) {
+    const released = await db.query.delivery.findFirst({
+      columns: { id: true },
+      where: and(eq(schema.delivery.orderId, order.id), isNotNull(schema.delivery.releasedAt)),
+    });
+    if (!released) return { ok: false, error: "not_allowed" };
+  }
+
+  /**
    * ส่งมอบต้องมีไฟล์จริง
    *
    * `deliverAndRelease()` กันข้อนี้ไว้แล้ว แต่ปุ่มเปลี่ยนสถานะบนหน้าออเดอร์
@@ -283,6 +300,7 @@ export async function transitionOrder(input: {
           consuming ? lt(schema.order.revisionsUsed, schema.order.revisionsAllowed) : undefined,
           moneyGateSql(to),
           moneyCas,
+          afterRelease ? releasedSql : undefined,
         ),
       )
       .returning({ id: schema.order.id, revisionsUsed: schema.order.revisionsUsed }),

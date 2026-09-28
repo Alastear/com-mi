@@ -49,6 +49,7 @@ export function OrderActions({
   money = null,
   currency = "THB",
   revisions = null,
+  released = false,
 }: {
   code: string;
   status: OrderStatus;
@@ -60,6 +61,11 @@ export function OrderActions({
   currency?: string;
   /** โควตารอบแก้ของออเดอร์ — ส่งมาเฉพาะฝั่งลูกค้า ซึ่งเป็นฝั่งเดียวที่กดขอแก้ได้ */
   revisions?: { used: number; allowed: number } | null;
+  /**
+   * ลูกค้าได้ไฟล์ไปแล้วอย่างน้อยหนึ่งรอบ — เปิดปุ่ม "ปิดงานด้วยไฟล์ที่ได้แล้ว" ระหว่างรอบแก้
+   * (เส้น `afterRelease` ใน state-machine.ts) ตัดสินฝั่ง server จากแถว delivery ที่ปล่อยแล้ว
+   */
+  released?: boolean;
 }) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -67,7 +73,7 @@ export function OrderActions({
   // ปลายทางที่รอให้กดยืนยันใน dialog — null = dialog ปิด
   const [confirming, setConfirming] = useState<OrderStatus | null>(null);
 
-  const next = allowedNext(status, actor);
+  const next = allowedNext(status, actor, { released });
   if (next.length === 0) {
     return <p className="text-sm text-muted-foreground">{t.orderAction.noActions}</p>;
   }
@@ -128,13 +134,20 @@ export function OrderActions({
   }
 
   function press(to: OrderStatus) {
+    /**
+     * ปิดงานระหว่างรอบแก้ = รอบที่ครีเอเตอร์กำลังทำจะไม่ถูกส่ง และย้อนไม่ได้ — ถามก่อนเสมอ
+     * (ปิดจาก `delivered` คือการรับงานปกติ ไม่ต้องถาม)
+     */
+    if (to === "completed" && status !== "delivered" && !window.confirm(t.orderAction.closeWithReleasedConfirm)) {
+      return;
+    }
     if (needsMoneyConfirm(to, money)) setConfirming(to);
     else move(to);
   }
 
   // ปุ่มหลักไว้ขวาสุดเพื่อให้อยู่ใกล้นิ้วโป้งบนมือถือ ส่วนปุ่มทำลายอยู่ซ้ายและไม่เด่น
-  const destructive = targets.filter((to) => !isPrimaryAction(to));
-  const primary = targets.filter(isPrimaryAction);
+  const destructive = targets.filter((to) => !isPrimaryAction(to, status));
+  const primary = targets.filter((to) => isPrimaryAction(to, status));
   const fmt = (cents: number) => formatMoney(cents, currency, locale);
 
   return (

@@ -1072,6 +1072,10 @@ const th = {
     markComplete: "ยืนยันรับงาน",
     requestRevision: "ขอแก้ไข",
     reopenForFix: "เปิดรอบแก้ (ไม่นับสิทธิ์ลูกค้า)",
+    /** ลูกค้าปิดงานระหว่างรอบแก้ ด้วยไฟล์ที่ได้ไปแล้ว — ทางออกเมื่อรอบแก้ไม่มาสักที */
+    closeWithReleased: "ปิดงานด้วยไฟล์ที่ได้รับแล้ว",
+    closeWithReleasedConfirm:
+      "ปิดงานนี้ด้วยไฟล์ที่ได้รับไปแล้ว?\n\nรอบแก้ที่ค้างอยู่จะไม่ถูกส่งมา และเปิดงานกลับมาไม่ได้อีก ไฟล์ที่ได้ไปแล้วยังดาวน์โหลดได้ตามเดิม และรีวิวร้านได้หลังปิดงาน",
     startReview: "เปิดอ่านคำขอ",
     acceptOrder: "รับงานนี้",
     cancel: "ยกเลิกงาน",
@@ -2337,6 +2341,9 @@ const en: Dictionary = {
     markComplete: "Confirm delivery",
     requestRevision: "Request a revision",
     reopenForFix: "Reopen to fix (does not use the client's revisions)",
+    closeWithReleased: "Close with the files already delivered",
+    closeWithReleasedConfirm:
+      "Close this order with the files you already received?\n\nThe revision in progress will not be delivered, and the order cannot be reopened. Files you already received stay downloadable, and you can review the shop once the order is closed.",
     startReview: "Open this request",
     acceptOrder: "Take this on",
     cancel: "Cancel order",

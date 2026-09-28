@@ -43,7 +43,9 @@ export function actionLabel(
       // ครีเอเตอร์กด = เปิดรอบแก้เอง (ไม่นับสิทธิ์ลูกค้า) ต้องใช้คำที่ไม่ฟังเหมือนขอแก้แทนลูกค้า
       return actor === "creator" ? a.reopenForFix : a.requestRevision;
     case "completed":
-      return a.markComplete;
+      // ปิดงานระหว่างรอบแก้ (`afterRelease`) ต้องบอกว่ารับ **ไฟล์ที่ได้ไปแล้ว** — ไม่ใช่ "ยืนยันรับงาน"
+      // ซึ่งฟังเหมือนมีงานใหม่ให้รับ ทั้งที่รอบแก้ที่ค้างอยู่จะไม่ถูกส่ง
+      return from === undefined || from === "delivered" ? a.markComplete : a.closeWithReleased;
     case "declined":
       return a.decline;
     case "cancelled":
@@ -59,7 +61,12 @@ export function actionLabel(
  * ถ้าทุกปุ่มเด่นเท่ากัน คนจะไม่รู้ว่าปกติควรกดอันไหน และปุ่มทำลาย
  * (ปฏิเสธ/ยกเลิก) ต้องไม่มีวันเป็นปุ่มหลัก ไม่งั้นมีคนกดพลาดแน่นอน
  */
-export function isPrimaryAction(to: OrderStatus): boolean {
+export function isPrimaryAction(to: OrderStatus, from?: OrderStatus): boolean {
+  /**
+   * ปิดงานระหว่างรอบแก้เป็นทางออกฉุกเฉิน ไม่ใช่ทางปกติ — ห้ามเด่น
+   * ถ้าเด่น ลูกค้าที่รอรอบแก้อยู่ (in_review มีปุ่มขอแก้ด้วย) จะเห็นปุ่มปิดงานเป็นปุ่มหลักแล้วกดไปทั้งที่ยังรออยู่
+   */
+  if (to === "completed" && from !== undefined && from !== "delivered") return false;
   return !["declined", "cancelled", "expired"].includes(to);
 }
 

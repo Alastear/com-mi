@@ -346,6 +346,8 @@ export default async function ClientRequestPage({ params }: Props) {
           money={moneyMoved(order.amountPaidCents, payments)}
           currency={order.currency}
           revisions={{ used: order.revisionsUsed, allowed: order.revisionsAllowed }}
+          // เคยได้ไฟล์แล้ว = ปิดงานระหว่างรอบแก้ได้ (ครีเอเตอร์เปิดรอบแก้แล้วเงียบไป ลูกค้าต้องมีทางออก)
+          released={releasedRound !== null}
         />
       </Card>
 

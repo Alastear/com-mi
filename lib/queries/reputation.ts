@@ -106,6 +106,12 @@ const CREATOR_REOPEN = sql`m.is_system_event
  * แปลว่าจ่ายครบแล้ว ช่วงระหว่างแนบกับปล่อยจึงเป็นของร้านล้วน ๆ
  *
  * ออเดอร์เก่าที่ไม่มีแถว `delivery` ที่ปล่อยแล้ว (ก่อนมี `deliverAndRelease`) ถอยไปใช้ event แรกแบบเดิม
+ *
+ * ⚠️ มีชุดที่ปล่อยแล้วแต่ร้านถอนเองทุกชุด = ลูกค้าปิดงานเองระหว่างรอบแก้ (`CLIENT_CLOSES_AFTER_RELEASE`
+ * ใน state-machine.ts — ทางเดียวที่ `completed` ได้โดยไม่มีชุดที่ปล่อยหลังการเปิดรอบแก้ครั้งสุดท้าย)
+ * ห้ามตกไปใช้ event แรก: นั่นคือเวลาของชุดที่ร้านบอกเองว่าใช้ไม่ได้ ร้านที่ปล่อยไฟล์ชั่วคราวให้ทันกำหนด
+ * แล้วเปิดรอบแก้เงียบ ๆ จนลูกค้ายอมปิดงานจะได้ "ตรงเวลา" ฟรี ใช้เวลาปิดงาน (`completed_at`) แทน
+ * — ร้านไม่เคยส่งของที่ตัวเองยืนยัน ลูกค้าได้งานจบจริงตอนที่ยอมรับของที่มีอยู่
  */
 const HANDOVER_AT = sql`coalesce(
   (
@@ -131,11 +137,15 @@ const HANDOVER_AT = sql`coalesce(
     order by d.released_at asc
     limit 1
   ),
-  (
-    select min(m.created_at) from message m
-    where m.order_id = o.id and m.is_system_event
-      and m.event_type = 'status_changed' and m.event_data->>'to' = 'delivered'
-  )
+  case
+    when exists (select 1 from delivery d where d.order_id = o.id and d.released_at is not null)
+      then o.completed_at
+    else (
+      select min(m.created_at) from message m
+      where m.order_id = o.id and m.is_system_event
+        and m.event_type = 'status_changed' and m.event_data->>'to' = 'delivered'
+    )
+  end
 )`;
 
 /**
