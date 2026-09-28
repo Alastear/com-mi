@@ -57,6 +57,26 @@ export function formatDate(date: Date | string, locale: Locale = "th"): string {
   }).format(d);
 }
 
+/**
+ * "ก.ย. 2569" / "Sep 2026" จากสตริง "YYYY-MM"
+ *
+ * รับเป็นสตริงเดือน ไม่ใช่ Date โดยตั้งใจ — ใช้กับรีวิวบนหน้าร้าน ซึ่งต้องบอกแค่เดือนที่สั่ง
+ * คิวรีตัดเหลือเดือนตั้งแต่ใน SQL (lib/queries/reputation.ts) วันที่เต็มจึงไม่เคยออกจาก server
+ * ตั้งเวลากลางเดือนแบบ UTC แล้วฟอร์แมตเป็น UTC — ไม่มีเขตเวลาไหนเลื่อนข้ามเดือนได้
+ * รูปแบบผิด = คืนค่าเดิม ดีกว่า "Invalid Date" บนหน้าร้าน
+ */
+export function formatYearMonth(ym: string, locale: Locale = "th"): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym);
+  if (!m) return ym;
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return ym;
+  return new Intl.DateTimeFormat(intlLocale(locale), {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(Number(m[1]), month - 1, 15)));
+}
+
 export function formatDateTime(date: Date | string, locale: Locale = "th"): string {
   const d = typeof date === "string" ? new Date(date) : date;
   return new Intl.DateTimeFormat(intlLocale(locale), {

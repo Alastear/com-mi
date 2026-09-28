@@ -193,7 +193,7 @@ sign-out ล้าง session ใน DB แล้วคุกกี้เดิ�
 - [ ] เพิ่ม Discord / X login
 - [ ] LINE Messaging API (ต้องสมัคร LINE Official Account)
 - [ ] ระบบ report + หน้า admin
-- [ ] รีวิว + คะแนน
+- [x] รีวิว + คะแนน + ประวัติร้านบนหน้าร้าน (เฉพาะงานที่มีเงินเข้า)
 
 ---
 

@@ -234,9 +234,14 @@ Index: `(creatorPageId, status, createdAt)`, `(clientUserId, createdAt)`, `code`
 `releasedAt` เป็น null จนกว่า `order.amountPaidCents >= order.totalCents` → signed URL ถึงจะออกให้
 
 ### `review`
-| id | orderId unique | creatorPageId | clientUserId | rating (1–5) | body | isPublic | creatorReply | createdAt |
+| id | orderId unique | creatorPageId | clientUserId | rating (1–5) | body | isPublic | creatorReply | creatorRepliedAt nullable | updatedAt nullable | createdAt |
 
-รีวิวได้เฉพาะออเดอร์ที่ `status = 'completed'` เท่านั้น
+- รีวิวได้เฉพาะออเดอร์ที่ `status = 'completed'` **และ** ร้านยืนยันรับเงินแล้ว (`amountPaidCents > 0`) — ออเดอร์ไม่มีเงินเข้าสร้างได้ฟรีด้วยบัญชีปลอม
+- หนึ่งออเดอร์หนึ่งรีวิว (unique `orderId`) · ลูกค้าแก้ได้ 7 วันนับจาก `createdAt` · ร้านตอบได้ครั้งเดียว (`creatorRepliedAt`)
+- หน้าร้านโชว์แค่ตัวอักษรแรกของชื่อลูกค้ากับเดือนที่สั่ง — ไม่โชว์ชื่อเต็มหรือ handle
+- กติกาอยู่ใน `lib/reputation/review-rules.ts` ด่านจริงอยู่ใน SQL ของ `lib/reputation/actions.ts`
+
+**ประวัติร้าน** (`lib/queries/reputation.ts`) คำนวณสดจากออเดอร์ที่มีเงินเข้า: งานเสร็จ, ส่งงานครั้งแรกตรงกำหนด, ค่ากลางเวลาจากมัดจำถึงส่งงานครั้งแรก, ร้านยกเลิกหลังรับเงิน — ซ่อนจนกว่าจะมีงานเสร็จ 5 งาน
 
 ---
 

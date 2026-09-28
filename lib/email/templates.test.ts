@@ -48,6 +48,8 @@ const CALLER_DATA: { [T in NotificationType]: NotificationData[T] } = {
   quote_accepted: { code: CODE },
   delivery_released: { code: CODE },
   order_auto_complete_soon: { code: CODE, days: 2 },
+  review_posted: { code: CODE },
+  review_replied: { code: CODE },
 };
 
 /** ออเดอร์ตัวอย่าง — ชื่อเป็น ASCII เพื่อเช็คได้ว่าอีเมลภาษาอังกฤษไม่มีภาษาไทยหลุดมา */

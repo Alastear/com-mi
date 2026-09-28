@@ -190,7 +190,19 @@ export const message = pgTable(
     readByCreatorAt: timestamp("read_by_creator_at", { withTimezone: true }),
     readByClientAt: timestamp("read_by_client_at", { withTimezone: true }),
   },
-  (t) => [index("message_order_idx").on(t.orderId, t.createdAt)],
+  (t) => [
+    index("message_order_idx").on(t.orderId, t.createdAt),
+    /**
+     * event ของระบบต่อออเดอร์ — ให้ประวัติร้าน (lib/queries/reputation.ts) หา "ส่งงานครั้งแรกเมื่อไร"
+     * กับ "ใครกดยกเลิก" ได้โดยไม่ต้องไล่อ่านแชททั้งเธรด
+     *
+     * partial เฉพาะ `is_system_event` เพราะข้อความแชทมีได้เป็นร้อยต่อออเดอร์ แต่ event มีแค่หลักสิบ
+     * ⚠️ คิวรีที่อยากใช้ index นี้ต้องมี `is_system_event` ใน WHERE ด้วย ไม่งั้น planner ใช้ไม่ได้
+     */
+    index("message_event_idx")
+      .on(t.orderId, t.eventType, t.createdAt)
+      .where(sql`${t.isSystemEvent}`),
+  ],
 );
 
 /* ── payment_record — บันทึกการชำระ ไม่ใช่การประมวลผล ──────── */
@@ -303,6 +315,22 @@ export const review = pgTable(
     body: text("body").notNull().default(""),
     isPublic: boolean("is_public").notNull().default(true),
     creatorReply: text("creator_reply").notNull().default(""),
+
+    /**
+     * ครีเอเตอร์ตอบเมื่อไร — null = ยังไม่ตอบ และเป็นด่าน "ตอบได้ครั้งเดียว" (compare-and-set)
+     *
+     * ดู `creatorReply` ว่างหรือไม่อย่างเดียวไม่พอ: คำตอบที่เป็นช่องว่างล้วนถูกตัดทิ้งก่อนเขียน
+     * แต่ค่าว่างเป็น default ของคอลัมน์ด้วย แยกไม่ออกว่า "ยังไม่ตอบ" หรือ "ตอบแล้วแต่ว่าง"
+     */
+    creatorRepliedAt: timestamp("creator_replied_at", { withTimezone: true }),
+
+    /**
+     * ลูกค้าแก้รีวิวครั้งล่าสุดเมื่อไร — null = ไม่เคยแก้
+     *
+     * ⚠️ ช่วงแก้ได้ 7 วันนับจาก `createdAt` ไม่ใช่จากค่านี้ ไม่งั้นแก้ทุก 6 วันก็แก้ได้ตลอดกาล
+     * หน้าร้านใช้ค่านี้บอกว่า "แก้ไขแล้ว" และบอกว่าร้านตอบก่อนหรือหลังการแก้
+     */
+    updatedAt: timestamp("updated_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

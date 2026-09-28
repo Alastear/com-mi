@@ -34,6 +34,10 @@ export const NOTIFICATION_TYPES = [
    * บอกล่วงหน้าเพื่อให้ลูกค้าที่เจอปัญหายังขอแก้หรือทักครีเอเตอร์ทัน ก่อนงานถูกปิดทับ
    */
   "order_auto_complete_soon",
+  /** ลูกค้ารีวิวงาน — **ถึงครีเอเตอร์** ไม่งั้นไม่มีทางรู้ว่ามีรีวิวรอให้ตอบ (ตอบได้ครั้งเดียว) */
+  "review_posted",
+  /** ครีเอเตอร์ตอบรีวิว — **ถึงลูกค้า** คำตอบขึ้นหน้าร้านใต้รีวิวของเขา */
+  "review_replied",
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -66,4 +70,6 @@ export type NotificationData = {
   delivery_released: { code: string };
   /** `days` = อีกกี่วันจะปิด — มาจาก `AUTO_COMPLETE_NOTICE_DAYS` ไม่ใช่เลขที่พิมพ์ไว้ในข้อความ */
   order_auto_complete_soon: { code: string; days: number };
+  review_posted: { code: string };
+  review_replied: { code: string };
 };

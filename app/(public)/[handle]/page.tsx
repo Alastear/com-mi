@@ -19,6 +19,9 @@ import { fill, getDictionary } from "@/lib/i18n/dictionaries";
 import { shopUrl } from "@/lib/site";
 import { normalizeHandle, redirectToCanonicalHandle } from "@/lib/canonical";
 import { openSlotsToShow } from "@/lib/shop/slots";
+import { getShopReputation } from "@/lib/queries/reputation";
+import { summarizeTrackRecord } from "@/lib/reputation/track-record";
+import { ShopReviews, ShopTrackRecord } from "@/components/shop-reputation";
 import type { ShopStatus } from "@/lib/types";
 
 type Props = { params: Promise<{ handle: string }> };
@@ -49,9 +52,14 @@ export default async function CreatorPage({ params }: Props) {
    * ร้านที่ยังไม่กด publish: เจ้าของเห็น preview พร้อมแถบเตือน คนอื่นเห็น 404
    * (docs/04-ux-and-ia.md §6 — หน้าที่มักลืมแต่ต้องมี)
    */
-  const session = await getSession();
+  /**
+   * ประวัติร้านยิงพร้อมกับ session — ไม่ขึ้นต่อกัน รอทีละตัวคือเสีย round trip เปล่า ๆ
+   * ร้านที่ยังไม่เผยแพร่แล้วคนดูไม่ใช่เจ้าของ ผลนี้ถูกทิ้งไป — คิวรีเดียวที่ถูก ไม่คุ้มจะรอ session ก่อน
+   */
+  const [session, reputation] = await Promise.all([getSession(), getShopReputation(shop.id)]);
   const isOwner = session?.user.id === shop.userId;
   if (!shop.isPublished && !isOwner) notFound();
+  const trackRecord = summarizeTrackRecord(reputation.raw);
 
   const ownerHandle = shop.owner.handle ?? handle;
   const avatarSrc = shop.avatar?.url ?? shop.owner.image ?? null;
@@ -167,6 +175,12 @@ export default async function CreatorPage({ params }: Props) {
             ))}
           </ul>
         ) : null}
+
+        {/*
+          ประวัติร้านอยู่ก่อนเมนู — แพลตฟอร์มไม่ถือเงิน ลูกค้าต้องตัดสินใจว่าจะโอนให้ร้านนี้ไหม
+          ก่อนจะเลือกเมนู ตัวเลขนี้คือสิ่งที่แทน escrow (นิยามอยู่ที่ lib/queries/reputation.ts)
+        */}
+        <ShopTrackRecord record={trackRecord} t={t} locale={locale} isOwner={isOwner} />
 
         <Separator className="my-10" />
 
@@ -293,6 +307,20 @@ export default async function CreatorPage({ params }: Props) {
                 })}
               </div>
             </section>
+          </>
+        ) : null}
+
+        {/* ── รีวิว ─────────────────────────────────────── */}
+        {/* ไม่มีรีวิวเลยก็ไม่ต้องมีหัวข้อว่าง ๆ — การ์ดประวัติร้านบอกสถานะร้านใหม่ไว้แล้ว */}
+        {reputation.reviews.length > 0 ? (
+          <>
+            <Separator className="my-10" />
+            <ShopReviews
+              reviews={reputation.reviews}
+              total={reputation.raw.reviewCount}
+              t={t}
+              locale={locale}
+            />
           </>
         ) : null}
 

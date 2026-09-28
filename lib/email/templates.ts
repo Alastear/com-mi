@@ -105,6 +105,12 @@ const KIND_OF: { [T in NotificationType]: KindRule<T> } = {
    * ถ้ารู้ตัวหลังงานถูกปิดไปแล้วว่าไฟล์ผิด ปุ่มขอแก้ไขก็หายไปแล้ว
    */
   order_auto_complete_soon: "auto_complete_soon",
+  /**
+   * รีวิวแค่กระดิ่ง ไม่ส่งอีเมล — ไม่มีใครต้องรีบลงมือทำอะไร และไม่ใช่เรื่องเงิน
+   * ครีเอเตอร์เปิดเว็บมาดูงานอยู่แล้ว เห็นกระดิ่งก็ตอบได้
+   */
+  review_posted: null,
+  review_replied: null,
 };
 
 export function emailKindFor<T extends NotificationType>(

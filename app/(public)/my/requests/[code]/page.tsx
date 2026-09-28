@@ -23,6 +23,10 @@ import type { PromptPayType } from "@/lib/payments/promptpay-id";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
 import { QuoteCard } from "@/components/app/quote-card";
+import { ClientReviewCard } from "@/components/app/order-review";
+import { getReviewForOrder } from "@/lib/queries/reputation";
+import { reviewEligibility } from "@/lib/reputation/review-rules";
+import { toOrderReviewView } from "@/lib/reputation/view";
 import { formatDate, formatLineAmount, formatMoney } from "@/lib/format";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -76,6 +80,13 @@ export default async function ClientRequestPage({ params }: Props) {
    * รอมัดจำอยู่ = บอกเป็นจำนวนวันหลังได้มัดจำ ไม่ใช่วันที่ (วันที่ยังเลื่อนได้)
    */
   const due = dueLabel(t, { ...order, status });
+  /**
+   * รีวิวมีได้เฉพาะงานที่ `completed` (สถานะปลายทาง ย้อนไม่ได้) — สถานะอื่นไม่ต้องเสีย query
+   * ฟอร์มเขียนใหม่โชว์เมื่อมีสิทธิ์ตามกติกาเดียวกับ server (`reviewEligibility`) ส่วนรีวิวที่มีแล้ว
+   * โชว์เสมอ แม้ร้านจะยกเลิกการยืนยันเงินทีหลัง — ลูกค้าต้องเห็นสิ่งที่ตัวเองเขียนไว้
+   */
+  const reviewRow = status === "completed" ? await getReviewForOrder(order.id) : null;
+  const canReview = reviewEligibility({ status, amountPaidCents: order.amountPaidCents }) === "ok";
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -140,6 +151,15 @@ export default async function ClientRequestPage({ params }: Props) {
           ) : null}
         </dl>
       </Card>
+
+      {reviewRow || canReview ? (
+        <div className="mt-4">
+          <ClientReviewCard
+            code={order.code}
+            review={reviewRow ? toOrderReviewView(reviewRow, locale) : null}
+          />
+        </div>
+      ) : null}
 
       <Card className="mt-4 gap-3 p-6">
         <p className="font-medium">{t.service.total}</p>

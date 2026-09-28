@@ -17,6 +17,9 @@ import { toPaymentRows } from "@/lib/payments/rows";
 import { PaymentPanel } from "@/components/app/payment-panel";
 import { DeliveryPanel } from "@/components/app/delivery-panel";
 import { QuoteBuilder } from "@/components/app/quote-builder";
+import { CreatorReviewCard } from "@/components/app/order-review";
+import { getReviewForOrder } from "@/lib/queries/reputation";
+import { toOrderReviewView } from "@/lib/reputation/view";
 import { readDelivery } from "@/lib/delivery/read";
 import { canRelease, paymentMode } from "@/lib/orders/release";
 import { depositPercentOf } from "@/lib/orders/pricing";
@@ -67,6 +70,8 @@ export default async function OrderPage({ params }: Props) {
    */
   const quotable = ["requested", "reviewing", "quoted"].includes(order.status);
   const liveQuote = quotable ? await getLiveQuote(order.id) : null;
+  // รีวิวมีได้เฉพาะงานที่ `completed` — สถานะอื่นไม่ต้องเสีย query
+  const reviewRow = status === "completed" ? await getReviewForOrder(order.id) : null;
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 lg:py-8">
@@ -97,6 +102,11 @@ export default async function OrderPage({ params }: Props) {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px] lg:items-start">
         <div className="space-y-6">
+          {/* รีวิวอยู่บนสุด — งานจบแล้ว สิ่งเดียวที่ร้านยังทำได้กับออเดอร์นี้คือตอบรีวิว (ครั้งเดียว) */}
+          {reviewRow ? (
+            <CreatorReviewCard code={order.code} review={toOrderReviewView(reviewRow, locale)} />
+          ) : null}
+
           <OrderThread
             code={order.code}
             entries={toThreadEntries(order.messages)}
