@@ -41,3 +41,12 @@ export function attachPlan(
   if (ids.length === 0) return null;
   return { mode: hasOpenRound ? "add" : "prepare", mediaIds: ids };
 }
+
+/**
+ * ย่อรายชื่อไฟล์สำหรับกล่องยืนยัน — โชว์ไม่เกิน `max` ชื่อ ที่เหลือบอกเป็นจำนวน
+ * (`window.confirm` ยาวเกินจอมือถือแล้วปุ่มตกลงหลุดจอ ชื่อไฟล์ยาวได้ถึงหลายร้อยตัวอักษร)
+ */
+export function namesPreview(names: readonly string[], max = 5): { shown: string[]; more: number } {
+  const shown = names.slice(0, Math.max(0, max));
+  return { shown, more: names.length - shown.length };
+}

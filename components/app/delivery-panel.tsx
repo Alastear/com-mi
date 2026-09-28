@@ -18,7 +18,7 @@ import {
   requestDeliveryDownload,
 } from "@/lib/delivery/actions";
 import { canUploadDelivery } from "@/lib/delivery/path";
-import { attachPlan } from "@/lib/delivery/plan";
+import { attachPlan, namesPreview } from "@/lib/delivery/plan";
 import { fill } from "@/lib/i18n/dictionaries";
 import { registerDelivery, uploadDelivery, type DeliveryUpload } from "@/lib/uploads/client";
 import { stopsBatch, uploadFailure, type UploadFailure } from "@/lib/uploads/errors";
@@ -276,22 +276,40 @@ export function DeliveryPanel({
     }
   }
 
+  /** รายชื่อไฟล์สำหรับกล่องยืนยัน — ย่อเมื่อยาว */
+  function nameList(files: readonly DeliveryFileRow[]): string {
+    const { shown, more } = namesPreview(files.map((f) => f.filename || f.mediaId));
+    const lines = shown.map((n) => `• ${n}`);
+    if (more > 0) lines.push(fill(t.delivery.andMore, { n: more }));
+    return lines.join("\n");
+  }
+
   function release() {
     if (!openRound) return;
+    /**
+     * ⚠️ ไฟล์ค้างที่ไม่อยู่ในรอบจะไม่ถูกส่ง — ถามก่อนทุกครั้ง
+     * ครีเอเตอร์อัปไฟล์เพิ่มหลังกดเตรียม แล้วกดปุ่มหลัก "ส่งมอบ" โดยเข้าใจว่าไปทั้งหมด
+     * เคยเป็นแบบนั้นแล้วไฟล์นั้นหลุดไปอยู่บนออเดอร์ที่ปิดงานแล้ว (ตอนนี้ลบทิ้งได้ แต่ลูกค้าไม่ได้ไฟล์)
+     */
+    if (loose.length > 0) {
+      const text = fill(t.delivery.releaseLeavesOut, { n: loose.length, names: nameList(loose) });
+      if (!window.confirm(text)) return;
+    }
     start(async () => {
       const res = await deliverAndRelease(code, openRound.id);
       if (res.ok) {
         toast.success(t.delivery.released);
-        router.refresh();
       } else {
         toast.error(
           res.error === "not_paid"
             ? t.delivery.notPaid
             : res.error === "no_files"
               ? t.delivery.noFilesYet
-              : t.error.title,
+              : staleText(res.error),
         );
       }
+      // ⚠️ refresh ทุกผล — `stale` คือแท็บนี้เห็นรอบที่ถูกปล่อยไปแล้ว ไม่โหลดใหม่ก็กดแล้วพังซ้ำไม่รู้จบ
+      router.refresh();
     });
   }
 
@@ -394,15 +412,21 @@ export function DeliveryPanel({
         </>
       ) : null}
 
-      {/* ไฟล์ค้าง (ครีเอเตอร์เท่านั้น) — ลบได้ตราบที่ยังไม่อยู่ในรอบไหนและงานยังเปิดอยู่ */}
+      {/*
+        ไฟล์ค้าง (ครีเอเตอร์เท่านั้น) — ลบได้ตลอดตราบที่ยังไม่อยู่ในรอบไหน **ไม่ว่างานจะอยู่สถานะไหน**
+        ⚠️ งานปิดแล้วไฟล์พวกนี้ไม่มีทางไปไหนอีก ถ้าไม่มีปุ่มลบจะกินพื้นที่ตลอดกาล
+        และห้ามใช้หัวข้อ "รอบถัดไป" ตอนงานปิดแล้ว — ไม่มีรอบถัดไปให้ส่ง
+      */}
       {loose.length > 0 ? (
         <>
-          {openRound ? (
+          {!uploadable ? (
+            <p className="text-xs font-medium text-muted-foreground">{t.delivery.notSent}</p>
+          ) : openRound ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.notInRound}</p>
           ) : releasedFiles.length > 0 ? (
             <p className="text-xs font-medium text-muted-foreground">{t.delivery.nextRound}</p>
           ) : null}
-          <ul className="space-y-2">{loose.map((f) => fileRow(f, false, uploadable))}</ul>
+          <ul className="space-y-2">{loose.map((f) => fileRow(f, false, true))}</ul>
         </>
       ) : null}
 
@@ -493,7 +517,11 @@ export function DeliveryPanel({
                 {releasable ? t.delivery.releaseHint : t.delivery.startWorkFirst}
               </p>
               {releasable ? (
-                <Button onClick={release} disabled={pending || !canDeliver} className="w-full">
+                <Button
+                  onClick={release}
+                  disabled={pending || busy || removing !== null || !canDeliver}
+                  className="w-full"
+                >
                   {pending ? <Loader2 className="size-4 animate-spin" /> : null}
                   {canDeliver ? t.delivery.release : t.delivery.notPaid}
                 </Button>

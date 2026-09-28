@@ -214,6 +214,13 @@ export type RemoveFileResult =
  * ไฟล์ที่อยู่ในรอบแล้วลบไม่ได้: รอบที่ปล่อยแล้วคือของที่ลูกค้าซื้อและเป็นหลักฐาน (trigger ใน 0008)
  * ส่วนรอบที่เตรียมไว้ถ้ายอมให้ลบไฟล์ออก `deliverAndRelease` ที่อ่านรายการไปแล้วอาจปล่อยรอบที่ไฟล์หายไป
  *
+ * ⚠️ **ไม่มีด่านสถานะออเดอร์** — ลบได้แม้งานปิดไปแล้ว (ส่งมอบ/เสร็จ/ยกเลิก/ข้อพิพาท)
+ * เดิมลบได้เฉพาะช่วงที่ยังอัปไฟล์ได้ ครีเอเตอร์ที่อัปไฟล์เพิ่มแล้วกดส่งมอบโดยไม่ได้ใส่เข้ารอบ
+ * ออเดอร์เป็น `delivered` → ลูกค้ากดรับงาน (หรือระบบปิดงานให้เอง) → ไฟล์นั้นค้างตลอดกาล:
+ * ลบไม่ได้ ใส่รอบไม่ได้ กินโควตาพื้นที่ (`usedBytesSql` นับทุกแถว media) และไม่มีงานเก็บกวาดไหนแตะถังส่วนตัว
+ * ไฟล์ที่ไม่อยู่ในรอบไหนเลยคือไฟล์ที่ลูกค้าไม่เคยได้และไม่เคยเห็น ไม่ใช่หลักฐานของอะไร
+ * ด่านที่กันไม่ให้ลบไฟล์ที่กำลังถูกผูกเข้ารอบคือ `notInAnyRoundSql` ใต้ lock เดียวกับ `attachDelivery`
+ *
  * ลำดับ: ลบแถวก่อน (compare-and-set ใต้ lock ของออเดอร์) แล้วค่อยลบไฟล์ในถัง
  * ⚠️ ห้ามลบไฟล์ก่อน — ถ้าแถวลบไม่ผ่านเพราะอีกแท็บเพิ่งผูกไฟล์นี้เข้ารอบ เราจะทำลายไฟล์ที่กำลังจะส่งให้ลูกค้า
  *
@@ -229,8 +236,6 @@ export async function removeDeliveryFile(code: string, mediaId: string): Promise
 
   const order = await resolve(code, userId);
   if (!order || !order.isCreator) return { ok: false, error: "forbidden" };
-  // ปิดงานแล้ว ไฟล์ที่เคยอัปไว้เป็นส่วนหนึ่งของประวัติงาน — แก้ได้เฉพาะช่วงที่ยังอัปไฟล์ได้
-  if (!canUploadDelivery(order.status)) return { ok: false, error: "not_allowed" };
 
   const db = getDb();
 
@@ -250,7 +255,6 @@ export async function removeDeliveryFile(code: string, mediaId: string): Promise
         delete from media m
         where m.id = ${mediaId} and m.order_id = ${order.id} and m.owner_user_id = ${userId}
           and m.kind = 'final' and m.access = 'private'
-          and ${orderAcceptsFilesSql(order.id)}
           and ${notInAnyRoundSql(order.id)}
         returning m.pathname, m.bytes, m.content_type, m.filename
       )
@@ -267,11 +271,8 @@ export async function removeDeliveryFile(code: string, mediaId: string): Promise
   ]);
 
   const key = firstKey(gone);
-  if (!key) {
-    // ไฟล์ถูกผูกเข้ารอบ ถูกลบไปแล้ว หรือสถานะเปลี่ยนระหว่างทาง — ให้หน้าจอโหลดใหม่
-    const fresh = await resolve(code, userId);
-    return { ok: false, error: fresh && !canUploadDelivery(fresh.status) ? "not_allowed" : "stale" };
-  }
+  // ไฟล์ถูกผูกเข้ารอบหรือถูกลบไปแล้วจากอีกแท็บ — ให้หน้าจอโหลดใหม่
+  if (!key) return { ok: false, error: "stale" };
 
   try {
     await deleteObjects("private", [key]);

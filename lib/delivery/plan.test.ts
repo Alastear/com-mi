@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ATTACH_MAX, attachPlan, uniqueIds } from "./plan";
+import { ATTACH_MAX, attachPlan, namesPreview, uniqueIds } from "./plan";
 
 /**
  * บั๊กที่เทสต์นี้กันไว้: เตรียมรอบไปแล้วแต่ยังไม่ปล่อย ไฟล์ที่อัปทีหลังหายไปจากจอครีเอเตอร์
@@ -40,5 +40,19 @@ describe("attachPlan", () => {
 describe("uniqueIds", () => {
   it("รักษาลำดับแรกที่เจอ", () => {
     assert.deepEqual(uniqueIds(["b", "a", "b", "c", "a"]), ["b", "a", "c"]);
+  });
+});
+
+describe("namesPreview", () => {
+  it("ไม่เกินจำนวนที่กำหนด → โชว์ครบ ไม่มีส่วนเกิน", () => {
+    assert.deepEqual(namesPreview(["a", "b"], 5), { shown: ["a", "b"], more: 0 });
+  });
+
+  it("เกิน → ตัดเหลือ max และบอกจำนวนที่เหลือ", () => {
+    assert.deepEqual(namesPreview(["a", "b", "c", "d"], 2), { shown: ["a", "b"], more: 2 });
+  });
+
+  it("ว่าง → ไม่มีอะไรเลย", () => {
+    assert.deepEqual(namesPreview([]), { shown: [], more: 0 });
   });
 });

@@ -532,6 +532,10 @@ const th = {
     removed: "ลบไฟล์แล้ว",
     roundChanged: "รายการไฟล์เปลี่ยนไปแล้ว — โหลดหน้าใหม่ให้แล้ว ลองอีกครั้ง",
     cannotChangeRound: "สถานะงานตอนนี้แก้ไฟล์ส่งมอบไม่ได้",
+    notSent: "ไม่ได้ส่งให้ลูกค้า — ลบทิ้งเพื่อคืนพื้นที่ได้",
+    releaseLeavesOut:
+      "ยังมี {n} ไฟล์ที่ไม่อยู่ในรอบนี้ และจะไม่ถูกส่งให้ลูกค้า:\n{names}\n\nส่งมอบเฉพาะไฟล์ในรอบนี้ต่อไหม? ถ้าจะส่งไฟล์เหล่านั้นด้วย กดยกเลิก แล้วกด \"เพิ่มเข้ารอบนี้\" ก่อน",
+    andMore: "และอีก {n} ไฟล์",
   },
 
   portfolioVideo: {
@@ -1817,6 +1821,10 @@ const en: Dictionary = {
     removed: "File removed",
     roundChanged: "The file list changed — the page was refreshed, try again",
     cannotChangeRound: "Delivery files cannot be changed at this stage",
+    notSent: "Never sent to the client — delete to free the space",
+    releaseLeavesOut:
+      "{n} file(s) are not in this round and will not be sent to the client:\n{names}\n\nDeliver only the files in this round? To send them too, press Cancel and add them to this round first.",
+    andMore: "and {n} more",
   },
 
   portfolioVideo: {
