@@ -54,3 +54,14 @@ describe("บันทึกไฟล์ส่งมอบ", () => {
     assert.match(reg, /db\.batch\(\[\s+lockOrder\(intent\.orderId\),/);
   });
 });
+
+describe("แผงไฟล์ส่งมอบตอนงานจบแล้ว", () => {
+  it("รอบที่ค้างตอนงานจบไม่โชว์ 'กดเริ่มงานก่อน' — ไม่มีปุ่มนั้นแล้ว และขัดกับหัวข้อให้เอาออกแล้วลบ", () => {
+    const panel = readFileSync(join(process.cwd(), "components/app/delivery-panel.tsx"), "utf8");
+    const i = panel.indexOf("t.delivery.startWorkFirst");
+    assert.ok(i >= 0);
+    // เงื่อนไขที่ครอบคำใบ้ (อันล่าสุดก่อนหน้า) ต้องตัดงานที่จบแล้วออก
+    const guard = panel.lastIndexOf("{openRound", i);
+    assert.match(panel.slice(guard, guard + 40), /^\{openRound && !closed \? \(/);
+  });
+});

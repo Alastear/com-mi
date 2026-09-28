@@ -596,7 +596,11 @@ export function DeliveryPanel({
             </>
           ) : null}
 
-          {openRound ? (
+          {/*
+            ⚠️ งานจบแล้วไม่มีทางส่งรอบนี้อีก — ห้ามโชว์ "กดเริ่มงานก่อน" ซึ่งไม่มีปุ่มนั้นให้กดแล้ว
+            และขัดกับหัวข้อ `roundNotSent` ด้านบนที่บอกให้เอาออกแล้วลบทิ้ง
+          */}
+          {openRound && !closed ? (
             <>
               <p className="text-xs text-muted-foreground">
                 {releasable ? t.delivery.releaseHint : t.delivery.startWorkFirst}
