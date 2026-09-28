@@ -133,6 +133,8 @@ export async function setShopImage(mediaId: string, slot: "banner" | "avatar") {
    * `orphanedAt: null` — รูปที่เคยถูกปลดแล้วถูกตั้งกลับมาต้องเริ่มนับใหม่ ไม่งั้นโดนลบทั้งที่ใช้อยู่
    */
   await db.batch([
+    // เรียง batch ที่แตะการอ้างถึงไฟล์ของคนนี้ — เหตุผลอยู่ที่ `orphanUnreferenced`
+    lockStorage(user.id),
     db
       .update(schema.creatorPage)
       .set(
@@ -211,6 +213,8 @@ export async function addPortfolioItem(mediaId: string, title = "") {
   // แถวผลงานกับสถานะ linked ต้องเกิดพร้อมกัน — ขาดตัวหลังเมื่อไร งานเก็บกวาดจะเห็นเป็น orphan
   // ที่พ้นเวลาผ่อนผัน (ด่าน `mediaReferencedSql` ตอนลบยังกันไว้ แต่แถวจะค้างสถานะผิดตลอดไป)
   await db.batch([
+    // เรียงกับ batch ที่ปลดไฟล์ของคนนี้ — ไม่งั้นไฟล์ที่เพิ่งผูกถูกปลดเป็น orphan ได้ (ดู `orphanUnreferenced`)
+    lockStorage(user.id),
     db.insert(schema.portfolioItem).values({
       id: newId("port"),
       creatorPageId: page.id,
@@ -241,6 +245,8 @@ export async function removePortfolioItem(itemId: string) {
    * ไฟล์ถูกลบจริงโดยงานเก็บกวาดหลังเวลาผ่อนผัน ไม่ใช่ตรงนี้ — หน้าร้านที่เปิดค้างไว้ยังโหลดรูปอยู่ได้
    */
   await db.batch([
+    // เรียง batch ที่แตะการอ้างถึงไฟล์ของคนนี้ — เหตุผลอยู่ที่ `orphanUnreferenced`
+    lockStorage(user.id),
     // จำกัดด้วย creatorPageId ด้วย — ไม่งั้นลบของคนอื่นได้ถ้ารู้ id
     db
       .delete(schema.portfolioItem)

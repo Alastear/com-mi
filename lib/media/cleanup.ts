@@ -10,7 +10,7 @@ import {
   isStray,
   referencedPaths,
 } from "./cleanup-rules";
-import { dueOrphanSql } from "./references";
+import { dueOrphanSql, mediaReferencedSql, relinkReferencedOrphansSql } from "./references";
 
 /**
  * เก็บกวาดไฟล์ที่ไม่มีใครใช้แล้ว
@@ -44,6 +44,8 @@ export type CleanupReport = {
   keptReferenced: number;
   /** แถว orphan ที่ถึงเวลาแล้วแต่ตอนจะลบกลับมีคนผูกใช้อยู่ — ไม่ลบ (ดู `sweepOrphanRows`) */
   orphanRowsKeptInUse: number;
+  /** แถวสาธารณะที่เป็น orphan ทั้งที่ยังมีคนใช้ — คืนเป็น linked (ดู `relinkReferencedOrphansSql`) */
+  orphanRowsRelinked: number;
   errors: string[];
 };
 
@@ -63,6 +65,7 @@ export async function cleanupMedia(
     keptTooRecent: 0,
     keptReferenced: 0,
     orphanRowsKeptInUse: 0,
+    orphanRowsRelinked: 0,
     errors: [],
   };
 
@@ -220,6 +223,27 @@ export async function sweepOrphanRows(opts: {
   const scope = onlyIds
     ? sql` and m.id in (${sql.join(onlyIds.map((id) => sql`${id}`), sql`, `)})`
     : sql``;
+
+  /**
+   * คืนสถานะแถวที่ถูกปลดผิด ๆ ก่อนเลือกแถวที่จะลบ — ไม่งั้นมันถูกข้ามเงียบ ๆ ทุกรอบ (SELECT กรองแถวที่ยังใช้อยู่ทิ้ง
+   * ตั้งแต่ใน SQL ไม่ถูกนับแม้แต่ใน `orphanRowsKeptInUse`) แล้ววันที่เลิกใช้ก็ถูกลบทันทีด้วย `orphaned_at` เก่า
+   * dry run ไม่เขียน — แค่นับ
+   */
+  try {
+    if (dryRun) {
+      const found = await db.execute(sql`
+        select count(*)::int as n from media m
+         where m.status = 'orphan' and m.access = 'public'
+           and ${mediaReferencedSql(sql`m.id`)}${scope}
+      `);
+      report.orphanRowsRelinked += Number((found.rows as Array<{ n: number }>)[0]?.n ?? 0);
+    } else {
+      report.orphanRowsRelinked += affectedRows(await db.execute(relinkReferencedOrphansSql(scope)));
+    }
+  } catch (err) {
+    // คืนสถานะไม่ได้ไม่ทำให้ลบผิด — delete ข้างล่างตรวจ `mediaReferencedSql` ซ้ำเองอยู่แล้ว
+    report.errors.push(`relink: ${String(err).slice(0, 120)}`);
+  }
   const result = await db.execute(sql`
     select m.id, m.pathname, m.poster_pathname, m.status, m.access, m.created_at, m.orphaned_at
       from media m

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { orphanUnreferenced } from "@/lib/media/references";
+import { lockStorage } from "@/lib/uploads/intent";
 import { requireCreator } from "@/lib/auth-guard";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -304,6 +305,8 @@ export async function setServiceCover(serviceId: string, mediaId: string) {
    * เดิมปกเก่าค้างเป็น linked ตลอดไป ไฟล์ไม่เคยถูกเก็บกวาดและกินโควตา
    */
   await db.batch([
+    // เรียง batch ที่แตะการอ้างถึงไฟล์ของคนนี้ — เหตุผลอยู่ที่ `orphanUnreferenced`
+    lockStorage(user.id),
     db
       .update(schema.service)
       .set({ coverMediaId: mediaId, updatedAt: new Date() })
@@ -332,6 +335,8 @@ export async function deleteService(serviceId: string) {
    * (`mediaReferencedSql` ไม่นับเมนูที่ลบแล้ว — ดูเหตุผลที่ lib/media/references.ts)
    */
   await db.batch([
+    // เรียง batch ที่แตะการอ้างถึงไฟล์ของคนนี้ — เหตุผลอยู่ที่ `orphanUnreferenced`
+    lockStorage(user.id),
     db
       .update(schema.service)
       .set({

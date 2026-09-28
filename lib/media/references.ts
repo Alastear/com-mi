@@ -62,9 +62,14 @@ export function mediaReferencedSql(id: SQL): SQL {
  * และแตะเฉพาะ `status = 'linked'` — แถว orphan ที่เพิ่งอัป (`orphaned_at` ว่าง) ต้องคงนับเวลา
  * ผ่อนผันจาก `created_at` เหมือนเดิม
  *
- * ⚠️ ด่านนี้ไม่ใช่ด่านสุดท้าย: สองคำขอที่วิ่งพร้อมกัน (เช่นตั้งรูปเดียวกันเป็นปกเมนูขณะเปลี่ยนอวาตาร์)
- * อาจทำให้แถวที่ถูกอ้างถึงกลายเป็น orphan ได้ใน READ COMMITTED งานเก็บกวาดจึงตรวจ
- * `mediaReferencedSql` ซ้ำในคำสั่ง delete เอง (compare-and-set) — แถวที่ยังถูกใช้ไม่มีวันถูกลบ
+ * ⚠️ **ทุก batch ที่เรียกตัวนี้ หรือผูกไฟล์สาธารณะเข้ากับอะไรก็ตาม ต้องเริ่มด้วย `lockStorage(เจ้าของ)`**
+ * สองคำขอที่วิ่งพร้อมกัน (เช่นตั้งรูป Y เป็นปกเมนูขณะเปลี่ยนอวาตาร์ออกจาก Y) — UPDATE ของตัวนี้รอ lock
+ * แถว Y แล้วเช็ค WHERE ซ้ำกับแถวใหม่ แต่ซับคิวรี `not exists` ยังใช้ snapshot ตอนเริ่มคำสั่ง
+ * จึงไม่เห็นปกที่อีกคำขอเพิ่ง commit — Y กลายเป็น orphan (`orphaned_at` = ตอนนั้น) ทั้งที่เป็นปกอยู่
+ * วันที่ปกเปลี่ยนจริง Y ไม่ถูกประทับเวลาใหม่ (ตัวนี้แตะแค่ linked) งานเก็บกวาดลบทันทีไม่รอ 24 ชม.
+ * ล็อกของเจ้าของก่อน = batch ของคนเดียวกันเรียงกัน คำสั่งใน batch หลังเริ่มหลังอีกอันจบแล้วจึงเห็นผลครบ
+ * แถวที่เคยพังไปแล้ว `sweepOrphanRows` คืนสถานะให้ (`relinkReferencedOrphansSql`)
+ * และงานเก็บกวาดยังตรวจ `mediaReferencedSql` ซ้ำในคำสั่ง delete เอง — แถวที่ยังถูกใช้ไม่มีวันถูกลบ
  */
 export function orphanUnreferenced(ownerUserId: string) {
   return getDb().execute(sql`
@@ -91,4 +96,29 @@ export function dueOrphanSql(cutoff: Date): SQL {
     and coalesce(m.orphaned_at, m.created_at) < ${cutoff.toISOString()}::timestamptz
     and not ${mediaReferencedSql(sql`m.id`)}
   )`;
+}
+
+/**
+ * คืนสถานะแถวสาธารณะที่ถูกปลดเป็น orphan ทั้งที่ยังมีคนใช้อยู่ — กลับเป็น linked และล้าง `orphaned_at`
+ *
+ * แถวแบบนี้เกิดจากการแข่งที่ `orphanUnreferenced` อธิบายไว้ (ก่อนมี `lockStorage` ในทุก batch) ถ้าไม่คืน
+ * มันค้างเป็น orphan ที่มี `orphaned_at` เก่า งานเก็บกวาดข้ามไปเงียบ ๆ ตราบที่ยังถูกใช้ แล้ววันที่เลิกใช้
+ * ก็ถูกลบทันทีโดยไม่มีเวลาผ่อนผัน (`orphanUnreferenced` ไม่ประทับเวลาใหม่ให้แถวที่ไม่ใช่ linked)
+ * คืนเป็น linked แล้ว การเลิกใช้ครั้งถัดไปจะเดินทางปกติ: linked → orphan พร้อมเวลาใหม่
+ *
+ * รวมแถว `orphaned_at` ว่าง (อัปแล้วถูกผูกโดยไม่ได้ตั้ง linked) ด้วย — เลิกใช้เมื่อไรก็โดนลบทันทีเหมือนกัน
+ * เพราะเวลาผ่อนผันนับจาก `created_at` ที่เก่าไปนานแล้ว
+ * ⚠️ แตะเฉพาะ public เหมือน `orphanUnreferenced` — ไฟล์ส่วนตัวใช้ `orphan` เป็นสถานะ "ไฟล์ค้าง" ของการส่งมอบ
+ *
+ * @param scope เงื่อนไขเพิ่ม (alias `m`) — สคริปต์ตรวจจำกัดเฉพาะแถวทดสอบ
+ */
+export function relinkReferencedOrphansSql(scope: SQL = sql``): SQL {
+  return sql`
+    update media m
+       set status = 'linked', orphaned_at = null
+     where m.status = 'orphan'
+       and m.access = 'public'
+       and ${mediaReferencedSql(sql`m.id`)}${scope}
+    returning m.id
+  `;
 }
