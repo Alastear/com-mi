@@ -1,7 +1,7 @@
 "use client";
 
 import { quotaFullText } from "@/lib/billing/plans";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Download, FileUp, Loader2, Lock, Package, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -87,6 +87,23 @@ export function DeliveryPanel({
     pct: number;
     phase: "upload" | RegisterStatus;
   } | null>(null);
+  /**
+   * กันปิดแท็บ/รีโหลดระหว่างอัปหรือบันทึก — ถามก่อนด้วยกล่องของเบราว์เซอร์
+   * ⚠️ ชิ้นที่อัปแล้วกับรายการ ETag อยู่ในหน่วยความจำของหน้านี้เท่านั้น ปิดไปแล้วไม่มีอะไรบันทึกต่อได้
+   * ไฟล์ 2 GB ที่อัปเสร็จแล้วกลายเป็นขยะรองานเก็บกวาด ทั้งที่ข้อความบอก "อย่าเพิ่งปิดหน้านี้"
+   * และช่วงบันทึกซ้ำนานได้ถึงยี่สิบนาที (lib/uploads/register-retry.ts)
+   * การเปลี่ยนหน้าภายในแอป (Link) ไม่ผ่านตรงนี้ — แต่ก็ไม่ทิ้งงาน promise ยังวิ่งต่อจนจบ
+   */
+  useEffect(() => {
+    if (!busy) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Safari/เบราว์เซอร์เก่าดูแค่ returnValue
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [busy]);
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [downloading, setDownloading] = useState<string | null>(null);
