@@ -29,3 +29,14 @@ describe("เอาไฟล์ออกจากรอบที่ยังไ�
     assert.match(fn, /update delivery d set media_ids = d\.media_ids - \$\{mediaId\}::text\s+where d\.order_id = \$\{order\.id\} and d\.released_at is null/);
   });
 });
+
+describe("ส่งมอบ + ปล่อยไฟล์", () => {
+  it("event ส่งมอบอยู่ใน batch เดียวกับการปล่อย (มีแถวเฉพาะเมื่อเพิ่งปล่อยจริง) ไม่ใช่คำสั่งตามหลัง", () => {
+    const fn = body("deliverAndRelease");
+    assert.match(fn, /where exists \(select 1 from delivery d where d\.id = \$\{dlv\.id\} and d\.released_at = \$\{at\}::timestamptz\)/);
+    assert.match(fn, /db\.batch\(\[lockOrder\(order\.id\), release, event\]\)/);
+    assert.match(fn, /db\.batch\(\[lockOrder\(order\.id\), flip, release, event\]\)/);
+    // ห้ามมี insert event หลัง batch อีก — ล้มตรงนั้นแล้วซ่อมไม่ได้
+    assert.doesNotMatch(fn, /db\.insert\(schema\.message\)/);
+  });
+});

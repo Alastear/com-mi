@@ -452,9 +452,26 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
     )
     .returning({ id: schema.delivery.id });
 
+  /**
+   * event ส่งมอบลงเธรด **ใน batch เดียวกับการปล่อย** — มีแถวเฉพาะเมื่อคำสั่งปล่อยข้างบนเพิ่งเขียนจริง
+   *
+   * ⚠️ เดิมเขียนหลัง batch commit เป็นคำสั่งแยก ถ้า Neon สะดุดตรงนั้น รอบถูกปล่อยและออเดอร์เป็น
+   * `delivered` แล้วแต่เธรดไม่มีบันทึกว่าใครปล่อยเมื่อไร และกดซ้ำก็ซ่อมไม่ได้ (รอบปล่อยแล้ว = `stale`)
+   * ด่าน "เพิ่งปล่อยตรงนี้" = `released_at` เท่ากับ `now` ของ request นี้ (แบบเดียวกับ `insertEventIf`
+   * ใน lib/payments/actions.ts) — แพ้ compare-and-set = ไม่มีแถว ไม่มี event
+   * ทุกพารามิเตอร์มี cast — ใน `insert ... select` Postgres เดาชนิดใน select list ไม่ได้
+   */
+  const at = now.toISOString();
+  const event = db.execute(sql`
+    insert into message (id, order_id, sender_user_id, is_system_event, event_type, event_data, created_at)
+    select ${newId("msg")}::text, ${order.id}::text, ${session.user.id}::text, true, 'status_changed'::text,
+           ${JSON.stringify({ from, to: "delivered", actor: "creator" })}::jsonb, ${at}::timestamptz
+    where exists (select 1 from delivery d where d.id = ${dlv.id} and d.released_at = ${at}::timestamptz)
+  `);
+
   let released: { id: string }[];
   if (alreadyDelivered) {
-    [, released] = await db.batch([lockOrder(order.id), release]);
+    [, released] = await db.batch([lockOrder(order.id), release, event]);
   } else {
     const flip = db
       .update(schema.order)
@@ -468,7 +485,7 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
         ),
       )
       .returning({ id: schema.order.id });
-    const [, flipped, rel] = await db.batch([lockOrder(order.id), flip, release]);
+    const [, flipped, rel] = await db.batch([lockOrder(order.id), flip, release, event]);
     released = rel;
     if (flipped.length === 0) {
       // สถานะยังเหมือนเดิมแต่เขียนไม่ผ่าน = เงินลดลงระหว่างทาง · อย่างอื่น = รอบ/สถานะเปลี่ยนจากอีกแท็บ
@@ -483,16 +500,7 @@ export async function deliverAndRelease(code: string, deliveryId: string): Promi
    */
   if (released.length === 0) return { ok: false, error: "stale" };
 
-  await db.insert(schema.message).values({
-    id: newId("msg"),
-    orderId: order.id,
-    senderUserId: session.user.id,
-    isSystemEvent: true,
-    eventType: "status_changed",
-    eventData: { from, to: "delivered", actor: "creator" },
-    createdAt: now,
-  });
-
+  // แจ้งลูกค้าเฉพาะเมื่อปล่อยสำเร็จจริง (ถึงตรงนี้ = `released` มีแถว) — event อยู่ใน batch ข้างบนแล้ว
   await notify({
     userId: order.clientUserId,
     actorUserId: session.user.id,
