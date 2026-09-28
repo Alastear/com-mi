@@ -238,6 +238,8 @@ async function registerClaimed(
    *     ต่างเห็นยอดเดิมและผ่านทั้งหมด ได้ N เท่าของโควตาถาวร
    *   ยังไม่มีแถวไหนชี้ key นี้ — การลองซ้ำหลังคำตอบหายต้องไม่ได้แถวที่สอง
    *
+   *   คำขอยังไม่ถูกปิดตั้งแต่เรา claim — `expires_at` ไม่ถูกลดลง (ดู `intentLive` ข้างล่าง)
+   *
    * ลำดับล็อก: ออเดอร์ก่อน แล้วค่อยโควตา (กติกาใน lib/orders/lock.ts)
    *
    * `url` ว่าง — ถังส่วนตัวไม่มีโดเมน ทุกการโหลดต้องผ่าน URL ที่เซ็นทีละครั้ง
@@ -245,6 +247,25 @@ async function registerClaimed(
    * ไม่คำนวณ thumbhash ให้ไฟล์ส่งมอบ — ภาพย่อของงานที่ยังไม่จ่ายก็คือการรั่ว
    */
   const mediaId = newId("med");
+  /**
+   * ⚠️ คำขอต้องยังเป็นของเราอยู่ **ตอน insert** ไม่ใช่แค่ตอน claim
+   *
+   * รอบก่อน insert commit ไปแล้วแต่ Neon โยน error → คืนสิทธิ์ → เบราว์เซอร์ลองซ้ำ (claim ได้อีก)
+   * ระหว่างนั้นครีเอเตอร์ลบไฟล์นี้จากอีกแท็บ: `removeDeliveryFile` ลบแถว + ปิดคำขอ ("ป้ายหลุมศพ" ที่ลด
+   * `expires_at` ลงเป็น now) แล้วลบไฟล์ใน R2 — ถ้าการลองซ้ำผ่านเช็ค `existing` ด้านบนไปก่อนแถวถูกลบ
+   * แล้ว insert ตรงนี้ได้ จะเกิดแถวใหม่ชี้ไฟล์ที่กำลังจะหาย ครีเอเตอร์ส่งมอบไปแล้วลูกค้าโหลดได้ 404
+   * `removeDeliveryFile` ถือ `lockOrder` เดียวกัน การลบกับ insert นี้จึงเรียงกันเสมอ — ถ้าลบมาก่อน
+   * WHERE นี้เห็นป้ายแล้วไม่ insert
+   *
+   * เทียบกับค่าที่ claim ได้ ไม่ใช่ `> now()` — คำขอที่หมดอายุเองระหว่างที่เราประกอบไฟล์อยู่ (เราถือมันอยู่)
+   * ยังบันทึกได้ ที่ห้ามคือคำขอที่ **มีคนปิด** (`closeIntent` / ป้ายหลุมศพ ต่างก็ลด `expires_at`)
+   * ตัดที่มิลลิวินาทีให้ตรงกับ `Date` ของ JS (เหตุผลเดียวกับ lib/orders/version.ts)
+   */
+  const intentLive = sql`exists (
+    select 1 from upload_intent i
+    where i.id = ${intent.id} and i.user_id = ${userId}
+      and date_trunc('milliseconds', i.expires_at) >= ${intent.expiresAt.toISOString()}::timestamptz
+  )`;
   const statuses = sql.join(
     DELIVERY_UPLOAD_STATUSES.map((s) => sql`${s}`),
     sql`, `,
@@ -260,6 +281,7 @@ async function registerClaimed(
              ${intent.bytes}::int, ${intent.filename.slice(0, MAX_FILENAME_LENGTH)}::text, 'orphan'::text
       where exists (select 1 from "order" o where o.id = ${intent.orderId} and o.status in (${statuses}))
         and not exists (select 1 from media m where m.pathname = ${key})
+        and ${intentLive}
         and ${withinQuotaSql(userId, intent.bytes, planLimits(plan).storage_bytes)}
       returning id
     `),
@@ -280,6 +302,12 @@ async function registerClaimed(
   }
   // ไบต์ถูกเขียนไปแล้ว ต้องเก็บกวาดเอง ไม่งั้นเหลือไฟล์ค้างที่ไม่มีแถวชี้ถึง
   await deleteObjects("private", [key]).catch(() => {});
+  // คำขอถูกปิดระหว่างทาง (ลบไฟล์นี้จากอีกแท็บ) — ไม่ใช่เรื่องโควตาหรือสถานะ ต้องอัปใหม่ถ้ายังต้องการไฟล์
+  const still = await db.query.uploadIntent.findFirst({
+    columns: { expiresAt: true },
+    where: and(eq(schema.uploadIntent.id, intent.id), eq(schema.uploadIntent.userId, userId)),
+  });
+  if (!still || still.expiresAt.getTime() < intent.expiresAt.getTime()) return { ok: false, error: "forbidden" };
   const fresh = await db.query.order.findFirst({
     where: eq(schema.order.id, intent.orderId),
     columns: { status: true },

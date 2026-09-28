@@ -40,3 +40,17 @@ describe("ส่งมอบ + ปล่อยไฟล์", () => {
     assert.doesNotMatch(fn, /db\.insert\(schema\.message\)/);
   });
 });
+
+describe("บันทึกไฟล์ส่งมอบ", () => {
+  it("insert ต้องเห็นว่าคำขอยังไม่ถูกปิดตั้งแต่ claim — ไฟล์ที่ถูกลบจากอีกแท็บต้องไม่ได้แถวใหม่", () => {
+    const reg = readFileSync(join(process.cwd(), "lib/delivery/register.ts"), "utf8");
+    assert.match(
+      reg,
+      /date_trunc\('milliseconds', i\.expires_at\) >= \$\{intent\.expiresAt\.toISOString\(\)\}::timestamptz/,
+    );
+    const insert = reg.slice(reg.indexOf("insert into media"), reg.indexOf("returning id", reg.indexOf("insert into media")));
+    assert.match(insert, /and \$\{intentLive\}/);
+    // ต้องอยู่ใต้ lock ของออเดอร์ตัวเดียวกับ removeDeliveryFile
+    assert.match(reg, /db\.batch\(\[\s+lockOrder\(intent\.orderId\),/);
+  });
+});
