@@ -49,7 +49,7 @@ export function PortfolioManager({
     start(async () => {
       await removePortfolioItem(id);
       router.refresh();
-      toast.success(t.media.remove);
+      toast.success(t.media.portfolioRemoved);
     });
   }
 

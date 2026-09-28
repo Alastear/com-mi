@@ -233,6 +233,8 @@ const th = {
     banner: "แบนเนอร์",
     avatar: "รูปโปรไฟล์",
     remove: "ลบรูปนี้",
+    /** toast หลังลบผลงาน — บอกว่าเสร็จแล้ว ไม่ใช่คำสั่ง และไม่พูดว่า "รูป" (ผลงานเป็นวิดีโอได้) */
+    portfolioRemoved: "ลบผลงานแล้ว",
     uploaded: "อัปโหลดแล้ว",
   },
 
@@ -1561,6 +1563,7 @@ const en: Dictionary = {
     banner: "Banner",
     avatar: "Profile picture",
     remove: "Remove",
+    portfolioRemoved: "Removed from portfolio",
     uploaded: "Uploaded",
   },
 
