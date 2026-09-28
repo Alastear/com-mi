@@ -23,7 +23,7 @@ pnpm dev                                  # http://localhost:3450
 | `pnpm test` | เทสต์ตรรกะที่พลาดแล้วเสียเงินจริง (state machine, ราคา, PromptPay) |
 | `pnpm lint` · `pnpm build` | ตรวจก่อน commit เสมอ |
 | `pnpm db:generate` · `pnpm db:migrate` | สร้างและรัน migration |
-| `pnpm blob:check` | ตรวจว่า Blob store ทั้งสองตัวตั้ง access ถูกโหมด |
+| `pnpm r2:check` | ตรวจว่าถัง R2 ทั้งสองตั้งค่าถูก (แยกสิทธิ์, CORS, อัปเป็นชิ้น) |
 | `pnpm db:seed-demo` | สร้างร้านตัวอย่าง `@nongfah` |
 | `pnpm db:reset-creator <email>` | ล้างร้านของผู้ใช้คนหนึ่งเพื่อเดิน onboarding ใหม่ |
 

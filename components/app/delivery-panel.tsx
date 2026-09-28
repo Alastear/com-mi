@@ -2,7 +2,6 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
 import { Download, FileUp, Loader2, Lock, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,17 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useDict } from "@/lib/i18n/client";
-import { deliveryPrefix } from "@/lib/delivery/path";
 import { formatBytes } from "@/lib/format";
 import { attachDelivery, deliverAndRelease, requestDeliveryDownload } from "@/lib/delivery/actions";
 import { registerDeliveryFile } from "@/lib/delivery/register";
+import { uploadDelivery } from "@/lib/uploads/client";
 import type { DeliveryFileRow, DeliveryRow } from "@/lib/delivery/rows";
 import { cn } from "@/lib/utils";
 
 /**
  * แผงไฟล์ส่งมอบ — ครีเอเตอร์อัปโหลดและกดส่ง · ลูกค้าดาวน์โหลด
  *
- * ⚠️ ไม่ใช้ `components/media-uploader.tsx` ซ้ำ เพราะตัวนั้นบังคับ `access: "public"`
+ * ⚠️ ไม่ใช้ `components/media-uploader.tsx` ซ้ำ เพราะตัวนั้นอัปเข้าถังสาธารณะ
  * และแปลงทุกไฟล์เป็น WebP ก่อนอัป ซึ่งจะทำลายไฟล์ส่งมอบ (PSD, ZIP, วิดีโอ)
  *
  * ⚠️ URL ดาวน์โหลดขอทีละครั้งผ่าน Server Action แล้วเปิดทันที
@@ -54,6 +53,8 @@ export function DeliveryPanel({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  /** ความคืบหน้าของไฟล์ที่กำลังอัป 0–100 — ไฟล์ส่งมอบใหญ่ได้ถึง 2 GB ต้องเห็นว่ายังเดินอยู่ */
+  const [progress, setProgress] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [pending, start] = useTransition();
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -73,28 +74,9 @@ export function DeliveryPanel({
     setBusy(true);
     try {
       for (const file of Array.from(files).slice(0, 20)) {
-        // กฎ path อยู่ที่ lib/delivery/path.ts — ฝั่ง server เทียบด้วยกฎเดียวกัน
-        const blob = await upload(`${deliveryPrefix(code)}${crypto.randomUUID()}`, file, {
-          /**
-           * ⚠️ ต้องเป็น "private" — เคยเขียนว่า "public" พร้อมคอมเมนต์ว่า
-           * "store จริงถูกกำหนดโดย endpoint ที่ออก token" ซึ่ง **ไม่จริง**
-           * @vercel/blob 2.7 ปฏิเสธตรง ๆ ว่า "Cannot use public access on a
-           * private store" การอัปไฟล์ส่งมอบจึงล้มทุกครั้งแม้ token จะออกให้แล้ว
-           * (ตรงกับ `access: "private"` ที่ lib/delivery/register.ts บันทึกลง DB อยู่แล้ว)
-           */
-          access: "private",
-          handleUploadUrl: "/api/blob/delivery-upload",
-          clientPayload: JSON.stringify({ code }),
-          multipart: true,
-          contentType: file.type || "application/octet-stream",
-        });
-
-        const res = await registerDeliveryFile({
-          code,
-          url: blob.url,
-          pathname: blob.pathname,
-          filename: file.name,
-        });
+        setProgress(0);
+        const up = await uploadDelivery(code, file, (f) => setProgress(Math.floor(f * 100)));
+        const res = await registerDeliveryFile(up);
         if (!res.ok) {
           toast.error(res.error === "storage_quota_exceeded" ? t.delivery.quotaFull : t.delivery.failed);
           break;
@@ -102,9 +84,21 @@ export function DeliveryPanel({
       }
       router.refresh();
     } catch (err) {
-      console.error("[delivery-upload]", err);
-      toast.error(t.delivery.failed);
+      const msg = err instanceof Error ? err.message : "";
+      console.error("[delivery-upload]", msg);
+      toast.error(
+        msg === "storage_quota_exceeded"
+          ? t.delivery.quotaFull
+          : msg === "too_large"
+            ? t.delivery.tooLarge
+            : msg === "invalid_state"
+              ? t.delivery.wrongState
+              : t.delivery.failed,
+      );
+      // ไฟล์ก่อนหน้าในชุดเดียวกันอาจบันทึกไปแล้ว — ต้องให้รายการบนจอตามทัน
+      router.refresh();
     } finally {
+      setProgress(null);
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -261,7 +255,9 @@ export function DeliveryPanel({
                   <FileUp className="size-5 text-muted-foreground" />
                 )}
                 <span className="text-sm font-medium">
-                  {busy ? t.delivery.uploading : t.delivery.upload}
+                  {busy
+                    ? `${t.delivery.uploading}${progress !== null ? ` ${progress}%` : ""}`
+                    : t.delivery.upload}
                 </span>
                 <span className="text-xs text-muted-foreground">{t.delivery.uploadHint}</span>
               </label>

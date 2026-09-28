@@ -101,6 +101,48 @@ export const media = pgTable(
   ],
 );
 
+/* ── upload_intent ─────────────────────────────────────────── */
+
+/**
+ * คำขออัปโหลดที่เซิร์ฟเวอร์อนุมัติไปแล้ว — หนึ่งแถวต่อหนึ่งไฟล์ ใช้ได้ครั้งเดียว
+ *
+ * เบราว์เซอร์อัปไฟล์ตรงไป R2 ด้วย URL ที่เราเซ็นให้ แล้วค่อยกลับมาขอบันทึกลง `media`
+ * ตอนกลับมา มันส่งแค่ `id` ของแถวนี้ — ไม่ได้ส่ง key, bucket หรือ URL
+ * ทุกอย่างที่ใช้ตัดสินจึงเป็นค่าที่เซิร์ฟเวอร์เลือกเองตอนอนุมัติ:
+ *   - key สุ่มฝั่งเรา ผู้ใช้เลือก path เองไม่ได้ และอ้างไฟล์ของคนอื่นไม่ได้
+ *   - bucket ผูกกับชนิดไฟล์ตั้งแต่ตอนอนุมัติ ไฟล์ส่งมอบไม่มีทางหลุดไปถังสาธารณะ
+ *   - `bytes` ถูกเซ็นลงใน URL ขนาดจริงจึงต้องตรงเป๊ะ (R2 ตอบ 403 ถ้าไม่ตรง)
+ *
+ * ยังเป็นรายการ "อัปไปแล้วแต่ไม่เคยบันทึก" ให้งานเก็บกวาดตามลบได้แม่นยำ
+ * รวมถึงในถังส่วนตัว ซึ่งเดิมเก็บกวาดไม่ได้เลยเพราะแยกไม่ออกว่าไฟล์ไหนเป็นขยะ
+ */
+export const uploadIntent = pgTable(
+  "upload_intent",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** public | private */
+    bucket: text("bucket").notNull(),
+    key: text("key").notNull().unique(),
+    kind: text("kind").notNull(),
+    /** เฉพาะไฟล์ส่งมอบ — คอลัมน์เปล่าไม่มี FK เหตุผลเดียวกับ `media.orderId` */
+    orderId: text("order_id"),
+    contentType: text("content_type").notNull(),
+    bytes: integer("bytes").notNull(),
+    filename: text("filename").notNull().default(""),
+    /** multipart upload id ของ R2 — ไม่มีเมื่ออัปแบบก้อนเดียว */
+    uploadId: text("upload_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** หลังเวลานี้บันทึกไม่ได้แล้ว — ไฟล์ที่ขึ้นไปแล้วกลายเป็นขยะให้งานเก็บกวาด */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    /** บันทึกลง `media` แล้ว — ใช้ซ้ำไม่ได้ */
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  },
+  (t) => [index("upload_intent_cleanup_idx").on(t.consumedAt, t.expiresAt)],
+);
+
 /* ── creator_page ──────────────────────────────────────────── */
 
 export const creatorPage = pgTable(

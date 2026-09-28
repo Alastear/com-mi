@@ -2,13 +2,12 @@
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { pickDeliveryFor } from "./read";
-import { issueSignedToken, presignUrl } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { getSession } from "@/lib/auth-guard";
-import { privateBlobToken } from "@/lib/blob/stores";
+import { presignPrivateGet } from "@/lib/storage/r2";
 import { isOrderCode } from "@/lib/orders/code";
 import { canRelease } from "@/lib/orders/release";
 import { moneyGateSql } from "@/lib/orders/release-sql";
@@ -271,7 +270,7 @@ export async function requestDeliveryDownload(
       eq(schema.media.orderId, order.id),
       eq(schema.media.kind, "final"),
     ),
-    columns: { pathname: true },
+    columns: { pathname: true, filename: true },
   });
   if (!media) return { ok: false, error: "not_found" };
 
@@ -279,25 +278,21 @@ export async function requestDeliveryDownload(
    * 15 นาที — พอสำหรับโหลดไฟล์ใหญ่บนมือถือไทย และสั้นพอที่ URL ที่หลุดไป
    * จะหมดอายุก่อนถูกส่งต่อไปไกล
    *
-   * ทดสอบแล้ว: การหมดอายุตรวจตอน "เริ่ม" คำขอ ไฟล์ที่กำลังโหลดค้างอยู่ไม่ถูกตัดกลางคัน
-   * (โหลด 8 MB นาน 52 วินาทีบน token อายุ 8 วินาที ยังจบครบ) แต่การ resume ด้วย
+   * ทดสอบกับ R2 แล้ว: การหมดอายุตรวจตอน "เริ่ม" คำขอ ไฟล์ที่กำลังโหลดค้างอยู่ไม่ถูกตัดกลางคัน
+   * (โหลด 8 MB นาน 12 วินาทีบน URL อายุ 3 วินาที ยังจบครบ) แต่การ resume ด้วย
    * Range หลังหมดอายุถูกปฏิเสธ 403
    */
-  const validUntil = Date.now() + 15 * 60_000;
-  const signed = await issueSignedToken({
-    token: privateBlobToken(),
-    pathname: media.pathname,
-    operations: ["get"],
-    validUntil,
-  });
-  const { presignedUrl } = await presignUrl(signed, {
-    operation: "get",
-    pathname: media.pathname,
-    access: "private",
+  const ttlSeconds = 15 * 60;
+  const validUntil = Date.now() + ttlSeconds * 1000;
+  // ชื่อไฟล์ตอนโหลดเป็นชื่อเดิมที่ครีเอเตอร์อัปมา — key ในถังเป็นแค่ id
+  const presignedUrl = await presignPrivateGet({
+    key: media.pathname,
+    filename: media.filename,
+    expiresInSeconds: ttlSeconds,
   });
 
   /**
-   * บันทึกทุกครั้งที่ออก URL — CDN ของ Blob ไม่ให้ log กลับมาเลย
+   * บันทึกทุกครั้งที่ออก URL — ถังส่วนตัวไม่มี log การโหลดให้เราอ่าน
    * ถ้าวันหนึ่งมีข้อพิพาทว่างานหลุด นี่คือสิ่งเดียวที่ตอบได้ว่าออกให้ใครเมื่อไร
    */
   await db.insert(schema.deliveryIssuance).values({

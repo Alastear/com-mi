@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
 import { ImagePlus, Link2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +11,7 @@ import { ACCEPTED_IMAGE_TYPES, MAX_SOURCE_BYTES, prepareImage } from "@/lib/medi
 import { ACCEPTED_VIDEO_TYPES, MAX_VIDEO_SECONDS, prepareVideo } from "@/lib/media/video";
 import { parseEmbed } from "@/lib/media/embed";
 import { addPortfolioEmbed, addPortfolioItem, registerMedia } from "@/lib/media/actions";
+import { uploadPublic } from "@/lib/uploads/client";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,9 +35,23 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
     setBusy(true);
     try {
       for (const file of Array.from(files).slice(0, 12)) {
-        if (ACCEPTED_VIDEO_TYPES.includes(file.type)) await uploadVideo(file);
-        else if (ACCEPTED_IMAGE_TYPES.includes(file.type)) await uploadImage(file);
-        else toast.error(t.media.wrongType);
+        /**
+         * จับทีละไฟล์ — เดิมไม่มี catch เลย ไฟล์ที่อัปไม่ผ่านหายเงียบโดยไม่มีข้อความ
+         * และไฟล์ที่เหลือในชุดเดียวกันก็ไม่ถูกอัปต่อ
+         */
+        try {
+          if (ACCEPTED_VIDEO_TYPES.includes(file.type)) await uploadVideo(file);
+          else if (ACCEPTED_IMAGE_TYPES.includes(file.type)) await uploadImage(file);
+          else toast.error(t.media.wrongType);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "";
+          console.error("[upload]", msg);
+          if (msg === "storage_quota_exceeded") {
+            toast.error(t.media.quotaFull);
+            break;
+          }
+          toast.error(msg === "too_large" ? t.media.tooBig : t.media.failed);
+        }
       }
       onDone();
     } finally {
@@ -52,16 +66,9 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
       return;
     }
     const prepared = await prepareImage(file);
-    const blob = await upload(`portfolio/${crypto.randomUUID()}.webp`, prepared.blob, {
-      access: "public",
-      handleUploadUrl: "/api/blob/upload",
-      contentType: "image/webp",
-      clientPayload: JSON.stringify({ kind: "portfolio" }),
-    });
+    const intentId = await uploadPublic("portfolio", prepared.blob, "image/webp");
     const { id } = await registerMedia({
-      url: blob.url,
-      pathname: blob.pathname,
-      kind: "portfolio",
+      intentId,
       width: prepared.width,
       height: prepared.height,
       thumbhash: prepared.thumbhash,
@@ -84,29 +91,15 @@ export function PortfolioUploader({ onDone }: { onDone: () => void }) {
     const v = prepared.value;
 
     // ภาพปกก่อน — ถ้าอัปวิดีโอสำเร็จแต่ภาพปกพัง กริดจะเหลือกล่องเปล่า
-    const poster = await upload(`portfolio/${crypto.randomUUID()}.webp`, v.poster, {
-      access: "public",
-      handleUploadUrl: "/api/blob/upload",
-      contentType: "image/webp",
-      clientPayload: JSON.stringify({ kind: "portfolio" }),
-    });
-
-    const video = await upload(`portfolio/${crypto.randomUUID()}`, v.file, {
-      access: "public",
-      handleUploadUrl: "/api/blob/upload",
-      contentType: v.file.type,
-      clientPayload: JSON.stringify({ kind: "portfolio" }),
-    });
+    const posterIntentId = await uploadPublic("portfolio", v.poster, "image/webp");
+    const intentId = await uploadPublic("portfolio", v.file, v.file.type);
 
     const { id } = await registerMedia({
-      url: video.url,
-      pathname: video.pathname,
-      kind: "portfolio",
+      intentId,
       width: v.width,
       height: v.height,
       thumbhash: v.thumbhash,
-      posterUrl: poster.url,
-      posterPathname: poster.pathname,
+      posterIntentId,
       durationSeconds: v.durationSeconds,
     });
     await addPortfolioItem(id);

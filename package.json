@@ -14,7 +14,8 @@
     "db:seed-session": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-test-session.mts",
     "db:clean-session": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-test-session.mts --clean",
     "db:stats": "dotenv -e .env.development.local -e .env.local -- tsx scripts/db-stats.mts",
-    "blob:check": "dotenv -e .env.development.local -e .env.local -- tsx scripts/blob-check.mts",
+    "r2:check": "dotenv -e .env.development.local -e .env.local -- tsx scripts/r2-check.mts",
+    "storage:migrate": "dotenv -e .env.development.local -e .env.local -- tsx scripts/migrate-blob-to-r2.mts",
     "test": "tsx --test lib/**/*.test.ts",
     "db:seed-orders": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-orders.mts",
     "db:seed-demo": "dotenv -e .env.development.local -e .env.local -- tsx scripts/seed-demo-shop.mts",
@@ -24,6 +25,8 @@
     "domain:switch": "tsx scripts/switch-domain.mts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
+    "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/blob": "^2.7.0",
     "better-auth": "^1.6.25",

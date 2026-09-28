@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { GRACE_MS, isStray, referencedPaths } from "./cleanup";
+import { GRACE_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
 
 /**
  * เทสต์ของงานที่ "ลบไฟล์ทิ้ง" ต้องเน้นฝั่งที่ห้ามลบเป็นหลัก
@@ -66,6 +66,44 @@ describe("cron ต้องไม่กลายเป็นเครื่อ�
     assert.equal(
       isStray({ pathname: "banner/victim.webp", uploadedAt: new Date(0) }, referenced, Date.now()),
       false,
+    );
+  });
+});
+
+describe("คำขออัปโหลดที่ค้าง", () => {
+  const now = 1_800_000_000_000;
+  const old = new Date(now - GRACE_MS - 1000);
+  const expired = new Date(now - 1000);
+
+  it("บันทึกสำเร็จแล้ว (มีแถวชี้ถึง key) ลบแค่แถวคำขอ ห้ามแตะไฟล์", () => {
+    // ไฟล์ส่งมอบที่ลูกค้าจ่ายแล้วอยู่ในกรณีนี้ — ลบผิดคือของที่ซื้อไปแล้วหายถาวร
+    const ref = new Set(["deliveries/ABCD2345/x"]);
+    assert.equal(
+      intentVerdict({ key: "deliveries/ABCD2345/x", createdAt: old, expiresAt: expired }, ref, now),
+      "drop_row",
+    );
+  });
+
+  it("ไม่มีใครชี้ถึงและหมดอายุแล้ว ลบไฟล์ได้", () => {
+    assert.equal(
+      intentVerdict({ key: "portfolio/y.webp", createdAt: old, expiresAt: expired }, new Set(), now),
+      "purge",
+    );
+  });
+
+  it("ยังไม่หมดอายุห้ามลบ แม้จะเก่ากว่าเวลาผ่อนผัน — อาจกำลังบันทึกอยู่", () => {
+    const later = new Date(now + 60_000);
+    assert.equal(
+      intentVerdict({ key: "portfolio/z.webp", createdAt: old, expiresAt: later }, new Set(), now),
+      "keep",
+    );
+  });
+
+  it("เพิ่งขอไปยังไม่ลบ แม้จะหมดอายุแล้ว", () => {
+    const fresh = new Date(now - 1000);
+    assert.equal(
+      intentVerdict({ key: "portfolio/w.webp", createdAt: fresh, expiresAt: expired }, new Set(), now),
+      "keep",
     );
   });
 });

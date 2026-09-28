@@ -1,6 +1,5 @@
 "use server";
 
-import { head } from "@vercel/blob";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -8,19 +7,20 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/id";
 import { requireCreator } from "@/lib/auth-guard";
 import { parseEmbed, serializeEmbed } from "@/lib/media/embed";
-import { PUBLIC_MEDIA_KINDS } from "@/lib/media/kinds";
+import { isPublicKind } from "@/lib/media/kinds";
+import { deleteObjects, headObject, publicUrl } from "@/lib/storage/r2";
+import { claimIntent, planLimits, storageUsed } from "@/lib/uploads/intent";
+
+const IntentId = z.string().min(1).max(64);
 
 const RegisterSchema = z.object({
-  url: z.url(),
-  pathname: z.string().min(1),
-  // เฉพาะชนิดที่อยู่ store สาธารณะ — ไฟล์ส่งมอบมี registerDeliveryFile ของตัวเอง
-  kind: z.enum(PUBLIC_MEDIA_KINDS),
+  /** ได้มาจาก `startMediaUpload` — ชนิด ขนาด และที่อยู่ของไฟล์อยู่ในแถวนั้น ไม่ได้มาจาก client */
+  intentId: IntentId,
   width: z.number().int().positive().max(20000),
   height: z.number().int().positive().max(20000),
   thumbhash: z.string().max(200),
   /** วิดีโอ: ภาพปกกับความยาว — ไม่มีเมื่อเป็นรูป */
-  posterUrl: z.url().nullish(),
-  posterPathname: z.string().max(400).nullish(),
+  posterIntentId: IntentId.nullish(),
   durationSeconds: z.number().int().positive().max(3600).nullish(),
 });
 
@@ -29,47 +29,60 @@ export type RegisterMediaInput = z.infer<typeof RegisterSchema>;
 /**
  * บันทึกไฟล์ที่เพิ่งอัปโหลดลงตาราง media
  *
- * เรียกจาก client หลัง `upload()` สำเร็จ — ไม่ใช้ `onUploadCompleted`
- * เพราะ callback นั้นไม่ทำงานบน localhost (ดูคอมเมนต์ใน app/api/blob/upload/route.ts)
+ * เรียกจาก client หลัง PUT ไป R2 สำเร็จ (lib/uploads/client.ts)
  *
- * ขนาดไฟล์อ่านจาก `head()` ไม่ใช่จากที่ client ส่งมา — client แก้ตัวเลขได้
- * ซึ่งจะทำให้โควตาพื้นที่ไร้ความหมาย
+ * client ส่งมาแค่ id ของคำขออัปโหลด — ไม่มี URL หรือ path ให้แก้
+ * เดิมรับ `url` จาก client ตรง ๆ ใครก็หยิบ URL รูปของร้านอื่นจาก `<img src>` มาอ้าง
+ * เป็นของตัวเองได้ ต้องมีด่านกันไว้แยกต่างหาก ตอนนี้ช่องนั้นไม่มีอยู่แล้ว:
+ * key ถูกสุ่มฝั่งเราและผูกกับคำขอที่ใช้ได้ครั้งเดียวของผู้ใช้คนนี้
+ *
+ * ขนาดตรวจกับไฟล์จริงในถังอีกรอบ — URL ที่เซ็นบังคับขนาดไว้แล้ว ถ้าไม่ตรงแปลว่า
+ * ไฟล์ไม่เคยขึ้นไปถึง ไม่ใช่ว่าขึ้นไปผิดขนาด
  */
 export async function registerMedia(input: RegisterMediaInput): Promise<{ id: string }> {
   const { user } = await requireCreator();
   const v = RegisterSchema.parse(input);
 
-  const meta = await head(v.url);
+  const file = await claimIntent(v.intentId, user.id, "public");
+  if (!file || !isPublicKind(file.kind)) throw new Error("not_found");
+
+  // ภาพปกของวิดีโอ — ต้องเป็นรูปของพอร์ตโฟลิโอที่คนเดียวกันเพิ่งขอไว้เท่านั้น
+  const poster = v.posterIntentId ? await claimIntent(v.posterIntentId, user.id, "public") : null;
+  if (v.posterIntentId && (!poster || poster.kind !== "portfolio" || poster.contentType !== "image/webp")) {
+    throw new Error("not_found");
+  }
+
+  const [meta, posterMeta] = await Promise.all([
+    headObject("public", file.key),
+    poster ? headObject("public", poster.key) : null,
+  ]);
+  if (!meta || meta.bytes !== file.bytes) throw new Error("not_uploaded");
+  if (poster && (!posterMeta || posterMeta.bytes !== poster.bytes)) throw new Error("not_uploaded");
 
   /**
-   * ⚠️ ไฟล์ที่มีเจ้าของอยู่แล้ว ห้ามใครมาลงทะเบียนซ้ำ
-   *
-   * `url` กับ `pathname` มาจาก client ตรง ๆ และ URL รูปของร้านอื่นอยู่ใน `<img src>`
-   * บนหน้าร้านสาธารณะ ใครก็หยิบมาอ้างเป็นของตัวเองได้ ถ้าปล่อยไว้ แถวปลอมนั้น
-   * จะกลายเป็นเครื่องมือสั่งลบไฟล์ของคนอื่นผ่านงานเก็บกวาด
-   * (ด่านที่สองอยู่ใน `lib/media/cleanup.ts` — ไฟล์ที่ยังมีคนใช้ห้ามลบ)
+   * ตรวจโควตาซ้ำ — ตอนขอ URL ตรวจไปแล้ว แต่ขอพร้อมกันหลายไฟล์ ทุกคำขอเห็นพื้นที่
+   * ที่ยังไม่ถูกกินเท่ากันหมด ไฟล์ที่ทำให้เกินต้องถูกลบ ไม่ใช่ถูกบันทึก
    */
-  const taken = await getDb().query.media.findFirst({
-    columns: { ownerUserId: true },
-    where: eq(schema.media.pathname, v.pathname),
-  });
-  if (taken && taken.ownerUserId !== user.id) throw new Error("not_found");
+  if ((await storageUsed(user.id)) + file.bytes > planLimits(user.plan).storage_bytes) {
+    await deleteObjects("public", poster ? [file.key, poster.key] : [file.key]);
+    throw new Error("storage_quota_exceeded");
+  }
 
   const id = newId("med");
   await getDb().insert(schema.media).values({
     id,
     ownerUserId: user.id,
-    pathname: v.pathname,
-    url: v.url,
+    pathname: file.key,
+    url: publicUrl(file.key),
     access: "public",
-    kind: v.kind,
-    contentType: meta.contentType ?? "image/webp",
-    bytes: meta.size,
+    kind: file.kind,
+    contentType: file.contentType,
+    bytes: file.bytes,
     width: v.width,
     height: v.height,
     thumbhash: v.thumbhash,
-    posterUrl: v.posterUrl ?? null,
-    posterPathname: v.posterPathname ?? null,
+    posterUrl: poster ? publicUrl(poster.key) : null,
+    posterPathname: poster?.key ?? null,
     durationSeconds: v.durationSeconds ?? null,
     // ยัง orphan จนกว่าจะถูกผูกกับ record จริง — cron เก็บกวาดตัวที่ค้างเกิน 24 ชม.
     status: "orphan",

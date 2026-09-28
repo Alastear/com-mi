@@ -1,6 +1,7 @@
-import { del, list } from "@vercel/blob";
 import { and, eq, lt } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { abortPrivateMultipart, deleteObjects, listObjects } from "@/lib/storage/r2";
+import { GRACE_MS, intentVerdict, isStray, referencedPaths } from "./cleanup-rules";
 
 /**
  * เก็บกวาดไฟล์ที่ไม่มีใครใช้แล้ว
@@ -8,24 +9,25 @@ import { getDb, schema } from "@/lib/db";
  * `registerMedia()` เขียนแถวใหม่เป็น `status: "orphan"` พร้อมคอมเมนต์ว่า
  * "cron เก็บกวาดตัวที่ค้างเกิน 24 ชม." มาตั้งแต่ต้น — แต่ cron ตัวนั้นไม่เคยถูกสร้าง
  *
- * มีขยะสองชนิด และชนิดที่สองมองจากฐานข้อมูลไม่เห็นเลย:
+ * มีขยะสามชนิด:
  *
  * 1. **แถวที่ค้างเป็น `orphan`** — อัปโหลดขึ้นไปแล้วแต่ไม่เคยถูกผูกกับอะไร
- * 2. **ไฟล์ที่ไม่มีแถวเลย** — เกิดตอน `put()` สำเร็จแล้วผู้ใช้ปิดแท็บก่อน
- *    `registerMedia()` จะถูกเรียก ไฟล์นั้นจะอยู่ในถังตลอดกาลโดยไม่มีอะไรชี้ถึง
- *    และไม่มี query ไหนหาเจอ ตอนตรวจจริงพบว่าเป็น 8 จาก 10 ไฟล์ในถังสาธารณะ
+ * 2. **คำขออัปโหลดที่ไม่เคยได้บันทึก** — ผู้ใช้ปิดแท็บก่อน `registerMedia()` หรือ
+ *    บันทึกไม่ผ่าน ไฟล์ขึ้นไปแล้ว (หรือขึ้นไปครึ่งเดียวเป็น multipart) แต่ไม่มีแถวชี้ถึง
+ *    `upload_intent` บอกได้แม่นยำว่าไฟล์ไหน จึงเก็บกวาดถังส่วนตัวได้ด้วย
+ * 3. **ไฟล์ในถังสาธารณะที่ไม่มีแถวเลย** — ของที่เกิดก่อนมี `upload_intent`
+ *    ตอนตรวจสมัย Vercel Blob พบว่าเป็น 8 จาก 10 ไฟล์ในถังสาธารณะ
  *
- * ⚠️ **ไม่แตะถังส่วนตัวเลย** ถังนั้นเก็บไฟล์งานที่ลูกค้าจ่ายเงินแล้ว
- * ลบผิดหนึ่งไฟล์คือลูกค้าเสียของที่ซื้อไปแล้วและกู้คืนไม่ได้
- * ส่วนที่ได้คืนมาคือพื้นที่ไม่กี่ KB — ไม่คุ้มกันเลย
- * (ทางนั้นมี `registerDeliveryFile` ลบไฟล์ให้เองอยู่แล้วเมื่อผูกไม่สำเร็จ)
+ * ⚠️ **ถังส่วนตัวแตะได้ทางเดียว: ผ่านคำขออัปโหลดที่ไม่มีแถวไหนชี้ถึง key ของมันเลย**
+ * ถังนั้นเก็บไฟล์งานที่ลูกค้าจ่ายเงินแล้ว ลบผิดหนึ่งไฟล์คือลูกค้าเสียของที่ซื้อไปแล้ว
+ * และกู้คืนไม่ได้ ห้ามไล่ list ถังส่วนตัวแล้วลบตามการเดา และห้ามลบแถว orphan ของถังนั้น
+ * (ไฟล์ที่อัปแล้วแต่ยังไม่ได้เตรียมส่งมอบก็เป็น orphan — ครีเอเตอร์อาจกลับมาทำต่อ)
  */
-
-/** เวลาผ่อนผัน — ไฟล์ที่เพิ่งอัปยังอยู่ระหว่างทางไป `registerMedia()` ได้ */
-export const GRACE_MS = 24 * 60 * 60 * 1000;
 
 export type CleanupReport = {
   orphanRowsDeleted: number;
+  intentsCleared: number;
+  abandonedUploadsDeleted: number;
   strayBlobsDeleted: number;
   scanned: number;
   keptTooRecent: number;
@@ -33,51 +35,17 @@ export type CleanupReport = {
   errors: string[];
 };
 
-/**
- * ไฟล์นี้ลบได้ไหม — แยกออกมาเป็นฟังก์ชันล้วนเพื่อให้เทสต์ได้โดยไม่ต้องต่อเน็ต
- *
- * เขียนเป็น "เงื่อนไขที่ต้องจริงทั้งหมดถึงจะลบ" ไม่ใช่ "เงื่อนไขที่ห้ามลบ" —
- * ตัวแปรใหม่ที่โผล่มาทีหลังจะตกไปอยู่ฝั่งไม่ลบเสมอ ซึ่งเป็นฝั่งที่ปลอดภัย
- */
-export function isStray(
-  blob: { pathname: string; uploadedAt: Date },
-  referenced: ReadonlySet<string>,
-  now: number,
-  graceMs: number = GRACE_MS,
-): boolean {
-  if (referenced.has(blob.pathname)) return false;
-  return now - blob.uploadedAt.getTime() > graceMs;
-}
-
-/**
- * ทุก pathname ที่ยังมีแถวชี้ถึง
- *
- * ⚠️ ต้องรวม `posterPathname` ด้วย ไม่ใช่แค่ `pathname`
- * โปสเตอร์ของวิดีโอถูกเก็บเป็น "คอลัมน์ของแถวอื่น" ไม่ได้มีแถวเป็นของตัวเอง
- * (`components/portfolio-uploader.tsx` ส่ง `posterPathname` มาพร้อมวิดีโอ)
- * ถ้าดูแค่ `pathname` โปสเตอร์ทุกอันจะดูเหมือนไฟล์กำพร้าและถูกลบทิ้งหมด
- */
-export function referencedPaths(
-  rows: ReadonlyArray<{ pathname: string | null; posterPathname: string | null }>,
-): Set<string> {
-  const set = new Set<string>();
-  for (const r of rows) {
-    if (r.pathname) set.add(r.pathname);
-    if (r.posterPathname) set.add(r.posterPathname);
-  }
-  return set;
-}
-
 export async function cleanupMedia(
   opts: { dryRun?: boolean; now?: number } = {},
 ): Promise<CleanupReport> {
   const dryRun = opts.dryRun ?? false;
   const now = opts.now ?? Date.now();
   const cutoff = new Date(now - GRACE_MS);
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
 
   const report: CleanupReport = {
     orphanRowsDeleted: 0,
+    intentsCleared: 0,
+    abandonedUploadsDeleted: 0,
     strayBlobsDeleted: 0,
     scanned: 0,
     keptTooRecent: 0,
@@ -109,8 +77,6 @@ export async function cleanupMedia(
   const stale = await db.query.media.findMany({
     columns: {
       id: true,
-      url: true,
-      posterUrl: true,
       pathname: true,
       posterPathname: true,
       access: true,
@@ -140,7 +106,7 @@ export async function cleanupMedia(
       if (!dryRun) {
         // ลบไฟล์ก่อน แล้วค่อยลบแถว — พังกลางทางแล้วยังเหลือแถวไว้ให้รอบหน้าตามเก็บ
         // ถ้าลบแถวก่อน ไฟล์จะกลายเป็นของที่ไม่มีใครรู้จักทันที
-        await del([row.url, ...(row.posterUrl ? [row.posterUrl] : [])], { token });
+        await deleteObjects("public", [row.pathname, ...(row.posterPathname ? [row.posterPathname] : [])]);
         await db.delete(schema.media).where(eq(schema.media.id, row.id));
       }
       report.orphanRowsDeleted += 1;
@@ -149,23 +115,58 @@ export async function cleanupMedia(
     }
   }
 
-  /* ── 2. ไฟล์ในถังที่ไม่มีแถวไหนชี้ถึงเลย ──────────────────────────── */
-
   /**
    * อ่านซ้ำ **หลัง** ลบรอบแรกเสร็จ — ไฟล์ของแถวที่เพิ่งลบไปจะได้ไม่ถูกนับว่ายังมีคนใช้
-   * และถูกเก็บในรอบนี้เลยถ้ายังค้างอยู่ในถัง
+   * และถูกเก็บในรอบถัดไปเลยถ้ายังค้างอยู่ในถัง
+   *
+   * ⚠️ รวมแถว orphan ด้วย (ต่างจากชุดแรก) — ไฟล์ส่งมอบที่อัปแล้วแต่ยังไม่เตรียมส่ง
+   * เป็น orphan และต้องปลอดภัยจากรอบที่สองกับสาม
    */
   const rows = await db.query.media.findMany({
     columns: { pathname: true, posterPathname: true },
   });
   const stillReferenced = referencedPaths(rows);
 
+  /* ── 2. คำขออัปโหลดที่ไม่เคยได้บันทึก ─────────────────────────────── */
+
+  const intents = await db.query.uploadIntent.findMany({
+    columns: { id: true, bucket: true, key: true, uploadId: true, expiresAt: true, createdAt: true },
+    where: lt(schema.uploadIntent.createdAt, cutoff),
+    limit: 500,
+  });
+
+  for (const intent of intents) {
+    const verdict = intentVerdict(intent, stillReferenced, now);
+    if (verdict === "keep") continue;
+    try {
+      if (!dryRun && verdict === "purge") {
+        const bucket = intent.bucket === "private" ? "private" : "public";
+        // multipart ที่ค้างครึ่งทางไม่ใช่ object — ลบ key อย่างเดียวไม่หาย ต้องยกเลิก upload ด้วย
+        if (bucket === "private" && intent.uploadId) {
+          await abortPrivateMultipart(intent.key, intent.uploadId);
+        }
+        await deleteObjects(bucket, [intent.key]);
+      }
+      if (!dryRun) {
+        // ลบไฟล์ก่อน แล้วค่อยลบแถว — พังกลางทางแล้วยังเหลือแถวไว้ให้รอบหน้าตามเก็บ
+        await db.delete(schema.uploadIntent).where(eq(schema.uploadIntent.id, intent.id));
+      }
+      report.intentsCleared += 1;
+      if (verdict === "purge") report.abandonedUploadsDeleted += 1;
+    } catch (err) {
+      report.errors.push(`intent ${intent.id}: ${String(err).slice(0, 120)}`);
+    }
+  }
+
+  /* ── 3. ไฟล์ในถังสาธารณะที่ไม่มีแถวไหนชี้ถึงเลย ────────────────────── */
+
   let cursor: string | undefined;
   do {
-    const page = await list({ token, cursor, limit: 500 });
-    cursor = page.hasMore ? page.cursor : undefined;
+    const page = await listObjects("public", cursor);
+    cursor = page.cursor;
 
-    for (const blob of page.blobs) {
+    for (const obj of page.objects) {
+      const blob = { pathname: obj.key, uploadedAt: obj.lastModified };
       report.scanned += 1;
       if (stillReferenced.has(blob.pathname)) {
         report.keptReferenced += 1;
@@ -176,10 +177,10 @@ export async function cleanupMedia(
         continue;
       }
       try {
-        if (!dryRun) await del(blob.url, { token });
+        if (!dryRun) await deleteObjects("public", [blob.pathname]);
         report.strayBlobsDeleted += 1;
       } catch (err) {
-        report.errors.push(`blob ${blob.pathname}: ${String(err).slice(0, 120)}`);
+        report.errors.push(`object ${blob.pathname}: ${String(err).slice(0, 120)}`);
       }
     }
   } while (cursor);

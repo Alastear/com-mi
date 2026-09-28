@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { upload } from "@vercel/blob/client";
 import { ImagePlus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDict } from "@/lib/i18n/client";
@@ -11,15 +10,16 @@ import {
   prepareImage,
 } from "@/lib/media/prepare";
 import { registerMedia } from "@/lib/media/actions";
+import { uploadPublic } from "@/lib/uploads/client";
 import { ImageCropper, type CropTarget } from "@/components/image-cropper";
 import type { PublicMediaKind } from "@/lib/media/kinds";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
- * อัปโหลดรูปตรงจากเบราว์เซอร์ไป Blob
+ * อัปโหลดรูปตรงจากเบราว์เซอร์ไป R2
  *
- * ลำดับ: ย่อ+แปลง WebP ในเครื่อง → ขอ token จาก /api/blob/upload → อัปโหลดตรง
+ * ลำดับ: ย่อ+แปลง WebP ในเครื่อง → ขอ URL ที่เซ็นแล้ว → PUT ตรงไปถัง
  * → เรียก Server Action บันทึกลง DB (ยืนยันขนาดจริงฝั่งเซิร์ฟเวอร์)
  */
 export function MediaUploader({
@@ -71,17 +71,10 @@ export function MediaUploader({
 
         const prepared = await prepareImage(file);
 
-        const blob = await upload(`${kind}/${crypto.randomUUID()}.webp`, prepared.blob, {
-          access: "public",
-          handleUploadUrl: "/api/blob/upload",
-          contentType: "image/webp",
-          clientPayload: JSON.stringify({ kind }),
-        });
+        const intentId = await uploadPublic(kind, prepared.blob, "image/webp");
 
         const { id } = await registerMedia({
-          url: blob.url,
-          pathname: blob.pathname,
-          kind,
+          intentId,
           width: prepared.width,
           height: prepared.height,
           thumbhash: prepared.thumbhash,
@@ -94,7 +87,6 @@ export function MediaUploader({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       // toast บอกผู้ใช้แบบสั้น ส่วนสาเหตุจริงต้องอ่านออกตอน debug
-      // (เคสที่เจอจริง: Blob store ตั้งเป็น private ทั้งที่โค้ดขอ public)
       console.error("[upload]", msg);
       toast.error(
         msg.includes("storage_quota_exceeded") ? t.media.quotaFull : t.media.failed,
@@ -110,17 +102,10 @@ export function MediaUploader({
     setPendingCrop(null);
     setBusy(true);
     try {
-      const up = await upload(`${kind}/${crypto.randomUUID()}.webp`, blob, {
-        access: "public",
-        handleUploadUrl: "/api/blob/upload",
-        contentType: "image/webp",
-        clientPayload: JSON.stringify({ kind }),
-      });
+      const intentId = await uploadPublic(kind, blob, "image/webp");
       const outW = crop?.outputWidth ?? 0;
       const { id } = await registerMedia({
-        url: up.url,
-        pathname: up.pathname,
-        kind,
+        intentId,
         width: outW,
         height: crop ? Math.round(outW / crop.ratio) : 0,
         // ไม่คำนวณ thumbhash ให้รูปที่ครอปแล้ว — ต้องอ่านพิกเซลซ้ำอีกรอบเพื่อ placeholder

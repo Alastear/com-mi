@@ -15,7 +15,7 @@
 | DB driver | **@neondatabase/serverless** | `1.1.0` | HTTP driver ไม่ต้องมี connection pool → Neon หลับได้จริง |
 | ORM | **Drizzle ORM** | `0.45.2` | SQL-first, bundle เล็ก, migration เป็นไฟล์ SQL อ่านออก |
 | Auth | **Better Auth** | `1.6.25` | ดู §3 |
-| Storage | **@vercel/blob** | `2.6.1` | ตามที่ระบุ + รองรับ private blob แล้ว |
+| Storage | **Cloudflare R2** ผ่าน `@aws-sdk/client-s3` | `3.x` | ไม่คิดค่า egress — รูปหน้าร้านโดนเปิดซ้ำมากที่สุด (ย้ายจาก Vercel Blob 2026-09) |
 | Billing | **stripe** | `22.4.0` | Stripe เปิดให้ธุรกิจไทยแล้ว + PromptPay + subscription |
 | Email | **resend** | `6.18.1` | free 3,000 ฉบับ/เดือน, React Email |
 | Web Push | **web-push** | `3.6.7` | VAPID, ไม่ต้องพึ่ง vendor |
@@ -336,7 +336,7 @@ HTTP driver คือ stateless one-shot ต่อ query ไม่ต้อง�
 ใช้ Vercel Marketplace เพื่อให้ env var ถูก inject เข้า project อัตโนมัติ ไม่ต้องตั้งเอง:
 ```bash
 vercel integration add neon      # ได้ DATABASE_URL
-# Blob store สร้างจาก dashboard → ได้ BLOB_READ_WRITE_TOKEN
+# R2: สร้างสองถังใน Cloudflare dashboard แล้วใส่ R2_* ทั้ง 8 ตัวเอง (ดู §10) — ตรวจด้วย pnpm r2:check
 vercel env pull .env.local --yes
 ```
 
@@ -344,50 +344,35 @@ vercel env pull .env.local --yes
 
 ## 5. Media pipeline — จุดที่ประหยัดได้มากที่สุด
 
-ราคาที่เกี่ยวข้อง (ณ 2026): Vercel Blob **$0.023/GB-เดือน** สำหรับ storage และ **$0.05/GB** สำหรับ data transfer,
-Hobby ให้ฟรี 1 GB storage + 10 GB transfer ([Vercel Blob pricing](https://vercel.com/docs/vercel-blob/usage-and-pricing))
+ไฟล์ทั้งหมดอยู่ที่ **Cloudflare R2** สองถัง (ย้ายจาก Vercel Blob เมื่อ 2026-09):
+
+| ถัง | เก็บอะไร | เปิดอ่านอย่างไร |
+|---|---|---|
+| `R2_PUBLIC_BUCKET` | avatar, banner, portfolio, service_cover | ตรงจาก `R2_PUBLIC_BASE_URL` (cache ได้ตลอด — key ไม่ซ้ำและไม่ถูกเขียนทับ) |
+| `R2_PRIVATE_BUCKET` | final (ไฟล์ส่งมอบ) | URL ที่เซ็นทีละครั้ง อายุ 15 นาที ออกเมื่อจ่ายครบเท่านั้น |
+
+กุญแจ API แยกสองตัว ผูกได้ถังเดียวต่อตัว — กุญแจถังสาธารณะหลุดก็เปิดไฟล์ส่งมอบไม่ได้
+R2 ไม่คิดค่า egress ส่วนที่แพงที่สุดของ Blob (ค่า transfer ของรูปที่คนเปิดซ้ำ) จึงหายไปทั้งก้อน
 
 ### กฎ 4 ข้อ
 
 **1. Client-direct upload เสมอ — ไฟล์ต้องไม่ผ่าน serverless function**
 
-Vercel function มีเพดาน request body **4.5 MB** และไฟล์ที่ผ่าน function จะโดนคิดค่า Fast Data Transfer
-ส่วน client upload **ไม่มีค่า data transfer** ([Client Uploads docs](https://vercel.com/docs/vercel-blob/client-upload))
+Vercel function มีเพดาน request body **4.5 MB** และไฟล์ที่ผ่าน function จะโดนคิดค่า transfer สองต่อ
+เบราว์เซอร์จึง PUT ตรงไป R2 ด้วย URL ที่เซิร์ฟเวอร์เซ็นให้ (`lib/uploads/`):
 
-```ts
-// app/api/blob/upload/route.ts
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
+1. `startMediaUpload` / `startDeliveryUpload` (Server Action) — ตรวจสิทธิ์ ชนิด ขนาด โควตา
+   แล้วสุ่ม key เอง บันทึกแถว `upload_intent` และคืน URL ที่เซ็นไว้
+2. เบราว์เซอร์ PUT ไฟล์ (ไฟล์ส่งมอบอัปเป็นชิ้นละ 8 MiB พร้อมกัน 4 ชิ้น)
+3. `registerMedia` / `registerDeliveryFile` — client ส่งมาแค่ id ของ `upload_intent`
+   เซิร์ฟเวอร์ใช้คำขอนั้น (ครั้งเดียว) ตรวจขนาดจริงในถัง แล้วบันทึกลง `media`
 
-export async function POST(request: Request) {
-  const body = (await request.json()) as HandleUploadBody
+**ขนาด ชนิดไฟล์ และ `if-none-match: *` ถูกเซ็นลงใน URL** — R2 ตอบ 403 ถ้าไม่ตรง
+(และ 412 ถ้าจะเขียนทับ) โควตาที่ตรวจตอนออก URL จึงเชื่อได้ ไม่ต้องไปลบทิ้งหลังอัปเสร็จ
+แบบสมัย Blob ที่บังคับเพดานกับ multipart ไม่ได้
 
-  return Response.json(await handleUpload({
-    body,
-    request,
-    onBeforeGenerateToken: async (pathname, clientPayload) => {
-      const { user } = await requireSession()
-      const { kind, orderId } = JSON.parse(clientPayload ?? '{}')
-
-      await assertQuotaAvailable(user.id)          // เช็คโควตาตาม plan ก่อนออก token
-      if (orderId) await assertOrderAccess(user.id, orderId)
-
-      return {
-        allowedContentTypes: ['image/webp', 'image/png', 'image/jpeg', 'video/mp4'],
-        maximumSizeInBytes: kind === 'final' ? 200_000_000 : 20_000_000,
-        addRandomSuffix: true,
-        // ไฟล์ส่งมอบเป็น private — ลูกค้าเข้าถึงได้ผ่าน signed URL เท่านั้น
-        // ⚠️ onBeforeGenerateToken ไม่มีฟิลด์ `access` — ตรวจกับ .d.ts แล้ว
-      // เลือก store ด้วย `token:` ที่ handleUpload แทน และแยกเป็นคนละ route
-        tokenPayload: JSON.stringify({ userId: user.id, orderId, kind }),
-      }
-    },
-    onUploadCompleted: async ({ blob, tokenPayload }) => {
-      const p = JSON.parse(tokenPayload!)
-      await db.insert(media).values({ /* ...บันทึก metadata + หักโควตา... */ })
-    },
-  }))
-}
-```
+⚠️ SDK ต้องตั้ง `requestChecksumCalculation: "WHEN_REQUIRED"` — ค่าเริ่มต้นใส่ CRC32
+ลง URL ที่เซ็น ซึ่งเบราว์เซอร์ส่งให้ตรงไม่ได้ อัปโหลดจะได้ 403 ทุกครั้ง
 
 **2. ย่อ + แปลงเป็น WebP ใน browser ก่อนอัปโหลด**
 
@@ -414,14 +399,10 @@ export async function prepareImage(file: File) {
 
 **3. ไม่ใช้ Vercel Image Optimization**
 
-เราย่อภาพเองตั้งแต่ต้นทางแล้ว ภาพจาก Blob ก็เสิร์ฟผ่าน CDN อยู่แล้ว
+เราย่อภาพเองตั้งแต่ต้นทางแล้ว ภาพจาก R2 ก็เสิร์ฟตรงจากโดเมนของถังอยู่แล้ว
 การส่งต่อเข้า `/_next/image` จะกินโควตา image transformation โดยไม่ได้อะไรเพิ่ม
 → ตั้ง `images.unoptimized: true` แล้วใช้ `<Image>` เพื่อเอา layout/lazy-load/aspect-ratio อย่างเดียว
 → ใช้ `thumbhash` ที่เก็บไว้เป็น `placeholder="blur"` (ไม่ต้องยิง request เพิ่ม)
-
-> **ใช้ `access: 'private'` เท่าที่จำเป็นจริง ๆ** — private blob เสิร์ฟช้ากว่าและ egress แพงกว่าเพราะไม่ผ่าน CDN cache แบบเดียวกัน
-> ในระบบนี้ private ใช้กับ **ไฟล์ final เท่านั้น** ซึ่งลูกค้าโหลดไม่กี่ครั้งต่อออเดอร์ → รับได้
-> ส่วน portfolio / WIP preview / avatar เป็น `public` ทั้งหมดเพราะโดนเปิดดูซ้ำเยอะ
 
 **4. Garbage collection**
 
@@ -429,37 +410,27 @@ export async function prepareImage(file: File) {
 → `media.status = 'orphan'` ตอนอัปโหลด, เปลี่ยนเป็น `'linked'` เมื่อ submit สำเร็จ
 → cron รายวันลบ orphan ที่เก่ากว่า 24 ชม. + ไฟล์ของ order ที่ยกเลิกและเกิน retention
 
-### ⚠️ Blob store ต้องสร้างเป็น **public** ตั้งแต่แรก (เจอจริงตอนต่อ Phase 1a)
+### ตั้งค่าถัง (ครั้งเดียว) — `pnpm r2:check` ตรวจครบทุกข้อ
 
-> สรุปที่ใช้จริง: store `blob-com-mi` (public, region `sin1`) — ตัว private ตัวแรกถูกลบทิ้งแล้ว
-> **token ของ store ไม่มี API ให้ดึงย้อนหลัง** ออกให้ตอนเชื่อมกับโปรเจกต์หรือดูจาก dashboard เท่านั้น
+- **CORS** ทั้งสองถัง: `AllowedOrigins` เฉพาะโดเมนของเว็บ (+ `http://localhost:3450`),
+  `AllowedMethods` PUT/GET/HEAD, `AllowedHeaders` content-type, cache-control, content-disposition,
+  if-none-match และ **`ExposeHeaders: ["ETag"]`** — ไม่มีตัวนี้เบราว์เซอร์อ่าน ETag ของแต่ละชิ้นไม่ได้
+  อัปไฟล์ส่งมอบไม่ได้ทั้งระบบ
+- ถังส่วนตัว: **ไม่มี** custom domain และปิด r2.dev
+- Lifecycle: ยกเลิก multipart ที่ค้างอัตโนมัติ — **ห้าม**ตั้งกฎลบ object
+- `R2_PUBLIC_BASE_URL` ตอนนี้เป็น `pub-….r2.dev` (มี rate limit ใช้ได้ช่วง beta)
+  ย้ายไปโดเมนจริงเมื่อไร: ผูก custom domain กับถัง แก้ env แล้วแก้ `media.url` / `media.poster_url`
+  ที่ขึ้นต้นด้วย base เดิมด้วย `replace()` คำสั่งเดียว (URL เต็มถูกเก็บในแถว)
 
-โหมด access ของ store ถูกกำหนด**ตอนสร้าง store** เปลี่ยนทีหลังไม่ได้
-ถ้าสร้างเป็น private แล้วโค้ดเรียก `put(..., { access: "public" })` จะได้:
-
-```
-Vercel Blob: Cannot use public access on a private store.
-The store is configured with private access.
-```
-
-**อาการหลอก:** ในเบราว์เซอร์จะเห็นเป็น CORS error แทน
-(`No 'Access-Control-Allow-Origin' header`) เพราะ response ที่เป็น error
-ไม่ส่ง header CORS มาด้วย — ทำให้หลงไปแก้เรื่อง origin/proxy ทั้งที่ไม่เกี่ยว
-`pnpm blob:check` ยิงตรงจาก Node ข้ามเบราว์เซอร์ไป จะเห็นข้อความจริงทันที
-
-private ไม่ใช่ทางเลือกสำหรับรูปหน้าร้าน/ผลงาน — เสิร์ฟช้ากว่าและ egress แพงกว่า
-เพราะทุกครั้งที่เปิดดูต้องเซ็น URL ใหม่และไม่ติด CDN cache
-เก็บ private ไว้ให้ไฟล์ส่งมอบงานใน Phase 1c เท่านั้น (แยกเป็นคนละ store)
-
-### เก็บอะไรใน Blob vs Neon
+### เก็บอะไรใน R2 vs Neon
 
 | ข้อมูล | เก็บที่ | เหตุผล |
 |---|---|---|
-| รูป/วิดีโอทั้งหมด | Blob | — |
+| รูป/วิดีโอ/ไฟล์ส่งมอบทั้งหมด | R2 | — |
 | metadata ของไฟล์ (url, ขนาด, มิติ, thumbhash) | Neon | ต้อง query/join |
 | ข้อความในเธรด | Neon | สั้น, ต้อง search |
 | ใบเสนอราคา/ใบเสร็จ PDF | สร้างสด ๆ ตอนขอ ไม่เก็บ | ประหยัด storage, ข้อมูลอยู่ใน DB อยู่แล้ว |
-| audit log เก่ากว่า 90 วัน | ย้ายเป็น JSON ลง Blob แล้วลบจาก Neon | Neon storage $0.35/GB แพงกว่า Blob 15 เท่า |
+| audit log เก่ากว่า 90 วัน | ย้ายเป็น JSON ลง R2 แล้วลบจาก Neon | Neon storage $0.35/GB แพงกว่า R2 ~20 เท่า |
 
 ---
 
@@ -549,11 +520,11 @@ export const config: VercelConfig = {
 | **IDOR** | order ใช้ ULID + `orderCode` แบบสุ่ม 8 ตัว, ทุก query มี `WHERE creatorId = $me OR clientId = $me` |
 | **สแปมคำขอ** | Vercel BotID บนฟอร์ม + rate limit + บังคับ login ก่อน submit |
 | **Rate limit** | Token bucket ใน Postgres (`rate_limit` table, upsert เดียวจบ) — ไม่ต้องเพิ่ม Redis |
-| **ไฟล์ส่งมอบ** | Private Blob + signed URL อายุ 15 นาที ออกให้เฉพาะเมื่อ payment ครบ |
+| **ไฟล์ส่งมอบ** | ถัง R2 ส่วนตัว + presigned URL อายุ 15 นาที ออกให้เฉพาะเมื่อ payment ครบ |
 | **XSS** | เนื้อหาจากผู้ใช้เป็น markdown จำกัด tag → sanitize ด้วย `rehype-sanitize` ห้าม `dangerouslySetInnerHTML` ดิบ |
 | **Webhook** | ตรวจ Stripe signature เสมอ + ตาราง `webhook_event` กัน replay |
-| **Secrets** | `vercel env` เท่านั้น, ไม่มี secret ใน client bundle, VAPID private key และ Blob RW token อยู่ server อย่างเดียว |
-| **CSP** | ตั้ง header ใน `proxy.ts` — `script-src 'self'`, `img-src` เฉพาะ blob domain |
+| **Secrets** | `vercel env` เท่านั้น, ไม่มี secret ใน client bundle, VAPID private key และกุญแจ R2 อยู่ server อย่างเดียว (`lib/storage/r2.ts` import `server-only`) |
+| **CSP** | ตั้ง header ใน `proxy.ts` — `script-src 'self'`, `img-src` เฉพาะโดเมนของ `R2_PUBLIC_BASE_URL` |
 
 ### Helper ที่ต้องมีตั้งแต่วันแรก
 ```ts
@@ -576,7 +547,7 @@ export async function requirePlan(feature: FeatureKey) { /* ดู 03-plans */ }
 │   ├── (auth)/             sign-in, onboarding
 │   ├── (app)/              backoffice ครีเอเตอร์ — dynamic
 │   ├── (client)/           my/requests — ฝั่งลูกค้า
-│   └── api/                auth, blob, stripe, cron, og
+│   └── api/                auth, stripe, cron, og
 ├── components/
 │   ├── ui/                 shadcn primitives
 │   ├── forms/              form builder + field renderer
@@ -607,7 +578,14 @@ BETTER_AUTH_SECRET=
 BETTER_AUTH_URL=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-BLOB_READ_WRITE_TOKEN=            # Vercel ใส่ให้อัตโนมัติเมื่อผูก Blob store
+R2_ACCOUNT_ID=
+R2_PUBLIC_BUCKET=
+R2_PUBLIC_ACCESS_KEY_ID=          # token "Object Read & Write" ผูกถังสาธารณะถังเดียว
+R2_PUBLIC_SECRET_ACCESS_KEY=
+R2_PUBLIC_BASE_URL=               # ไม่มี / ท้าย
+R2_PRIVATE_BUCKET=
+R2_PRIVATE_ACCESS_KEY_ID=         # token แยก ผูกถังส่วนตัวถังเดียว
+R2_PRIVATE_SECRET_ACCESS_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PRICE_PRO_MONTHLY=
@@ -629,7 +607,7 @@ NEXT_PUBLIC_APP_URL=
 |---|---|---|
 | Vercel Hobby | ตลอด สำหรับ non-commercial | ต้องขึ้น Pro ($20/เดือน) เมื่อ (ก) เริ่มเก็บเงินจริง หรือ (ข) ต้องการ cron ถี่กว่าวันละครั้ง |
 | Neon Free | 100 CU-hours + 0.5 GB | ~150–300 ครีเอเตอร์ active ถ้า cache ดี → Launch plan |
-| Vercel Blob | 1 GB + 10 GB transfer | ~700–1,500 ผลงาน (หลังบีบอัด) → $0.023/GB-เดือน |
+| Cloudflare R2 | 10 GB + ไม่คิดค่า egress | เกิน 10 GB → $0.015/GB-เดือน (ค่าอ่าน/เขียนต่อครั้งฟรีจนถึงหลักล้านครั้ง) |
 | Resend | 3,000 อีเมล/เดือน | ~300 ครีเอเตอร์ active |
 | Stripe | ไม่มีค่าแรกเข้า | หัก ~3.65% ต่อธุรกรรม subscription |
 
