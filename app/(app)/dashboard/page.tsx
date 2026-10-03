@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Clock, Inbox, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Inbox, TrendingUp, LayoutList, Send, Images, Wallet, CheckCircle2 } from "lucide-react";
 import { ArtImage } from "@/components/art-image";
 import { UserAvatar } from "@/components/user-avatar";
 import { OrderStatusPill } from "@/components/status-pill";
 import { CopyLinkButton } from "@/components/copy-link-button";
-import { LockedFeature } from "@/components/locked-feature";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -115,7 +115,7 @@ export default async function DashboardPage() {
       {/* ตัวเลขสรุป */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
-          <Card key={s.label} className="gap-1 p-4">
+          <Card key={s.label} className="gap-3 p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">{s.label}</p>
               <s.icon className={`size-4 ${s.tone}`} />
@@ -124,12 +124,13 @@ export default async function DashboardPage() {
           </Card>
         ))}
 
-        <Card className="gap-1 p-4">
-          <p className="text-sm text-muted-foreground">{t.dashboard.monthRevenue}</p>
+        <Card className="gap-3 bg-primary/5 p-5">
+          <div className="flex items-center justify-between"><p className="text-sm text-muted-foreground">{t.redesign.allTimeRevenue}</p><Wallet className="size-4 text-primary" /></div>
           <p className="tabular text-2xl font-semibold xl:text-3xl">
             {/* TODO Phase 1: อ่านสกุลเงินจาก creator_page */}
             {formatMoney(revenue, currency, locale)}
           </p>
+          <p className="text-xs text-muted-foreground">{t.redesign.revenueHint}</p>
         </Card>
       </div>
 
@@ -151,7 +152,8 @@ export default async function DashboardPage() {
           </div>
 
           {needsAttention.length === 0 ? (
-            <Card className="mt-3 items-center p-10 text-center text-sm text-muted-foreground">
+            <Card className="mt-3 items-center gap-3 border-dashed p-10 text-center text-sm text-muted-foreground">
+              <CheckCircle2 className="size-8 text-success" />
               {t.dashboard.needsAttentionEmpty}
             </Card>
           ) : (
@@ -197,39 +199,22 @@ export default async function DashboardPage() {
             </ul>
           )}
 
-          {/* ตัวอย่างฟีเจอร์ที่ล็อกไว้ — ต้องเห็นว่ามีอะไรให้ปลด ไม่ใช่หน้าว่าง */}
-          <div className="mt-6">
-            <h2 className="mb-3 font-semibold">{t.nav.analytics}</h2>
-            <LockedFeature
-              variant="soon"
-              description={t.analytics.lockDesc}
-            >
-              <Card className="gap-4 p-5">
-                <div className="flex items-end gap-2">
-                  {[42, 68, 55, 90, 74, 96, 61, 83, 45, 77, 88, 52].map((h, i) => (
-                    <div
-                      key={i}
-                      className="flex-1 rounded-t bg-primary/70"
-                      style={{ height: `${h}px` }}
-                    />
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Views</p>
-                    <p className="tabular text-xl font-semibold">2,481</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Requests</p>
-                    <p className="tabular text-xl font-semibold">63</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Conversion</p>
-                    <p className="tabular text-xl font-semibold">2.5%</p>
-                  </div>
-                </div>
-              </Card>
-            </LockedFeature>
+          <div className="mt-8">
+            <h2 className="font-semibold">{t.redesign.quickActions}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{t.redesign.quickActionsHint}</p>
+            <div className="mt-4 space-y-3">
+              {[
+                { href: "/services" as const, icon: LayoutList, title: t.nav.services, hint: t.redesign.serviceHint },
+                { href: "/invites" as const, icon: Send, title: t.nav.invites, hint: t.redesign.inviteHint },
+                { href: "/portfolio" as const, icon: Images, title: t.nav.portfolio, hint: t.redesign.portfolioHint },
+              ].map((action) => (
+                <Link key={action.href} href={action.href} className="group flex items-center gap-4 rounded-xl border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/30">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/8 text-primary"><action.icon className="size-5" /></span>
+                  <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{action.title}</span><span className="mt-0.5 block text-xs text-muted-foreground">{action.hint}</span></span>
+                  <ArrowRight className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+                </Link>
+              ))}
+            </div>
           </div>
         </section>
 

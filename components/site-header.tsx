@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
 import { LayoutDashboard, LogOut, Menu, Receipt, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ export type HeaderUser = {
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const t = useDict();
   const router = useRouter();
+  const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleSignOut() {
     await signOut();
@@ -69,14 +72,14 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   ];
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-4">
+    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-18 w-full max-w-6xl items-center gap-3 px-5 sm:px-6">
         <Logo />
 
         <nav className="ml-4 hidden items-center gap-1 md:flex">
           {links.map((l) => (
             <Button key={l.href} asChild variant="ghost" size="sm">
-              <Link href={l.href}>{l.label}</Link>
+              <Link href={l.href} aria-current={pathname === l.href ? "page" : undefined} className={pathname === l.href ? "bg-primary/8 text-primary" : undefined}>{l.label}</Link>
             </Button>
           ))}
         </nav>
@@ -123,9 +126,9 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             </Button>
           )}
 
-          <Sheet>
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label={t.nav.explore}>
+              <Button variant="ghost" size="icon" className="md:hidden" aria-label={t.redesign.menu}>
                 <Menu className="size-4" />
               </Button>
             </SheetTrigger>
@@ -133,7 +136,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               <SheetTitle className="px-4 pt-4">
                 <Logo />
               </SheetTitle>
-              <nav className="mt-4 flex flex-col gap-1 px-2">
+              <nav className="mt-4 flex flex-col gap-1 px-2" onClick={(event) => { if ((event.target as HTMLElement).closest("a")) setMenuOpen(false); }}>
                 {links.map((l) => (
                   <Button key={l.href} asChild variant="ghost" className="justify-start">
                     <Link href={l.href}>{l.label}</Link>

@@ -15,6 +15,7 @@ import {
   LayoutList,
   Users,
   Send,
+  ExternalLink,
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ComingSoonBadge } from "@/components/locked-feature";
@@ -69,10 +70,17 @@ function useNavItems() {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const items = useNavItems();
+  const t = useDict();
+  const groups = [
+    { title: t.redesign.workspace, items: items.filter((i) => ["/dashboard", "/orders", "/invites"].includes(i.href)) },
+    { title: t.redesign.manageShop, items: items.filter((i) => ["/shop", "/services", "/portfolio", "/settings"].includes(i.href)) },
+    { title: t.redesign.upcoming, items: items.filter((i) => "soon" in i) },
+  ];
 
   return (
-    <nav className="flex flex-col gap-0.5 p-2">
-      {items.map((item) => {
+    <nav className="flex flex-col gap-5 p-3">
+      {groups.map((group) => <div key={group.title}><p className="mb-2 px-3 text-[11px] font-medium tracking-wide text-muted-foreground">{group.title}</p>
+      {group.items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
@@ -81,9 +89,9 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
+              "mb-1 flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
               active
-                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                ? "bg-primary/10 font-semibold text-primary ring-1 ring-primary/15"
                 : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
             )}
           >
@@ -92,7 +100,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             {"soon" in item && item.soon ? <ComingSoonBadge /> : null}
           </Link>
         );
-      })}
+      })}</div>)}
     </nav>
   );
 }
@@ -119,34 +127,46 @@ function NotificationBell() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let cancelled = false;
+    let polling = false;
+    let lastSnapshot = "";
+    const controller = new AbortController();
 
     async function poll() {
+      if (cancelled || polling) return;
       if (document.visibilityState !== "visible") return schedule();
+      polling = true;
       try {
         const res = await fetch("/api/notifications", {
+          signal: controller.signal,
           headers: etag.current ? { "If-None-Match": etag.current } : {},
         });
         if (res.status === 304) {
           emptyPolls.current++;
         } else if (res.ok) {
           const data = (await res.json()) as { unread: number; items: NotificationItem[] };
-          const changed = data.unread !== unread || data.items[0]?.id !== items[0]?.id;
+          const snapshot = `${data.unread}:${data.items[0]?.id ?? ""}`;
+          const changed = snapshot !== lastSnapshot;
+          lastSnapshot = snapshot;
           emptyPolls.current = changed ? 0 : emptyPolls.current + 1;
           etag.current = res.headers.get("ETag");
           if (!cancelled) {
             setUnread(data.unread);
             setItems(data.items);
           }
+        } else {
+          emptyPolls.current++;
         }
       } catch {
         // เน็ตหลุดชั่วคราวไม่ใช่เรื่องต้องแจ้งผู้ใช้ — รอบหน้าลองใหม่เอง
         emptyPolls.current++;
       }
+      polling = false;
       schedule();
     }
 
     function schedule() {
       if (cancelled) return;
+      clearTimeout(timer);
       timer = setTimeout(poll, Math.min(60_000, 5_000 * 2 ** emptyPolls.current));
     }
 
@@ -163,11 +183,11 @@ function NotificationBell() {
 
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-    // ตั้งใจให้รันครั้งเดียว — ค่าที่ใช้ข้างในอ่านผ่าน ref หรือ setState แบบ callback
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Snapshot lives in this effect so comparisons use the last response, not mount-time state.
   }, []);
 
   return (
@@ -257,6 +277,9 @@ export function AppShell({
 }) {
   const t = useDict();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const currentPage = useNavItems().find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   /**
    * ⚠️ ป้ายแพ็กเกจต้องมาจากแพ็กเกจที่ใช้จริง ไม่ใช่ค่าที่เก็บใน DB
    * เดิมอ่าน `user.plan` ตรง ๆ ช่วงเบต้าทุกคนจึงเห็น "Free" + ปุ่มอัปเกรดทุกหน้า
@@ -277,8 +300,8 @@ export function AppShell({
   return (
     <div className="flex min-h-full flex-1">
       {/* Sidebar — desktop */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
-        <div className="flex h-14 items-center px-4">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r bg-sidebar lg:flex">
+        <div className="flex h-18 shrink-0 items-center px-6">
           <Logo href="/dashboard" />
         </div>
         <NavList />
@@ -287,7 +310,7 @@ export function AppShell({
           <div className="rounded-xl border bg-card p-3">
             <div className="flex items-center gap-2">
               <Badge variant={isPro ? "default" : "secondary"}>
-                {isPro ? t.plan.pro : t.plan.free}
+                {t.plan[plan.shown]}
               </Badge>
             </div>
             {plan.offerUpgrade ? (
@@ -310,27 +333,28 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur-md">
-          <Sheet>
+        <header className="sticky top-0 z-30 flex h-18 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-xl lg:px-8">
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label={t.nav.dashboard}>
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label={t.redesign.menu}>
                 <Menu className="size-4" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <SheetTitle className="flex h-14 items-center px-4">
+              <SheetTitle className="flex h-18 shrink-0 items-center px-6">
                 <Logo href="/dashboard" />
               </SheetTitle>
-              <NavList />
+              <NavList onNavigate={() => setMenuOpen(false)} />
             </SheetContent>
           </Sheet>
 
+          <p className="hidden text-sm font-semibold md:block">{currentPage?.label ?? t.redesign.workspace}</p>
           {user.handle ? (
             <Link
               href={shopPageHref}
-              className="hidden text-sm text-muted-foreground hover:text-foreground sm:block"
+              className="ml-4 hidden min-w-0 items-center gap-2 truncate border-l pl-4 text-xs text-muted-foreground hover:text-primary xl:flex"
             >
-              {shopUrlDisplay(user.handle)}
+              {shopUrlDisplay(user.handle)}<ExternalLink className="size-3 shrink-0" aria-hidden />
             </Link>
           ) : (
             <Link href="/onboarding" className="hidden text-sm text-primary sm:block">
@@ -372,7 +396,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 bg-muted/20">{children}</main>
       </div>
     </div>
   );

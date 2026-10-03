@@ -1,3 +1,4 @@
+import { cronResponseStatus } from "@/lib/cron/report";
 import { timingSafeEqual } from "node:crypto";
 import { cleanupMedia, type CleanupReport } from "@/lib/media/cleanup";
 import { runLifecycle, type LifecycleReport } from "@/lib/orders/lifecycle-run";
@@ -87,7 +88,10 @@ export async function GET(request: Request) {
   // ขึ้น log ให้เห็นใน Vercel เสมอ — งานที่ไม่มีใครดูผลคืองานที่พังเงียบ ๆ ได้
   console.log("[cron/cleanup]", JSON.stringify(report));
 
-  return Response.json(report);
+  return Response.json(report, {
+    status: cronResponseStatus(report),
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 /**

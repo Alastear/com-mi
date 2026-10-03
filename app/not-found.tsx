@@ -9,7 +9,7 @@ export default async function NotFound() {
   const t = getDictionary(locale);
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <main id="main-content" tabIndex={-1} className="flex min-h-dvh flex-col">
       <div className="mx-auto flex w-full max-w-6xl items-center px-4 py-4">
         <Logo />
       </div>
@@ -29,6 +29,6 @@ export default async function NotFound() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

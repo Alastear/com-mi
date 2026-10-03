@@ -62,6 +62,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${notoThai.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        <a href="#main-content" className="skip-link">{t.redesign.skip}</a>
         <Providers locale={locale}>
           {children}
           <Toaster position="bottom-right" />

@@ -20,7 +20,7 @@ export default function ErrorBoundary({
   }, [error]);
 
   return (
-    <div className="grid flex-1 place-items-center px-4 py-24 text-center">
+    <main id="main-content" tabIndex={-1} className="grid flex-1 place-items-center px-4 py-24 text-center">
       <div className="max-w-sm">
         <p className="text-lg font-semibold">
           {t.error.title}
@@ -36,6 +36,6 @@ export default function ErrorBoundary({
           {t.error.retry}
         </Button>
       </div>
-    </div>
+    </main>
   );
 }

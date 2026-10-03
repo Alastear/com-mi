@@ -27,7 +27,7 @@ export async function GET(request: Request): Promise<Response> {
    */
   const etag = `W/"${items[0]?.id ?? "0"}-${unread}"`;
   if (request.headers.get("if-none-match") === etag) {
-    return new Response(null, { status: 304, headers: { ETag: etag } });
+    return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-store" } });
   }
 
   return Response.json(

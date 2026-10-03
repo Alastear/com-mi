@@ -34,13 +34,13 @@ export function OnboardingClient({ suggested }: { suggested: string }) {
   const valid = local.ok && !serverError;
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4">
+    <main id="main-content" tabIndex={-1} className="hero-studio grid min-h-dvh place-items-center px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 flex justify-center">
           <Logo />
         </div>
 
-        <Card className="gap-5 p-6">
+        <Card className="gap-6 rounded-3xl p-7 sm:p-8">
           <div>
             <h1 className="text-lg font-semibold">{t.onboarding.title}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{t.onboarding.subtitle}</p>
@@ -112,6 +112,6 @@ export function OnboardingClient({ suggested }: { suggested: string }) {
           </div>
         </Card>
       </div>
-    </div>
+    </main>
   );
 }

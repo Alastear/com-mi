@@ -13,7 +13,7 @@ export function Providers({
   children: React.ReactNode;
 }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <LocaleProvider locale={locale}>
         <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
       </LocaleProvider>

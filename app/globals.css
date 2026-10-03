@@ -64,7 +64,7 @@
    Light theme
    ──────────────────────────────────────────────────────────── */
 :root {
-  --background: oklch(0.995 0.001 285);
+  --background: oklch(0.982 0.006 80);
   --foreground: oklch(0.205 0.006 285);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.205 0.006 285);
@@ -96,8 +96,8 @@
   --chart-3: oklch(0.58 0.145 155);
   --chart-4: oklch(0.68 0.145 70);
   --chart-5: oklch(0.6 0.16 15);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.985 0.002 285);
+  --radius: 0.875rem;
+  --sidebar: oklch(0.975 0.008 305);
   --sidebar-foreground: oklch(0.205 0.006 285);
   --sidebar-primary: oklch(0.545 0.198 305);
   --sidebar-primary-foreground: oklch(0.99 0.002 305);
@@ -202,5 +202,38 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@layer base {
+  :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+  }
+  main:focus { outline: none; }
+}
+
+@layer components {
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 1rem;
+    z-index: 100;
+    transform: translateY(-180%);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+  .skip-link:focus { transform: translateY(0); }
+  .hero-studio {
+    background-image: radial-gradient(ellipse at 85% 35%, color-mix(in oklch, var(--primary) 9%, transparent), transparent 58%);
+  }
+  .commission-preview::before {
+    content: "";
+    position: absolute;
+    inset: 12% 0 7%;
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--primary) 7%, transparent);
   }
 }

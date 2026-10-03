@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Receipt, Search, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, Check, Clock, Receipt, Search, ShieldCheck, Wallet, Sparkles, Paintbrush } from "lucide-react";
+import { CommissionPreview } from "@/components/commission-preview";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -56,54 +57,40 @@ export default async function HomePage() {
 
   return (
     <div>
-      {/* ── หา ─────────────────────────────────────────────── */}
-      <section className="mx-auto w-full max-w-4xl px-4 pt-16 pb-10 text-center lg:pt-24">
-        <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-          {t.home.heroTitle}{" "}
-          <span className="bg-gradient-to-r from-primary to-info bg-clip-text text-transparent">
-            {t.home.heroTitleAccent}
-          </span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl text-pretty text-muted-foreground sm:text-lg">
-          {t.home.heroSubtitle}
-        </p>
-
-        {/*
-          ฟอร์มธรรมดาแบบ GET — ไม่ต้องใช้ JavaScript ก็ค้นได้ และปุ่ม Enter ทำงานเอง
-          ปลายทางคือ /explore ซึ่งเป็นหน้ารายการเต็ม
-        */}
-        <form action="/explore" className="mx-auto mt-7 flex max-w-lg gap-2">
-          <div className="relative flex-1">
-            <Search
-              aria-hidden
-              className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              type="search"
-              name="q"
-              placeholder={t.home.searchPlaceholder}
-              aria-label={t.home.searchPlaceholder}
-              className="h-11 pl-9"
-            />
+      <section className="hero-studio overflow-hidden border-b border-border/60">
+        <div className="mx-auto grid w-full max-w-6xl items-center gap-8 px-5 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.15fr_1fr] lg:gap-12 lg:py-20">
+          <div>
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
+              <Sparkles className="size-3.5" aria-hidden />{t.redesign.eyebrow}
+            </span>
+            <h1 className="mt-6 text-4xl leading-[1.25] font-semibold tracking-tight text-balance sm:text-5xl lg:text-[3.4rem]">
+              {t.redesign.heroTitle}<span className="mt-1 block text-primary">{t.redesign.heroAccent}</span>
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">{t.redesign.heroBody}</p>
+            <form action="/explore" role="search" className="mt-7 flex gap-2 rounded-2xl border bg-card p-2 shadow-sm">
+              <div className="relative min-w-0 flex-1">
+                <Search aria-hidden className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input type="search" name="q" placeholder={t.home.searchPlaceholder} aria-label={t.home.searchPlaceholder} className="h-12 border-0 bg-transparent pl-9 shadow-none dark:bg-transparent" />
+              </div>
+              <Button type="submit" size="lg" className="rounded-xl">{t.home.searchCta}<ArrowRight className="hidden size-4 sm:block" aria-hidden /></Button>
+            </form>
+            <p className="mt-5 text-xs font-medium text-muted-foreground">{t.redesign.popular}</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {categories.map((k) => (
+                <Button key={k} asChild variant="outline" size="sm" className="rounded-full bg-card/70">
+                  <Link href={`/explore?kind=${k}`}>{t.serviceKind[k]}</Link>
+                </Button>
+              ))}
+            </div>
           </div>
-          <Button type="submit" size="lg" className="h-11">
-            {t.home.searchCta}
-          </Button>
-        </form>
-
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          {categories.map((k) => (
-            <Button key={k} asChild variant="outline" size="sm" className="rounded-full">
-              <Link href={`/explore?kind=${k}`}>{t.serviceKind[k]}</Link>
-            </Button>
-          ))}
+          <CommissionPreview t={t} />
         </div>
       </section>
 
       {/* ── ครีเอเตอร์ที่เปิดรับงาน ────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-16">
+      <section className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 lg:py-20">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold tracking-tight">{t.home.featuredTitle}</h2>
+          <div><h2 className="text-2xl font-semibold tracking-tight">{t.home.featuredTitle}</h2><p className="mt-2 text-sm text-muted-foreground">{t.redesign.featuredNote}</p></div>
           {shops.length > 0 ? (
             <Button asChild variant="ghost" size="sm">
               <Link href="/explore">
@@ -115,9 +102,11 @@ export default async function HomePage() {
         </div>
 
         {shops.length === 0 ? (
-          <Card className="mt-5 items-center gap-3 p-10 text-center">
-            <p className="font-medium">{t.home.featuredEmpty}</p>
-            <p className="max-w-md text-sm text-muted-foreground">{t.home.featuredEmptyBody}</p>
+          <Card className="mt-7 items-center gap-3 border border-dashed border-primary/25 bg-primary/3 px-5 py-12 text-center shadow-none ring-0">
+            <span className="mb-2 grid size-14 place-items-center rounded-2xl border border-primary/15 bg-card text-primary"><Paintbrush className="size-6" aria-hidden /></span>
+            <p className="text-xs font-medium text-primary">{t.redesign.emptyEyebrow}</p>
+            <h3 className="text-xl font-semibold">{t.redesign.emptyTitle}</h3>
+            <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{t.redesign.emptyBody}</p>
             <div className="mt-2 flex flex-wrap justify-center gap-2">
               <Button asChild>
                 <Link href="/for-creators">{t.landing.heroCta}</Link>
@@ -133,7 +122,7 @@ export default async function HomePage() {
               const handle = c.user?.handle ?? "";
               const cheapest = c.services[0];
               return (
-                <Card key={c.id} className="gap-0 overflow-hidden p-0">
+                <Card key={c.id} className="gap-0 overflow-hidden p-0 transition-shadow hover:shadow-lg">
                   <Link href={shopHref(handle)} className="group block">
                     <ArtImage
                       seed={c.id}
@@ -143,7 +132,7 @@ export default async function HomePage() {
                       rounded={false}
                       className="transition-transform duration-300 group-hover:scale-[1.03]"
                     />
-                    <div className="-mt-7 px-4 pb-4">
+                    <div className="relative -mt-7 px-5 pb-5">
                       <ArtAvatar
                         seed={c.id + "-avatar"}
                         src={c.avatar?.url}
@@ -193,13 +182,13 @@ export default async function HomePage() {
       </section>
 
       {/* ── สั่งงานยังไง ──────────────────────────────────── */}
-      <section className="border-t bg-card/30">
+      <section className="border-y bg-card/60">
         <div className="mx-auto w-full max-w-6xl px-4 py-16">
-          <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.howTitle}</h2>
+          <p className="mb-2 text-xs font-medium text-primary">{t.redesign.howEyebrow}</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.howTitle}</h2>
           <ol className="mt-8 grid gap-8 sm:grid-cols-3">
             {steps.map((s) => (
-              <li key={s.n}>
-                <span className="tabular grid size-9 place-items-center rounded-full bg-primary/12 text-sm font-semibold text-primary">
+              <li key={s.n} className="rounded-2xl border bg-background p-6">
+                <span className="tabular grid size-11 place-items-center rounded-xl bg-primary/12 text-sm font-semibold text-primary">
                   {s.n}
                 </span>
                 <h3 className="mt-3 font-medium">{s.title}</h3>
@@ -212,10 +201,10 @@ export default async function HomePage() {
 
       {/* ── ทำไมสั่งที่นี่ ────────────────────────────────── */}
       <section className="mx-auto w-full max-w-6xl px-4 py-16">
-        <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.trustTitle}</h2>
+        <p className="mb-2 text-xs font-medium text-primary">{t.redesign.trustEyebrow}</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.trustTitle}</h2>
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
           {trust.map((x) => (
-            <div key={x.title} className="flex gap-3.5">
+            <div key={x.title} className="flex gap-4 rounded-2xl border bg-card p-5">
               <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card">
                 <x.icon className="size-4 text-primary" />
               </span>
@@ -230,7 +219,7 @@ export default async function HomePage() {
 
       {/* ── ทางเข้าฝั่งครีเอเตอร์ ─────────────────────────── */}
       <section className="mx-auto w-full max-w-6xl px-4 pb-20">
-        <Card className="flex-row flex-wrap items-center gap-4 border-primary/30 bg-primary/5 p-6">
+        <Card className="flex-row flex-wrap items-center gap-4 border-primary/20 bg-primary/5 p-6 sm:p-9">
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-2 font-medium">
               {t.home.forCreatorsTitle}

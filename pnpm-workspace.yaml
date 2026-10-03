@@ -1,3 +1,8 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+# Targeted security patches; remove when upstream resolves these versions itself.
+overrides:
+  nanoid@3.3.17: 3.3.18
+  undici@6.28.0: 6.28.1

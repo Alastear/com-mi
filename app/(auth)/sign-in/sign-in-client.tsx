@@ -157,13 +157,13 @@ export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) 
   }
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4">
+    <main id="main-content" tabIndex={-1} className="hero-studio grid min-h-dvh place-items-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex justify-center">
           <Logo />
         </div>
 
-        <Card className="gap-5 p-6">
+        <Card className="gap-6 rounded-3xl p-7 sm:p-8">
           <div className="text-center">
             <h1 className="text-lg font-semibold">{t.common.signIn}</h1>
             <p className="mt-1 text-sm text-muted-foreground">{t.brand.tagline}</p>
@@ -282,6 +282,6 @@ export function SignInClient({ passwordEnabled }: { passwordEnabled: boolean }) 
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

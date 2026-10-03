@@ -1,3 +1,4 @@
+import { Search, Compass } from "lucide-react";
 import Link from "next/link";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
@@ -40,13 +41,14 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <span className="mb-4 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Compass className="size-6" aria-hidden /></span>
       <h1 className="text-3xl font-semibold tracking-tight">{t.nav.explore}</h1>
       <p className="mt-2 text-muted-foreground">
         {shops.length > 0 ? fill(t.explore.count, { n: shops.length }) : t.brand.tagline}
       </p>
 
       {/* ฟอร์ม GET ธรรมดา — ค้นได้แม้ JavaScript ยังไม่โหลด และ Enter ทำงานเอง */}
-      <form className="mt-6 flex max-w-lg gap-2">
+      <form role="search" className="mt-6 flex max-w-xl gap-2 rounded-2xl border bg-card p-2 shadow-sm">
         {kind ? <input type="hidden" name="kind" value={kind} /> : null}
         <Input
           type="search"
@@ -54,12 +56,12 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
           defaultValue={q}
           placeholder={t.home.searchPlaceholder}
           aria-label={t.home.searchPlaceholder}
-          className="h-10"
+          className="h-11 border-0 bg-transparent shadow-none dark:bg-transparent"
         />
-        <Button type="submit">{t.home.searchCta}</Button>
+        <Button type="submit" className="h-11"><Search className="size-4" aria-hidden />{t.home.searchCta}</Button>
       </form>
 
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap gap-2 border-b pb-7">
         <Button
           asChild
           size="sm"
@@ -114,7 +116,7 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
                     rounded={false}
                     className="transition-transform duration-300 group-hover:scale-[1.03]"
                   />
-                  <div className="-mt-7 px-4 pb-4">
+                  <div className="relative -mt-7 px-5 pb-5">
                     <ArtAvatar
                       seed={c.id + "-avatar"}
                       src={c.avatar?.url}
