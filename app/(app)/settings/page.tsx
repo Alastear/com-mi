@@ -1,3 +1,4 @@
+import { CAPABILITY_SURFACES } from "@/lib/capabilities/registry";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { Bell, CreditCard, MessageSquare, Store, User } from "lucide-react";
@@ -175,7 +176,7 @@ export default async function SettingsPage() {
           <Card className="gap-2 p-5">
             <div className="flex items-center gap-2">
               <p className="font-medium">{t.settings.themeTitle}</p>
-              <ComingSoonBadge />
+              <ComingSoonBadge capabilities={CAPABILITY_SURFACES.settings.theme} />
             </div>
             <p className="text-sm text-muted-foreground">
               {t.settings.themeDesc}
@@ -241,25 +242,25 @@ export default async function SettingsPage() {
               icon: Bell,
               title: t.settings.notifyInApp,
               body: t.settings.notifyInAppBody,
-              soon: false,
+              capabilities: undefined,
             },
             {
               icon: MessageSquare,
               title: t.settings.notifyEmail,
               body: t.settings.notifyEmailBody,
-              soon: false,
+              capabilities: undefined,
             },
             {
               icon: Bell,
               title: "Web Push",
               body: t.settings.notifyPushBody,
-              soon: true,
+              capabilities: CAPABILITY_SURFACES.settings.push,
             },
             {
               icon: MessageSquare,
               title: "Discord",
               body: t.settings.notifyDiscordBody,
-              soon: true,
+              capabilities: CAPABILITY_SURFACES.settings.discord,
             },
           ].map((n) => (
             <Card key={n.title} className="flex-row items-center gap-4 p-4">
@@ -270,8 +271,8 @@ export default async function SettingsPage() {
                 <p className="flex items-center gap-2 font-medium">{n.title}</p>
                 <p className="text-sm text-muted-foreground">{n.body}</p>
               </div>
-              {n.soon ? (
-                <ComingSoonBadge />
+              {n.capabilities ? (
+                <ComingSoonBadge capabilities={n.capabilities} />
               ) : (
                 <Badge variant="secondary">{t.common.on}</Badge>
               )}

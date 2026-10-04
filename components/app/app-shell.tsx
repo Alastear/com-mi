@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { ComingSoonBadge } from "@/components/locked-feature";
+import { CAPABILITY_SURFACES, capabilityPresentation } from "@/lib/capabilities/registry";
 import { planDisplay, type PlanId } from "@/lib/billing/plans";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
 import { UserAvatar } from "@/components/user-avatar";
@@ -45,11 +46,9 @@ import { shopHref } from "@/lib/routes";
 import { shopUrlDisplay } from "@/lib/site";
 
 /**
- * เมนูที่มี `soon: true` จะขึ้นป้าย "เร็ว ๆ นี้"
- *
- * ⚠️ เดิมสามเมนูนี้ติดป้าย Pro รูปกุญแจ ซึ่งแปลว่า "จ่ายแล้วได้ใช้" — แต่หน้าข้างในทั้งสาม
- * เป็นภาพตัวอย่างใต้ `LockedFeature variant="soon"` ไม่มีของจริงเลย (ช่วงเบต้าทุกคนเป็น Pro
- * อยู่แล้วด้วย กุญแจจึงบอกว่าล็อกทั้งที่ไม่ได้ล็อก) เปลี่ยนกลับเป็น Pro เมื่อสร้างเสร็จจริงเท่านั้น
+ * สถานะจาก registry ใช้ร่วมทั้ง desktop/mobile — planned/internal/beta/paused
+ * ยังอยู่ในกลุ่ม upcoming; เมื่อ live จึงย้ายเข้ากลุ่มจัดการร้าน
+ * ป้ายไม่ใช่ permission gate: query/action ของฟีเจอร์จริงต้องตรวจฝั่ง server เสมอ
  */
 function useNavItems() {
   const t = useDict();
@@ -59,10 +58,10 @@ function useNavItems() {
     { href: "/shop", label: t.nav.shop, icon: Store },
     { href: "/services", label: t.nav.services, icon: LayoutList },
     { href: "/invites", label: t.nav.invites, icon: Send },
-    { href: "/listings", label: t.nav.listings, icon: Gavel, soon: true },
+    { href: "/listings", label: t.nav.listings, icon: Gavel, ...capabilityPresentation(CAPABILITY_SURFACES.nav["/listings"]) },
     { href: "/portfolio", label: t.nav.portfolio, icon: Images },
-    { href: "/clients", label: t.nav.clients, icon: Users, soon: true },
-    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, soon: true },
+    { href: "/clients", label: t.nav.clients, icon: Users, ...capabilityPresentation(CAPABILITY_SURFACES.nav["/clients"]) },
+    { href: "/analytics", label: t.nav.analytics, icon: BarChart3, ...capabilityPresentation(CAPABILITY_SURFACES.nav["/analytics"]) },
     { href: "/settings", label: t.nav.settings, icon: Settings },
   ] as const;
 }
@@ -73,13 +72,13 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const t = useDict();
   const groups = [
     { title: t.redesign.workspace, items: items.filter((i) => ["/dashboard", "/orders", "/invites"].includes(i.href)) },
-    { title: t.redesign.manageShop, items: items.filter((i) => ["/shop", "/services", "/portfolio", "/settings"].includes(i.href)) },
-    { title: t.redesign.upcoming, items: items.filter((i) => "soon" in i) },
+    { title: t.redesign.manageShop, items: items.filter((i) => ["/shop", "/services", "/portfolio", "/settings"].includes(i.href) || ("capabilities" in i && !i.soon)) },
+    { title: t.redesign.upcoming, items: items.filter((i) => "soon" in i && i.soon) },
   ];
 
   return (
     <nav className="flex flex-col gap-5 p-3">
-      {groups.map((group) => <div key={group.title}><p className="mb-2 px-3 text-xs font-medium tracking-wide text-muted-foreground">{group.title}</p>
+      {groups.filter((group) => group.items.length > 0).map((group) => <div key={group.title}><p className="mb-2 px-3 text-xs font-medium tracking-wide text-muted-foreground">{group.title}</p>
       {group.items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -97,7 +96,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           >
             <item.icon className="size-4 shrink-0" />
             <span className="min-w-0 flex-1">{item.label}</span>
-            {"soon" in item && item.soon ? <ComingSoonBadge /> : null}
+            {"soon" in item && item.soon ? <ComingSoonBadge capabilities={item.capabilities} /> : null}
           </Link>
         );
       })}</div>)}

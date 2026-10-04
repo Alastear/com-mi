@@ -1,3 +1,4 @@
+import { CAPABILITY_SURFACES } from "@/lib/capabilities/registry";
 import { LockedFeature } from "@/components/locked-feature";
 import { Card } from "@/components/ui/card";
 import { formatMoney, intlLocale } from "@/lib/format";
@@ -27,7 +28,7 @@ export default async function AnalyticsPage() {
         {t.analytics.desc}
       </p>
 
-      <LockedFeature variant="soon" className="mt-6">
+      <LockedFeature capabilities={CAPABILITY_SURFACES.nav["/analytics"]} className="mt-6">
         <div className="space-y-4 p-4">
           <div className="grid gap-4 sm:grid-cols-3">
             {[

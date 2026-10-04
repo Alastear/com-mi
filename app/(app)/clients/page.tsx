@@ -1,3 +1,4 @@
+import { CAPABILITY_SURFACES } from "@/lib/capabilities/registry";
 import { ArtAvatar } from "@/components/art-image";
 import { LockedFeature } from "@/components/locked-feature";
 import { Card } from "@/components/ui/card";
@@ -26,7 +27,7 @@ export default async function ClientsPage() {
       </p>
 
       <LockedFeature
-        variant="soon"
+        capabilities={CAPABILITY_SURFACES.nav["/clients"]}
         className="mt-6"
         description={
           t.clients.lockDesc

@@ -20,6 +20,7 @@ pnpm dev                                  # http://localhost:3450
 | คำสั่ง | ทำอะไร |
 |---|---|
 | `pnpm dev` | รันเซิร์ฟเวอร์ dev (พอร์ต 3450) |
+| `pnpm beta:check [target-env] [production-baseline-env]` | ตรวจ config สำหรับ staging แบบ offline ไม่อ่าน fallback และไม่แสดง secret; ดูข้อจำกัดในเอกสาร FND |
 | `pnpm test` | เทสต์ตรรกะที่พลาดแล้วเสียเงินจริง (state machine, ราคา, PromptPay) |
 | `pnpm lint` · `pnpm build` | ตรวจก่อน commit เสมอ |
 | `pnpm db:generate` · `pnpm db:migrate` | สร้างและรัน migration |
@@ -32,6 +33,8 @@ pnpm dev                                  # http://localhost:3450
 เริ่มจาก [แผน Beta และเตรียมขาย](PLAN.md) และ [รายงานตรวจระบบ 3 ต.ค. 2026](docs/SYSTEM-AUDIT.md) สำหรับสถานะปัจจุบันและงานที่ต้องทำก่อนเปิดใช้จริง
 
 แผนงานถัดไป: [ฟีเจอร์ “เร็ว ๆ นี้” และ backlog](docs/COMING-SOON-PLAN.md)
+
+ความคืบหน้า implementation: [รอบพื้นฐาน FND และรายการเตรียม staging](docs/FOUNDATION-IMPLEMENTATION.md)
 
 งาน UI ล่าสุด: [แผนหน้าแรกและผลตรวจ responsive](docs/HOMEPAGE-ART-DIRECTION.md)
 

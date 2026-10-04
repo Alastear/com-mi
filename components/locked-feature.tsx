@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Hammer, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDict } from "@/lib/i18n/client";
+import { capabilityStatus, type CapabilityGroup } from "@/lib/capabilities/registry";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,15 +30,19 @@ export function LockedFeature({
   description,
   className,
   variant = "pro",
+  capabilities,
 }: {
   children: React.ReactNode;
   title?: string;
   description?: string;
   className?: string;
   variant?: "pro" | "soon";
+  capabilities?: CapabilityGroup;
 }) {
   const t = useDict();
-  const soon = variant === "soon";
+  // This component always covers sample content; a release flag must never expose mock data.
+  const soon = !!capabilities || variant === "soon";
+  const status = capabilities ? capabilityStatus(capabilities) : "planned";
   const Icon = soon ? Hammer : Lock;
 
   return (
@@ -65,7 +70,7 @@ export function LockedFeature({
           <div className="mx-auto mb-3 grid size-10 place-items-center rounded-full border border-primary/30 bg-primary/10">
             <Icon className="size-4 text-primary" />
           </div>
-          <p className="font-medium">{title ?? (soon ? t.locked.soonTitle : t.locked.title)}</p>
+          <p className="font-medium">{title ?? (soon ? (status === "planned" ? t.locked.soonTitle : t.locked.previewTitle) : t.locked.title)}</p>
           {description ? (
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           ) : null}
@@ -87,14 +92,15 @@ export function LockedFeature({
 }
 
 /**
- * ป้าย "เร็ว ๆ นี้" — คู่ของ `variant="soon"` สำหรับวางข้างข้อความบรรทัดเดียว
- *
- * ⚠️ ใช้กับของที่ **ยังไม่มีโค้ดรองรับ** เท่านั้น ห้ามใช้แทน ProBadge
- * ป้าย Pro แปลว่าจ่ายแล้วได้ใช้ทันที ป้ายนี้แปลว่าจ่ายไปก็ยังไม่ได้อะไร
- * ไม่มีปุ่มอัปเกรดคู่กันโดยตั้งใจ ด้วยเหตุผลเดียวกับ LockedFeature ข้างบน
+ * Public release badge. Without capabilities, retain the legacy "Coming soon" label.
+ * With capabilities, internal stays private, beta/paused get their own labels and live hides it.
+ * This is presentation only and never grants feature access.
  */
-export function ComingSoonBadge({ className }: { className?: string }) {
+export function ComingSoonBadge({ className, capabilities }: { className?: string; capabilities?: CapabilityGroup }) {
   const t = useDict();
+  const status = capabilities ? capabilityStatus(capabilities) : "planned";
+  if (status === "live") return null;
+  const label = status === "paused" ? t.common.featurePaused : status === "beta" ? t.common.featureBeta : t.common.comingSoon;
   return (
     <span
       className={cn(
@@ -103,7 +109,7 @@ export function ComingSoonBadge({ className }: { className?: string }) {
       )}
     >
       <Hammer aria-hidden className="size-2.5" />
-      {t.common.comingSoon}
+      {label}
     </span>
   );
 }

@@ -1,3 +1,4 @@
+import { CAPABILITY_SURFACES, capabilityPresentation, type CapabilityGroup } from "@/lib/capabilities/registry";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -50,6 +51,7 @@ export default async function LandingPage() {
     body: string;
     soon?: true;
     soonNote?: string;
+    capabilities?: CapabilityGroup;
   }> = [
     { icon: Store, title: t.landing.features.shopTitle, body: t.landing.features.shopBody },
     { icon: LayoutGrid, title: t.landing.features.queueTitle, body: t.landing.features.queueBody },
@@ -57,20 +59,22 @@ export default async function LandingPage() {
       icon: ClipboardList,
       title: t.landing.features.briefTitle,
       body: t.landing.features.briefBody,
-      soonNote: t.landing.features.briefSoon,
+      soonNote: capabilityPresentation(CAPABILITY_SURFACES.marketing.brief).soon ? t.landing.features.briefSoon : undefined,
+      capabilities: CAPABILITY_SURFACES.marketing.brief,
     },
     { icon: QrCode, title: t.landing.features.payTitle, body: t.landing.features.payBody },
     {
       icon: Bell,
       title: t.landing.features.notifyTitle,
       body: t.landing.features.notifyBody,
-      soonNote: t.landing.features.notifySoon,
+      soonNote: capabilityPresentation(CAPABILITY_SURFACES.marketing.notify).soon ? t.landing.features.notifySoon : undefined,
+      capabilities: CAPABILITY_SURFACES.marketing.notify,
     },
     {
       icon: Gavel,
       title: t.landing.features.adoptTitle,
       body: t.landing.features.adoptBody,
-      soon: true,
+      ...capabilityPresentation(CAPABILITY_SURFACES.marketing.adopt),
     },
   ];
 
@@ -218,12 +222,12 @@ export default async function LandingPage() {
                 </div>
                 <h3 className="flex flex-wrap items-center gap-2 font-medium">
                   {f.title}
-                  {f.soon ? <ComingSoonBadge /> : null}
+                  {f.soon ? <ComingSoonBadge capabilities={f.capabilities} /> : null}
                 </h3>
                 <p className="text-sm leading-relaxed text-muted-foreground">{f.body}</p>
                 {f.soonNote ? (
                   <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <ComingSoonBadge />
+                    <ComingSoonBadge capabilities={f.capabilities} />
                     {f.soonNote}
                   </p>
                 ) : null}

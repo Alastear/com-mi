@@ -1,3 +1,4 @@
+import { CAPABILITY_SURFACES } from "@/lib/capabilities/registry";
 import { Gavel, Timer } from "lucide-react";
 import { ArtImage } from "@/components/art-image";
 import { LockedFeature } from "@/components/locked-feature";
@@ -29,7 +30,7 @@ export default async function ListingsPage() {
       </p>
 
       <LockedFeature
-        variant="soon"
+        capabilities={CAPABILITY_SURFACES.nav["/listings"]}
         className="mt-6"
         description={
           t.listings.lockDesc

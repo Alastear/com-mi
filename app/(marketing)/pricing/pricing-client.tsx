@@ -40,7 +40,7 @@ export function PricingClient() {
       price: 0,
       cta: t.pricing.startFree,
       highlight: false,
-      bullets: Object.values(t.pricing.freeBullets).map((text) => ({ text, soon: false })),
+      bullets: Object.values(t.pricing.freeBullets).map((text) => ({ text, soon: false, capabilities: undefined })),
     },
     {
       id: "pro" as const,
@@ -49,7 +49,7 @@ export function PricingClient() {
       price: proPrice,
       cta: t.pricing.choosePlan,
       highlight: true,
-      bullets: PRO_BULLETS.map((b) => ({ text: t.pricing.proBullets[b.key], soon: b.soon === true })),
+      bullets: PRO_BULLETS.map((b) => ({ text: t.pricing.proBullets[b.key], soon: b.soon === true, capabilities: b.capabilities })),
     },
   ];
 
@@ -166,7 +166,7 @@ export function PricingClient() {
                     <Hourglass aria-hidden className="mt-0.5 size-4 shrink-0" />
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       {b.text}
-                      <ComingSoonBadge />
+                      <ComingSoonBadge capabilities={b.capabilities} />
                     </span>
                   </li>
                 ) : (
@@ -251,7 +251,7 @@ function ComparisonRows({
               )}
             >
               {t.compare.rows[row.key]}
-              {row.soon ? <ComingSoonBadge /> : null}
+              {row.soon ? <ComingSoonBadge capabilities={row.capabilities} /> : null}
             </span>
           </td>
           <td className={cn("border-t py-2.5 text-center", row.soon && "opacity-50")}>

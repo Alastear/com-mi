@@ -57,6 +57,8 @@ const th = {
     no: "ไม่มี",
     /** ป้ายของฟีเจอร์ที่ยังไม่มีโค้ดรองรับ — ใช้ร่วมกันทุกหน้า จะได้เป็นคำเดียวกันทั้งเว็บ */
     comingSoon: "เร็ว ๆ นี้",
+    featureBeta: "ทดลองเฉพาะกลุ่ม",
+    featurePaused: "หยุดให้บริการชั่วคราว",
   },
 
   /**
@@ -1411,6 +1413,7 @@ const th = {
     title: "ฟีเจอร์นี้อยู่ในแพ็กเกจ Pro",
     cta: "ดูรายละเอียด Pro",
     soonTitle: "กำลังพัฒนาอยู่",
+    previewTitle: "ตัวอย่างหน้าตาฟีเจอร์",
     soonNote: "ภาพข้างหลังเป็นตัวอย่างหน้าตา ยังไม่ใช่ข้อมูลจริงของคุณ",
   },
 
@@ -1472,6 +1475,8 @@ const en: Dictionary = {
     yes: "Yes",
     no: "No",
     comingSoon: "Coming soon",
+    featureBeta: "Limited beta",
+    featurePaused: "Temporarily paused",
   },
 
   admin: {
@@ -2735,6 +2740,7 @@ const en: Dictionary = {
     title: "This is a Pro feature",
     cta: "See what Pro includes",
     soonTitle: "Still being built",
+    previewTitle: "Feature preview",
     soonNote: "What you see behind this is a mock-up, not your real data",
   },
 

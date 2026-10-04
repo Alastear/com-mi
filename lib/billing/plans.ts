@@ -1,9 +1,12 @@
+import { CAPABILITY_SURFACES, capabilityPresentation, type CapabilityGroup } from "@/lib/capabilities/registry";
+
 /**
  * แหล่งความจริงเดียวของแพ็กเกจและลิมิต
  * ตรงกับ docs/03-plans-and-entitlements.md §4.1
  *
  * ตอนต่อของจริง: `can()` / `limitOf()` ต้องเป็น synchronous ล้วน
- * เพราะ plan อยู่ใน session cookie cache แล้ว (ไม่มี I/O)
+ * can() ตรวจแพ็กเกจเท่านั้น ไม่ใช่สิทธิ์ใช้งานฟีเจอร์ — ใช้ requireCapability()
+ * สำหรับฟีเจอร์ใหม่ ซึ่งอ่าน ownership/plan/suspension สดจาก DB
  */
 
 /**
@@ -257,12 +260,14 @@ export type ComparisonRow = {
   free: CompareValue;
   pro: CompareValue;
   /**
-   * `true` = **ยังไม่มีโค้ดรองรับ** — หน้า /pricing ติดป้าย "เร็ว ๆ นี้" ให้แถวนี้
+   * `true` = ยังไม่ live สำหรับทุกคน — derived จาก registry
+   * ป้ายอ่าน capabilities เพื่อแยก planned/internal, limited beta และ paused
    *
-   * ⚠️ ห้ามลบ `soon` ออกจนกว่าของจะใช้ได้จริงบนเว็บ ไม่ใช่แค่ "เริ่มทำแล้ว"
+   * ⚠️ ห้ามกำหนด soon แยกเอง ให้เปลี่ยน implementation/release ใน registry หลัง QA
    * แถวที่ไม่มีป้ายคือคำสัญญาว่าจ่ายแล้วได้ใช้ทันที
    */
   soon?: true;
+  capabilities?: CapabilityGroup;
 };
 
 export type ComparisonGroup = {
@@ -298,8 +303,8 @@ export const COMPARISON: ComparisonGroup[] = [
     rows: [
       { key: "shop", free: true, pro: true },
       { key: "portfolio", free: "30", pro: "300" },
-      { key: "theme", free: { t: "presets3" }, pro: true, soon: true },
-      { key: "badge", free: false, pro: true, soon: true },
+      { key: "theme", free: { t: "presets3" }, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.theme) },
+      { key: "badge", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.badge) },
     ],
   },
   {
@@ -307,9 +312,9 @@ export const COMPARISON: ComparisonGroup[] = [
     rows: [
       { key: "services", free: "5", pro: UNLIMITED_CELL },
       { key: "active", free: "5", pro: UNLIMITED_CELL },
-      { key: "form", free: { t: "presets3" }, pro: { t: "fullyCustom" }, soon: true },
+      { key: "form", free: { t: "presets3" }, pro: { t: "fullyCustom" }, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.form) },
       { key: "deposit", free: true, pro: true },
-      { key: "milestone", free: false, pro: true, soon: true },
+      { key: "milestone", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.milestone) },
     ],
   },
   {
@@ -317,17 +322,17 @@ export const COMPARISON: ComparisonGroup[] = [
     rows: [
       { key: "inapp", free: true, pro: true },
       { key: "email", free: true, pro: true },
-      { key: "push", free: false, pro: true, soon: true },
-      { key: "discord", free: false, pro: true, soon: true },
+      { key: "push", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.push) },
+      { key: "discord", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.discord) },
     ],
   },
   {
     key: "adopts",
     rows: [
-      { key: "listing", free: "3", pro: UNLIMITED_CELL, soon: true },
-      { key: "auction", free: false, pro: true, soon: true },
-      { key: "waitlist", free: false, pro: true, soon: true },
-      { key: "crm", free: false, pro: true, soon: true },
+      { key: "listing", free: "3", pro: UNLIMITED_CELL, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.listing) },
+      { key: "auction", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.auction) },
+      { key: "waitlist", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.waitlist) },
+      { key: "crm", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.crm) },
     ],
   },
   {
@@ -336,7 +341,7 @@ export const COMPARISON: ComparisonGroup[] = [
       { key: "storage", free: "2 GB", pro: "20 GB" },
       { key: "filesize", free: { t: "fileSizeNow" }, pro: { t: "fileSizeNow" } },
       { key: "retention", free: { t: "days90" }, pro: { t: "forever" } },
-      { key: "analytics", free: false, pro: true, soon: true },
+      { key: "analytics", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.analytics) },
     ],
   },
 ];
@@ -350,12 +355,12 @@ type ProBulletKey = keyof Dictionary["pricing"]["proBullets"];
  * ข้อที่ใช้ได้จริงของ Pro ตอนนี้คือเพดานที่สูงกว่า ซึ่งบังคับอยู่จริงในโค้ด
  * (active_orders, services, storage_bytes) จึงยกขึ้นมาไว้ก่อน
  */
-export const PRO_BULLETS: ReadonlyArray<{ key: ProBulletKey; soon?: true }> = [
+export const PRO_BULLETS: ReadonlyArray<{ key: ProBulletKey; soon?: true; capabilities?: CapabilityGroup }> = [
   { key: "orders" },
   { key: "services" },
   { key: "storage" },
-  { key: "notify", soon: true },
-  { key: "auctions", soon: true },
-  { key: "theme", soon: true },
-  { key: "analytics", soon: true },
+  { key: "notify", ...capabilityPresentation(CAPABILITY_SURFACES.proBullets.notify) },
+  { key: "auctions", ...capabilityPresentation(CAPABILITY_SURFACES.proBullets.auctions) },
+  { key: "theme", ...capabilityPresentation(CAPABILITY_SURFACES.proBullets.theme) },
+  { key: "analytics", ...capabilityPresentation(CAPABILITY_SURFACES.proBullets.analytics) },
 ];
