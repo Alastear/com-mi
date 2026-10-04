@@ -60,7 +60,7 @@ export default async function AnalyticsPage() {
                       style={{ height: `${(v / maxRevenue) * 100}%` }}
                     />
                   </div>
-                  <span className="text-[9px] text-muted-foreground">{months[i]}</span>
+                  <span className="text-xs text-muted-foreground">{months[i]}</span>
                 </div>
               ))}
             </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Receipt, Search, ShieldCheck, Wallet, Sparkles, Paintbrush } from "lucide-react";
-import { CommissionPreview } from "@/components/commission-preview";
+import { ArrowRight, Check, Clock, Receipt, Search, ShieldCheck, Wallet, Sparkles, Paintbrush, ArrowUpRight, Pencil, MessageCircle, Gift } from "lucide-react";
+import { ArtPlayground } from "@/components/art-playground";
+import { StudioArt, ART_STYLES, type ArtPalette } from "@/components/studio-art";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,9 +32,9 @@ export default async function HomePage() {
   const shops = await listPublicShops(6);
 
   const steps = [
-    { n: "1", title: t.home.how.s1Title, body: t.home.how.s1Body },
-    { n: "2", title: t.home.how.s2Title, body: t.home.how.s2Body },
-    { n: "3", title: t.home.how.s3Title, body: t.home.how.s3Body },
+    { n: "1", icon: Pencil, title: t.home.how.s1Title, body: t.home.how.s1Body },
+    { n: "2", icon: MessageCircle, title: t.home.how.s2Title, body: t.home.how.s2Body },
+    { n: "3", icon: Gift, title: t.home.how.s3Title, body: t.home.how.s3Body },
   ];
 
   const trust = [
@@ -57,25 +58,25 @@ export default async function HomePage() {
 
   return (
     <div>
-      <section className="hero-studio overflow-hidden border-b border-border/60">
-        <div className="mx-auto grid w-full max-w-6xl items-center gap-8 px-5 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.15fr_1fr] lg:gap-12 lg:py-20">
-          <div>
+      <section className="art-home-hero overflow-hidden border-b border-border/60">
+        <div className="mx-auto grid w-full max-w-7xl items-center gap-8 px-5 py-8 sm:gap-12 sm:px-8 sm:py-16 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:py-20">
+          <div className="min-w-0">
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary">
               <Sparkles className="size-3.5" aria-hidden />{t.redesign.eyebrow}
             </span>
-            <h1 className="mt-6 text-4xl leading-[1.25] font-semibold tracking-tight text-balance sm:text-5xl lg:text-[3.4rem]">
-              {t.redesign.heroTitle}<span className="mt-1 block text-primary">{t.redesign.heroAccent}</span>
+            <h1 className="mt-6 text-[2.25rem] leading-[1.3] font-semibold tracking-tight text-balance sm:text-5xl xl:text-[3.5rem]">
+              {t.redesign.heroTitle}<span className="art-headline-accent relative mt-1 block w-fit text-primary">{t.redesign.heroAccent}</span>
             </h1>
             <p className="mt-5 max-w-lg text-base leading-relaxed text-pretty text-muted-foreground sm:text-lg">{t.redesign.heroBody}</p>
-            <form action="/explore" role="search" className="mt-7 flex gap-2 rounded-2xl border bg-card p-2 shadow-sm">
+            <form action="/explore" role="search" className="mt-7 flex flex-col gap-2 rounded-2xl border border-foreground/15 bg-card p-2 shadow-lg shadow-primary/5 sm:flex-row">
               <div className="relative min-w-0 flex-1">
                 <Search aria-hidden className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input type="search" name="q" placeholder={t.home.searchPlaceholder} aria-label={t.home.searchPlaceholder} className="h-12 border-0 bg-transparent pl-9 shadow-none dark:bg-transparent" />
               </div>
               <Button type="submit" size="lg" className="rounded-xl">{t.home.searchCta}<ArrowRight className="hidden size-4 sm:block" aria-hidden /></Button>
             </form>
-            <p className="mt-5 text-xs font-medium text-muted-foreground">{t.redesign.popular}</p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
+            <p className="mt-5 hidden text-xs font-medium text-muted-foreground sm:block">{t.redesign.popular}</p>
+            <div className="mt-2.5 hidden flex-wrap gap-2 sm:flex">
               {categories.map((k) => (
                 <Button key={k} asChild variant="outline" size="sm" className="rounded-full bg-card/70">
                   <Link href={`/explore?kind=${k}`}>{t.serviceKind[k]}</Link>
@@ -83,12 +84,35 @@ export default async function HomePage() {
               ))}
             </div>
           </div>
-          <CommissionPreview t={t} />
+          <ArtPlayground copy={t.artHome} />
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-7xl px-5 pt-14 pb-4 sm:px-8 lg:pt-20" aria-labelledby="art-categories-title">
+        <div className="max-w-2xl">
+          <p className="text-sm font-medium text-primary">{t.artHome.galleryEyebrow}</p>
+          <h2 id="art-categories-title" className="mt-3 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{t.artHome.galleryTitle}</h2>
+          <p className="mt-3 text-base text-muted-foreground">{t.artHome.galleryBody}</p>
+        </div>
+        <div className="mt-8 grid gap-6 md:grid-cols-3">
+          {ART_STYLES.map((kind, index) => (
+            <Link key={kind} href={`/explore?kind=${kind}`} className="art-category group min-w-0 rounded-3xl border bg-card p-3 transition-transform motion-safe:hover:-translate-y-1">
+              <div className="overflow-hidden rounded-2xl">
+                <StudioArt kind={kind} palette={(["peach", "mint", "lilac"] as ArtPalette[])[index]} className="aspect-[21/13] w-full object-cover" />
+              </div>
+              <div className="px-3 pt-5 pb-3">
+                <p className="text-xs font-medium text-primary">{t.serviceKind[kind]}</p>
+                <h3 className="mt-2 text-xl font-semibold leading-relaxed">{t.artHome.categories[kind].title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{t.artHome.categories[kind].body}</p>
+                <span className="mt-5 flex items-center justify-between gap-3 text-sm font-medium">{t.artHome.galleryCta}<ArrowUpRight className="size-5 shrink-0 transition-transform motion-safe:group-hover:translate-x-1 motion-safe:group-hover:-translate-y-1" aria-hidden /></span>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
 
       {/* ── ครีเอเตอร์ที่เปิดรับงาน ────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 lg:py-20">
+      <section className="mx-auto w-full max-w-7xl px-5 py-14 sm:px-6 lg:py-20">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="text-2xl font-semibold tracking-tight">{t.home.featuredTitle}</h2><p className="mt-2 text-sm text-muted-foreground">{t.redesign.featuredNote}</p></div>
           {shops.length > 0 ? (
@@ -182,15 +206,16 @@ export default async function HomePage() {
       </section>
 
       {/* ── สั่งงานยังไง ──────────────────────────────────── */}
-      <section className="border-y bg-card/60">
-        <div className="mx-auto w-full max-w-6xl px-4 py-16">
+      <section className="art-journey border-y bg-card/60">
+        <div className="mx-auto w-full max-w-7xl px-5 sm:px-8 py-16">
           <p className="mb-2 text-xs font-medium text-primary">{t.redesign.howEyebrow}</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.howTitle}</h2>
-          <ol className="mt-8 grid gap-8 sm:grid-cols-3">
+          <ol className="relative mt-8 grid gap-6 md:grid-cols-3">
             {steps.map((s) => (
-              <li key={s.n} className="rounded-2xl border bg-background p-6">
-                <span className="tabular grid size-11 place-items-center rounded-xl bg-primary/12 text-sm font-semibold text-primary">
-                  {s.n}
-                </span>
+              <li key={s.n} className="relative rounded-2xl border bg-card p-6">
+                <div className="flex items-center justify-between">
+                  <span className="tabular text-3xl font-semibold text-primary/50">0{s.n}</span>
+                  <s.icon className="size-7 text-primary" aria-hidden />
+                </div>
                 <h3 className="mt-3 font-medium">{s.title}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
               </li>
@@ -200,7 +225,7 @@ export default async function HomePage() {
       </section>
 
       {/* ── ทำไมสั่งที่นี่ ────────────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-4 py-16">
+      <section className="mx-auto w-full max-w-7xl px-5 sm:px-8 py-16">
         <p className="mb-2 text-xs font-medium text-primary">{t.redesign.trustEyebrow}</p><h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t.home.trustTitle}</h2>
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
           {trust.map((x) => (
@@ -218,10 +243,12 @@ export default async function HomePage() {
       </section>
 
       {/* ── ทางเข้าฝั่งครีเอเตอร์ ─────────────────────────── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20">
-        <Card className="flex-row flex-wrap items-center gap-4 border-primary/20 bg-primary/5 p-6 sm:p-9">
-          <div className="min-w-0 flex-1">
-            <p className="flex flex-wrap items-center gap-2 font-medium">
+      <section className="mx-auto w-full max-w-7xl px-5 sm:px-8 pb-20">
+        <Card className="art-creator-banner relative flex-row flex-wrap items-center gap-6 overflow-hidden border-primary/20 p-6 sm:p-10">
+          <span className="art-creator-doodle" aria-hidden>✳</span>
+          <div className="relative min-w-0 basis-full lg:flex-1">
+            <p className="mb-3 text-sm font-medium text-primary">{t.artHome.creatorEyebrow}</p>
+            <p className="flex flex-wrap items-center gap-3 text-2xl font-semibold">
               {t.home.forCreatorsTitle}
               <Badge variant="secondary" className="font-normal">
                 <Check className="size-3" />

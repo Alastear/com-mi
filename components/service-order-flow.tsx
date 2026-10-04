@@ -258,7 +258,7 @@ export function ServiceOrderFlow({
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-start">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
       {/* ── ซ้าย: ขั้นตอน ─────────────────────────────── */}
       <div>
         {/* ตัวบอกขั้นตอน */}
@@ -271,7 +271,7 @@ export function ServiceOrderFlow({
                 disabled={i > step}
                 aria-current={i === step ? "step" : undefined}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-2.5 py-1 transition-colors",
+                  "flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full px-2.5 py-2 transition-colors",
                   i === step && "bg-primary/12 text-primary",
                   i < step && "text-muted-foreground hover:text-foreground",
                   i > step && "text-muted-foreground/50",
@@ -279,7 +279,7 @@ export function ServiceOrderFlow({
               >
                 <span
                   className={cn(
-                    "tabular grid size-5 place-items-center rounded-full text-[11px] font-semibold",
+                    "tabular grid size-5 place-items-center rounded-full text-xs font-semibold",
                     i === step
                       ? "bg-primary text-primary-foreground"
                       : i < step
@@ -463,7 +463,7 @@ export function ServiceOrderFlow({
                 ยอดที่ต้องจ่ายต้องอยู่เหนือปุ่มส่งเสมอ — บนมือถือการ์ดสรุปราคาไปอยู่ใต้ปุ่มส่ง
                 ลูกค้าจึงติ๊กยอมรับแล้วกดส่งโดยไม่เคยเห็นมัดจำ จอใหญ่ไม่ต้องซ้ำ การ์ดด้านข้างติดจออยู่แล้ว
               */}
-              <Card className="gap-3 p-4 lg:hidden">
+              <Card className="gap-3 p-4 xl:hidden">
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm font-medium">{t.service.total}</span>
                   <span className="tabular text-lg font-semibold">{money(total)}</span>
@@ -475,7 +475,7 @@ export function ServiceOrderFlow({
                 <p className="text-sm font-medium">{t.order.brief}</p>
                 <dl className="space-y-2 text-sm">
                   {BRIEF_FIELDS.map((f) => (
-                    <div key={f.key} className="grid grid-cols-[140px_1fr] gap-2">
+                    <div key={f.key} className="grid grid-cols-1 sm:grid-cols-[140px_minmax(0,1fr)] gap-2">
                       <dt className="text-muted-foreground">{t.brief[f.key]}</dt>
                       <dd>{brief[f.key]?.trim() || "—"}</dd>
                     </div>
@@ -560,7 +560,7 @@ export function ServiceOrderFlow({
       </div>
 
       {/* ── ขวา: สรุปราคา (sticky) ────────────────────── */}
-      <Card className="gap-0 p-5 lg:sticky lg:top-20">
+      <Card className="gap-0 p-5 xl:sticky xl:top-24">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium">{service.title}</p>
           <Badge variant={service.mode === "instant" ? "default" : "secondary"}>

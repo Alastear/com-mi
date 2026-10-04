@@ -44,7 +44,7 @@ export function CommissionPreview({ t }: { t: Dictionary }) {
               <span className={i === 2 ? "grid size-8 place-items-center rounded-full bg-primary text-primary-foreground" : "grid size-8 place-items-center rounded-full bg-primary/10 text-primary"}>
                 {i === 2 ? <Check className="size-4" aria-hidden /> : <span className="text-xs font-semibold">0{i + 1}</span>}
               </span>
-              <span className="text-[11px] text-muted-foreground">{step}</span>
+              <span className="text-xs text-muted-foreground">{step}</span>
             </div>
           ))}
         </div>

@@ -41,7 +41,7 @@ export default async function ClientsPage() {
                   <p className="text-sm font-medium">{c.name}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {c.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-[10px] font-normal">
+                      <Badge key={tag} variant="secondary" className="text-xs font-normal">
                         {tag}
                       </Badge>
                     ))}

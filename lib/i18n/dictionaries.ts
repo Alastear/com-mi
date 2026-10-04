@@ -283,6 +283,28 @@ const th = {
    * หน้าแรกสำหรับ "คนที่มาหาคนวาดงาน" — คนละกลุ่มกับ landing.* ที่พูดกับครีเอเตอร์
    * ข้อความชุดนี้ห้ามพูดเรื่องเปิดร้านหรือราคาแพ็กเกจ นั่นเป็นเรื่องของหน้า /for-creators
    */
+  artHome: {
+    playTitle: "ลองแต่งไอเดียของคุณ",
+    playBadge: "ลองเล่นได้!",
+    chooseStyle: "เลือกสไตล์ภาพตัวอย่าง",
+    choosePalette: "เลือกชุดสีภาพตัวอย่าง",
+    styles: { illustration: "ภาพบุคคล", chibi: "ชิบิ", emote: "อีโมต" },
+    palettes: { lilac: "ม่วงละมุน", peach: "พีชสดใส", mint: "มิ้นต์สบายตา" },
+    tryColors: "จิ้มสี แล้วลองเปลี่ยนอารมณ์",
+    findStyle: "หาคนวาดสไตล์นี้",
+    artNote: "ภาพประกอบสำหรับลองเล่น ไม่ใช่ผลงานจากร้านค้า",
+    galleryEyebrow: "ไอเดียของคุณหน้าตาเป็นแบบไหน?",
+    galleryTitle: "เลือกความชอบ แล้วเจอสไตล์ที่ใช่",
+    galleryBody: "จากตัวละครในจินตนาการ ไปจนถึงอีโมตที่เป็นตัวคุณ เริ่มจากงานที่อยากได้เลย",
+    galleryCta: "สำรวจประเภทงาน",
+    categories: {
+      illustration: { title: "ตัวคุณ ในอีกลายเส้น", body: "ภาพบุคคล ตัวละคร และโลกในจินตนาการ" },
+      chibi: { title: "ตัวจิ๋ว ความน่ารักเต็มร้อย", body: "ชิบิและมาสคอตที่มีบุคลิกเฉพาะตัว" },
+      emote: { title: "ทุกอารมณ์ เป็นตัวคุณ", body: "อีโมตและสติกเกอร์สำหรับคอมมูนิตี้ของคุณ" },
+    },
+    creatorEyebrow: "เว้นที่ไว้ให้ความคิดสร้างสรรค์ของคุณ",
+  },
+
   redesign: {
     eyebrow: "พื้นที่เล็ก ๆ สำหรับไอเดียที่ยิ่งใหญ่",
     heroTitle: "ทุกไอเดียของคุณ",
@@ -1653,6 +1675,28 @@ const en: Dictionary = {
       publish: "Publish your shop",
       publishBody: "Until you do, only you can see it",
     },
+  },
+
+  artHome: {
+    playTitle: "Make it your kind of art",
+    playBadge: "Try me!",
+    chooseStyle: "Choose an illustration style",
+    choosePalette: "Choose an illustration palette",
+    styles: { illustration: "Portrait", chibi: "Chibi", emote: "Emotes" },
+    palettes: { lilac: "Soft lilac", peach: "Peach pop", mint: "Fresh mint" },
+    tryColors: "Pick a color. Change the mood.",
+    findStyle: "Find this kind of artist",
+    artNote: "Playful sample illustrations, not artwork from a shop.",
+    galleryEyebrow: "What does your next idea look like?",
+    galleryTitle: "Find a little something that feels like you",
+    galleryBody: "A character from your imagination. An emote with your energy. Start with the art you want to make.",
+    galleryCta: "Explore this kind of art",
+    categories: {
+      illustration: { title: "You, in a whole new style", body: "Portraits, characters, and imaginary worlds." },
+      chibi: { title: "Small character. Big personality.", body: "Little chibis and mascots with a spark of their own." },
+      emote: { title: "Every mood, made yours", body: "Emotes and stickers for your community." },
+    },
+    creatorEyebrow: "A little room for your creative world",
   },
 
   redesign: {

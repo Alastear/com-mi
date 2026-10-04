@@ -73,10 +73,10 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur-xl">
-      <div className="mx-auto flex h-18 w-full max-w-6xl items-center gap-3 px-5 sm:px-6">
+      <div className="mx-auto flex h-18 w-full max-w-7xl items-center gap-3 px-5 sm:px-8">
         <Logo />
 
-        <nav className="ml-4 hidden items-center gap-1 md:flex">
+        <nav className="ml-4 hidden items-center gap-1 lg:flex">
           {links.map((l) => (
             <Button key={l.href} asChild variant="ghost" size="sm">
               <Link href={l.href} aria-current={pathname === l.href ? "page" : undefined} className={pathname === l.href ? "bg-primary/8 text-primary" : undefined}>{l.label}</Link>
@@ -128,7 +128,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
 
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label={t.redesign.menu}>
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label={t.redesign.menu}>
                 <Menu className="size-4" />
               </Button>
             </SheetTrigger>

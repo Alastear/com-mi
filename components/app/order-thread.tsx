@@ -124,7 +124,7 @@ export function OrderThread({
               <div className={cn("min-w-0 max-w-[80%]", mine && "text-right")}>
                 <div
                   className={cn(
-                    "inline-block rounded-2xl px-3.5 py-2 text-left text-sm whitespace-pre-wrap",
+                    "inline-block rounded-2xl px-3.5 py-2 text-left text-sm whitespace-pre-wrap [overflow-wrap:anywhere]",
                     mine ? "bg-primary text-primary-foreground" : "bg-muted",
                     // ข้อความที่ยังไม่ยืนยันจากเซิร์ฟเวอร์ — จางไว้ให้รู้ว่ากำลังส่ง
                     m.id.startsWith("pending-") && "opacity-60",
@@ -132,7 +132,7 @@ export function OrderThread({
                 >
                   {m.body}
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground" suppressHydrationWarning>
+                <p className="mt-1 text-xs text-muted-foreground" suppressHydrationWarning>
                   {formatRelative(m.createdAt, locale)}
                 </p>
               </div>

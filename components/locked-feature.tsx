@@ -98,7 +98,7 @@ export function ComingSoonBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-muted-foreground",
+        "inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-muted-foreground/40 px-1.5 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground",
         className,
       )}
     >
@@ -114,7 +114,7 @@ export function ProBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary uppercase",
+        "inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-primary uppercase",
         className,
       )}
     >

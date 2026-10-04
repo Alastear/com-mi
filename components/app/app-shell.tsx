@@ -79,7 +79,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="flex flex-col gap-5 p-3">
-      {groups.map((group) => <div key={group.title}><p className="mb-2 px-3 text-[11px] font-medium tracking-wide text-muted-foreground">{group.title}</p>
+      {groups.map((group) => <div key={group.title}><p className="mb-2 px-3 text-xs font-medium tracking-wide text-muted-foreground">{group.title}</p>
       {group.items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -96,7 +96,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             )}
           >
             <item.icon className="size-4 shrink-0" />
-            <span className="flex-1 truncate">{item.label}</span>
+            <span className="min-w-0 flex-1">{item.label}</span>
             {"soon" in item && item.soon ? <ComingSoonBadge /> : null}
           </Link>
         );
@@ -196,13 +196,13 @@ function NotificationBell() {
         <Button variant="ghost" size="icon" className="relative" aria-label={t.notification.title}>
           <Bell className="size-4" />
           {unread > 0 ? (
-            <span className="tabular absolute -top-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+            <span className="tabular absolute -top-0.5 -right-0.5 grid min-w-5 h-5 px-1 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
               {unread > 9 ? "9+" : unread}
             </span>
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
+      <DropdownMenuContent align="end" className="w-80 max-w-[calc(100vw-2rem)]">
         <DropdownMenuLabel className="flex items-center justify-between gap-2">
           {t.notification.title}
           {unread > 0 ? (
@@ -238,7 +238,7 @@ function NotificationBell() {
                     ) : null}
                     <span className={cn("truncate text-sm", !n.read && "font-medium")}>{text}</span>
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {formatRelative(n.createdAt, locale)}
                   </span>
                 </Link>
@@ -300,7 +300,7 @@ export function AppShell({
   return (
     <div className="flex min-h-full flex-1">
       {/* Sidebar — desktop */}
-      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r bg-sidebar lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-72 shrink-0 flex-col overflow-y-auto border-r bg-sidebar lg:flex">
         <div className="flex h-18 shrink-0 items-center px-6">
           <Logo href="/dashboard" />
         </div>
@@ -340,7 +340,7 @@ export function AppShell({
                 <Menu className="size-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="w-72 data-[side=left]:w-72 max-w-[calc(100vw-2rem)] p-0">
               <SheetTitle className="flex h-18 shrink-0 items-center px-6">
                 <Logo href="/dashboard" />
               </SheetTitle>

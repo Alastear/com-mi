@@ -97,7 +97,7 @@ export function ArtMedia({
             </span>
           </button>
           {durationSeconds ? (
-            <span className="tabular pointer-events-none absolute right-2 bottom-2 rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white">
+            <span className="tabular pointer-events-none absolute right-2 bottom-2 rounded bg-black/65 px-1.5 py-0.5 text-xs text-white">
               {formatDuration(durationSeconds)}
             </span>
           ) : null}
@@ -107,7 +107,7 @@ export function ArtMedia({
               href={embedWatchUrl(embed)}
               target="_blank"
               rel="noreferrer noopener"
-              className="absolute top-2 right-2 rounded bg-black/65 px-1.5 py-0.5 text-[11px] text-white opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+              className="absolute top-2 right-2 rounded bg-black/65 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
             >
               {embed.provider === "youtube" ? "YouTube" : "Vimeo"}
             </a>

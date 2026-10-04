@@ -9,12 +9,12 @@ export function SiteFooter() {
 
   return (
     <footer className="mt-auto border-t">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-center">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-8 lg:flex-row lg:items-center">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <LogoMark className="size-5" />
           <span>{t.brand.tagline}</span>
         </div>
-        <nav className="flex flex-wrap gap-4 text-sm text-muted-foreground sm:ml-auto">
+        <nav className="flex flex-wrap gap-4 text-sm text-muted-foreground lg:ml-auto">
           <Link href="/pricing" className="hover:text-foreground">
             {t.nav.pricing}
           </Link>

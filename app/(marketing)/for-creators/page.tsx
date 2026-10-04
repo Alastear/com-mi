@@ -153,7 +153,7 @@ export default async function LandingPage() {
             ไม่งั้นชื่อร้าน ราคา และจำนวนช่องอ่านเหมือนร้านจริงบนแพลตฟอร์ม
           */}
           <div className="relative">
-            <p className="absolute top-3 left-3 z-10 rounded-full border bg-background/85 px-2.5 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur">
+            <p className="absolute top-3 left-3 z-10 rounded-full border bg-background/85 px-2.5 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
               {t.landing.exampleLabel}
             </p>
             <Card className="overflow-hidden p-0 shadow-2xl">
@@ -179,8 +179,8 @@ export default async function LandingPage() {
                   {services.slice(0, 3).map((s) => (
                     <div key={s.id} className="rounded-lg border bg-background/40 p-2">
                       <ArtImage seed={s.coverSeed} alt={s.title} ratio={1.1} className="mb-2" />
-                      <p className="truncate text-[11px] font-medium">{s.title}</p>
-                      <p className="tabular text-[11px] text-muted-foreground">
+                      <p className="truncate text-xs font-medium">{s.title}</p>
+                      <p className="tabular text-xs text-muted-foreground">
                         {formatMoney(s.basePriceCents, creator.currency, locale)}
                       </p>
                     </div>

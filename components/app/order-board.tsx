@@ -140,7 +140,7 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
               onClick={() => setView(v.id)}
               aria-pressed={view === v.id}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
+                "inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                 view === v.id
                   ? "bg-secondary font-medium"
                   : "text-muted-foreground hover:text-foreground",
@@ -156,7 +156,7 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
       </div>
 
       {view === "board" ? (
-        <div className="no-scrollbar mt-5 flex gap-3 overflow-x-auto pb-4">
+        <div role="region" aria-label={t.order.boardView} tabIndex={0} className="mt-5 flex gap-3 overflow-x-auto rounded-xl pb-4">
           {columns.map((col) => (
             <div
               key={col.status}
@@ -186,7 +186,7 @@ export function OrderBoard({ orders }: { orders: BoardOrder[] }) {
             >
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <span className="text-sm font-medium">{t.orderStatus[col.status]}</span>
-                <span className="tabular grid size-5 place-items-center rounded-full bg-muted text-[11px] text-muted-foreground">
+                <span className="tabular grid size-5 place-items-center rounded-full bg-muted text-xs text-muted-foreground">
                   {col.items.length}
                 </span>
               </div>
@@ -322,7 +322,7 @@ function OrderCard({
         <div className="flex gap-2.5">
           <ArtImage seed={order.id} alt="" ratio={1} className="size-11 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="tabular font-mono text-[11px] text-muted-foreground">#{order.code}</p>
+            <p className="tabular font-mono text-xs text-muted-foreground">#{order.code}</p>
             <p className="truncate text-sm font-medium">{order.title}</p>
             <p className="truncate text-xs text-muted-foreground">{order.clientName}</p>
           </div>
@@ -375,7 +375,7 @@ function OrderCard({
                 }}
               />
             </div>
-            <span className="tabular text-[10px] text-muted-foreground">
+            <span className="tabular text-xs text-muted-foreground">
               {order.amountPaidCents >= order.totalCents
                 ? t.order.fullyPaid
                 : formatMoney(order.amountPaidCents, order.currency, locale)}

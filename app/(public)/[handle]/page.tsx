@@ -210,7 +210,7 @@ export default async function CreatorPage({ params }: Props) {
                           <h3 className="leading-snug font-medium">{s.title}</h3>
                           <Badge
                             variant={s.mode === "instant" ? "default" : "secondary"}
-                            className="shrink-0 text-[10px]"
+                            className="shrink-0 text-xs"
                           >
                             {s.mode === "instant"
                               ? t.service.instantOrder
@@ -226,7 +226,7 @@ export default async function CreatorPage({ params }: Props) {
 
                         <div className="mt-3 flex items-end justify-between gap-2">
                           <div>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               {t.service.startingAt}
                             </p>
                             <p className="tabular text-lg font-semibold">
@@ -339,7 +339,7 @@ export default async function CreatorPage({ params }: Props) {
                   <ol className="space-y-2.5 text-sm">
                     {shop.tos.map((line, i) => (
                       <li key={line} className="flex gap-2.5">
-                        <span className="tabular mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-muted text-[11px] font-medium">
+                        <span className="tabular mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-muted text-xs font-medium">
                           {i + 1}
                         </span>
                         <span className="leading-relaxed">{line}</span>

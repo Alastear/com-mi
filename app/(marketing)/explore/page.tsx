@@ -48,7 +48,7 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
       </p>
 
       {/* ฟอร์ม GET ธรรมดา — ค้นได้แม้ JavaScript ยังไม่โหลด และ Enter ทำงานเอง */}
-      <form role="search" className="mt-6 flex max-w-xl gap-2 rounded-2xl border bg-card p-2 shadow-sm">
+      <form role="search" className="mt-6 flex max-w-xl flex-col gap-2 sm:flex-row rounded-2xl border bg-card p-2 shadow-sm">
         {kind ? <input type="hidden" name="kind" value={kind} /> : null}
         <Input
           type="search"
@@ -89,7 +89,7 @@ export default async function ExplorePage(props: PageProps<"/explore">) {
       </div>
 
       {shops.length === 0 ? (
-        <Card className="mt-10 items-center gap-3 p-10 text-center">
+        <Card className="mt-10 items-center gap-3 p-5 sm:p-10 text-center">
           {/* หาไม่เจอกับยังไม่มีใครเปิดร้าน เป็นคนละเรื่อง ต้องบอกให้ตรง */}
           <p className="font-medium">{hasFilter ? t.explore.noMatch : t.explore.empty}</p>
           <p className="max-w-md text-sm text-muted-foreground">

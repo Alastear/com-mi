@@ -79,7 +79,7 @@ export function SetupChecklist({
               >
                 <span
                   className={cn(
-                    "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-[11px]",
+                    "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border text-xs",
                     step.done
                       ? "border-success bg-success text-success-foreground"
                       : "border-muted-foreground/40 text-muted-foreground",
@@ -94,7 +94,7 @@ export function SetupChecklist({
                       {t.setup.steps[step.id]}
                     </span>
                     {!step.required && !step.done ? (
-                      <Badge variant="secondary" className="text-[10px] font-normal">
+                      <Badge variant="secondary" className="text-xs font-normal">
                         {t.setup.optional}
                       </Badge>
                     ) : null}

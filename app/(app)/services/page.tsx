@@ -72,12 +72,12 @@ export default async function ServicesPage() {
                     <p className="font-medium">{s.title}</p>
                     <Badge
                       variant={s.mode === "instant" ? "default" : "secondary"}
-                      className="text-[10px]"
+                      className="text-xs"
                     >
                       {s.mode === "instant" ? t.service.instantOrder : t.service.customProposal}
                     </Badge>
                     {!s.isActive && (
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {t.service.inactive}
                       </Badge>
                     )}

@@ -278,7 +278,7 @@ export default async function DashboardPage() {
                         <span className="block truncate text-xs text-muted-foreground">
                           {o.client?.name ?? "—"} · {t.orderStatus[o.status as OrderStatus]}
                         </span>
-                        <span className="block text-[11px] text-muted-foreground">
+                        <span className="block text-xs text-muted-foreground">
                           {formatRelative(o.createdAt, locale)}
                         </span>
                       </span>
