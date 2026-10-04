@@ -1,3 +1,5 @@
+> สถานะ 4 ตุลาคม 2026: โค้ดแพ็กเกจปัจจุบันอยู่ใน [lib/billing/plans.ts](../lib/billing/plans.ts) ส่วนฟีเจอร์ที่ยังไม่สร้างใช้ [COMING-SOON-PLAN.md](COMING-SOON-PLAN.md) เอกสารด้านล่างมี design เดิมและตัวอย่างที่ยังไม่ใช่ implementation โดยเฉพาะ trial, billing และ entitlements
+
 # 03 — Plans & Entitlements
 
 ---

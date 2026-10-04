@@ -1,3 +1,5 @@
+> แผนฟีเจอร์ที่ยังไม่เปิดใช้ อัปเดต 4 ตุลาคม 2026: [COMING-SOON-PLAN.md](COMING-SOON-PLAN.md) มี inventory จากโค้ดจริงและลำดับพัฒนาที่ใช้แทน Phase 2–3 ด้านล่างในส่วนที่ซ้อนกัน
+
 > สถานะอัปเดต 3 ตุลาคม 2026: ใช้ [PLAN.md](../PLAN.md) และ [SYSTEM-AUDIT.md](SYSTEM-AUDIT.md) สำหรับแผน Beta/ขายปัจจุบัน เอกสารด้านล่างเก็บประวัติการวางแผนเดิมและอาจไม่ตรงกับ implementation ล่าสุด
 
 # 05 — Roadmap & Build Order
