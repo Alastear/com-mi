@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { OrderStatusPill } from "@/components/status-pill";
 import { OrderActions } from "@/components/app/order-actions";
 import { orderVersion } from "@/lib/orders/version";
+import { WorkPreviewPanel } from "@/components/app/work-preview-panel";
 import { OrderThread } from "@/components/app/order-thread";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -117,6 +118,7 @@ export default async function OrderPage({ params }: Props) {
             <CreatorReviewCard code={order.code} review={toOrderReviewView(reviewRow, locale)} />
           ) : null}
 
+          <WorkPreviewPanel code={order.code} viewer="creator" status={order.status as OrderStatus} />
           <OrderThread
             code={order.code}
             entries={toThreadEntries(order.messages)}
@@ -275,6 +277,7 @@ export default async function OrderPage({ params }: Props) {
                 <>
                   <Separator />
                   <PaymentPanel
+              finalApproved={Boolean(order.approvedPreviewId) || ["accepted", "delivered", "completed"].includes(order.status)}
                     code={order.code}
                     viewer="creator"
                     totalCents={order.totalCents}
@@ -282,7 +285,7 @@ export default async function OrderPage({ params }: Props) {
                     depositCents={order.depositCents}
                     currency={order.currency}
                     payments={payments}
-                    hasPayout={Boolean(order.page.promptpayId)}
+                    hasPayout={Boolean(order.page.promptpayId || order.page.bankAccountNumber || order.page.trueWalletPhone)}
                     closed
                   />
                 </>
@@ -292,6 +295,7 @@ export default async function OrderPage({ params }: Props) {
           <Card className="gap-3 p-5">
             <p className="text-sm font-medium">{t.payment.title}</p>
             <PaymentPanel
+              finalApproved={Boolean(order.approvedPreviewId) || ["accepted", "delivered", "completed"].includes(order.status)}
               code={order.code}
               viewer="creator"
               totalCents={order.totalCents}
@@ -300,7 +304,7 @@ export default async function OrderPage({ params }: Props) {
               currency={order.currency}
               payments={payments}
               // ครีเอเตอร์ไม่ต้องเห็น QR ของตัวเอง แต่ต้องรู้ว่าตั้งค่ารับเงินแล้วหรือยัง
-              hasPayout={Boolean(order.page.promptpayId)}
+              hasPayout={Boolean(order.page.promptpayId || order.page.bankAccountNumber || order.page.trueWalletPhone)}
             />
           </Card>
           )}

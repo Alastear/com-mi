@@ -67,12 +67,14 @@ export async function uploadDelivery(
   code: string,
   file: File,
   onProgress?: (fraction: number) => void,
+  kind: "final" | "wip" = "final",
 ): Promise<DeliveryUpload> {
   // ไฟล์ 0 ไบต์ประกอบเป็น multipart ไม่ได้ (ต้องมีอย่างน้อยหนึ่งชิ้น) — บอกให้ตรงเรื่องแทน "ลองใหม่"
   if (file.size === 0) throw new Error("empty_file");
 
   const requestedAt = Date.now();
   const start = await startDeliveryUpload({
+    kind,
     code,
     // เซิร์ฟเวอร์รับชื่อไม่เกิน 200 ตัว — ตัดเองโดยเก็บนามสกุลไว้ ลูกค้าจะได้เปิดไฟล์ได้
     filename: clampFilename(file.name),

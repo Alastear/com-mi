@@ -100,7 +100,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
        * ไฟล์ส่งมอบสะสมตามจำนวนออเดอร์ ไม่ใช่ตามพื้นที่ที่ตั้งไว้
        */
       portfolio_items: 30,
-      storage_bytes: 2 * GB,
+      storage_bytes: 5 * GB,
       file_size_bytes: 50 * MB,
       active_listings: 3,
       delivery_retention_days: 90,
@@ -131,7 +131,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       active_orders: UNLIMITED,
       services: UNLIMITED,
       portfolio_items: 300,
-      storage_bytes: 20 * GB,
+      storage_bytes: 50 * GB,
       file_size_bytes: 200 * MB,
       active_listings: UNLIMITED,
       delivery_retention_days: UNLIMITED,
@@ -146,7 +146,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       active_orders: UNLIMITED,
       services: UNLIMITED,
       portfolio_items: UNLIMITED,
-      storage_bytes: 100 * GB,
+      storage_bytes: 200 * GB,
       file_size_bytes: 500 * MB,
       active_listings: UNLIMITED,
       delivery_retention_days: UNLIMITED,
@@ -338,7 +338,7 @@ export const COMPARISON: ComparisonGroup[] = [
   {
     key: "other",
     rows: [
-      { key: "storage", free: "2 GB", pro: "20 GB" },
+      { key: "storage", free: "5 GB", pro: "50 GB" },
       { key: "filesize", free: { t: "fileSizeNow" }, pro: { t: "fileSizeNow" } },
       { key: "retention", free: { t: "days90" }, pro: { t: "forever" } },
       { key: "analytics", free: false, pro: true, ...capabilityPresentation(CAPABILITY_SURFACES.pricing.analytics) },

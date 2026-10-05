@@ -29,6 +29,7 @@ export async function getOrderForClient(code: string, clientUserId: string) {
     columns: {
       id: true,
       code: true,
+      approvedPreviewId: true,
       status: true,
       currency: true,
       subtotalCents: true,
@@ -64,6 +65,11 @@ export async function getOrderForClient(code: string, clientUserId: string) {
           promptpayType: true,
           promptpayId: true,
           promptpayName: true,
+          bankName: true,
+          bankAccountNumber: true,
+          bankAccountName: true,
+          trueWalletPhone: true,
+          trueWalletName: true,
         },
         with: { user: { columns: { handle: true, name: true, image: true } } },
       },
@@ -182,7 +188,7 @@ export async function getOrderForCreator(code: string, creatorUserId: string) {
         answers: { orderBy: [asc(schema.orderAnswer.sortOrder)] },
         service: { columns: { slug: true, title: true, deliveryDays: true } },
         client: { columns: { name: true, image: true, email: true } },
-        page: { columns: { promptpayId: true } },
+      page: { columns: { promptpayId: true, bankAccountNumber: true, trueWalletPhone: true } },
         // เธรดกับ timeline อยู่ตารางเดียวกัน เรียงตามเวลาแล้วได้ทั้งสองอย่างพร้อมกัน
         messages: {
           // ตัวตัดสินรองเมื่อเวลาเท่ากัน — เหตุผลอยู่ที่ query ฝั่งลูกค้าข้างบน

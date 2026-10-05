@@ -49,6 +49,8 @@ function errorText(t: Dictionary, error: Failure): string {
   switch (error) {
     case "pending_exists":
       return t.payment.errPending;
+    case "approval_required":
+      return t.payment.awaitingWorkApproval;
     case "over_outstanding":
       return t.payment.errOverOutstanding;
     case "over_total":
@@ -77,6 +79,7 @@ function errorText(t: Dictionary, error: Failure): string {
 const REFRESH_ON: ReadonlySet<Failure> = new Set<Failure>([
   "stale",
   "pending_exists",
+  "approval_required",
   "over_outstanding",
   "over_total",
   "order_closed",
@@ -138,6 +141,8 @@ export function PaymentPanel({
   payments,
   qr,
   hasPayout,
+  channels = [],
+  finalApproved = false,
   closed = false,
 }: {
   code: string;
@@ -151,6 +156,8 @@ export function PaymentPanel({
   qr?: React.ReactNode;
   /** ครีเอเตอร์ตั้งค่าหมายเลขรับเงินแล้วหรือยัง — ถ้ายัง ลูกค้าโอนไม่ได้เลย */
   hasPayout: boolean;
+  channels?: Array<{ method: "promptpay" | "bank_transfer" | "true_wallet"; label: string; details: React.ReactNode }>;
+  finalApproved?: boolean;
   /** ออเดอร์จบแล้ว — ประวัติอ่านอย่างเดียว ไม่มีปุ่มขยับเงิน */
   closed?: boolean;
 }) {
@@ -233,6 +240,8 @@ export function PaymentPanel({
               {t.payment.reportedPendingHint}
             </p>
           </div>
+        ) : !dueIsDeposit && !finalApproved ? (
+          <p className="rounded-lg border bg-muted/30 p-3 text-sm">{locale === "th" ? "กรุณาตรวจและยืนยันภาพตัวอย่างงานก่อนแจ้งชำระยอดสุดท้าย" : "Review and approve the preview before reporting the final payment."}</p>
         ) : hasPayout ? (
           <ReportForm
             code={code}
@@ -240,6 +249,7 @@ export function PaymentPanel({
             dueNow={dueNow}
             outstanding={outstanding}
             money={money}
+            channels={channels}
           />
         ) : (
           // ครีเอเตอร์ยังไม่ตั้งค่ารับเงิน — บอกลูกค้าตรง ๆ ดีกว่าโชว์ปุ่มที่กดแล้วงง
@@ -262,6 +272,7 @@ export function PaymentPanel({
                 viewer={viewer}
                 // ยืนยันแถวนี้แล้วเกินราคางานไหม — server ปฏิเสธอยู่แล้ว แต่บอกก่อนกดดีกว่า
                 fits={fitsUnderTotal(p.amountCents, paidCents, totalCents)}
+                awaitingApproval={!finalApproved && p.amountCents + paidCents >= totalCents}
                 money={money}
               />
             ))}
@@ -271,7 +282,7 @@ export function PaymentPanel({
         <p className="text-sm text-muted-foreground">{t.payment.empty}</p>
       ) : null}
 
-      {viewer === "creator" && outstanding > 0 ? (
+      {viewer === "creator" && outstanding > 0 && dueIsDeposit ? (
         pendingReport ? (
           /*
             ระหว่างที่ลูกค้ามีรายการรอตอบ ไม่มีฟอร์มบันทึกเอง — server ก็ไม่รับ (`pending_exists`)
@@ -282,8 +293,14 @@ export function PaymentPanel({
             {t.payment.recordBlockedPending}
           </p>
         ) : (
-          <RecordForm code={code} dueNow={dueNow} outstanding={outstanding} money={money} />
+          <RecordForm code={code} dueNow={dueNow} outstanding={Math.min(outstanding, depositCents - paidCents)} money={money} />
         )
+      ) : null}
+
+      {viewer === "creator" && outstanding > 0 && !dueIsDeposit && !pendingReport ? (
+        <p className="rounded-lg border bg-muted/30 p-3 text-sm">
+          {locale === "th" ? "รอลูกค้ากดแจ้งชำระยอดสุดท้ายก่อน จึงจะยืนยันรับเงินได้ ตรวจยอดเงินเข้าบัญชีจริงก่อนยืนยัน" : "Wait for the client's final payment report before confirming receipt. Check your account balance before confirming."}
+        </p>
       ) : null}
 
       {viewer === "creator" && !hasPayout ? (
@@ -337,17 +354,21 @@ function ReportForm({
   dueNow,
   outstanding,
   money,
+  channels,
 }: {
   code: string;
   qr: React.ReactNode;
   dueNow: number;
   outstanding: number;
   money: (c: number) => string;
+  channels: Array<{ method: "promptpay" | "bank_transfer" | "true_wallet"; label: string; details: React.ReactNode }>;
 }) {
   const { t } = useLocale();
   const [pending, run] = usePaymentAction();
   const amount = useBahtField(dueNow, outstanding, money);
   const requestId = useRequestId();
+  const [method, setMethod] = useState<"promptpay" | "bank_transfer" | "true_wallet">(channels[0]?.method ?? "promptpay");
+  const selected = channels.find(c => c.method === method) ?? channels[0];
 
   function report() {
     if (amount.cents === null || amount.error) return;
@@ -357,7 +378,7 @@ function ReportForm({
         recordPayment({
           code,
           amountCents,
-          method: "promptpay",
+          method: selected?.method ?? method,
           proofMediaId: null,
           note: "",
           paymentId: requestId.take(),
@@ -369,7 +390,8 @@ function ReportForm({
 
   return (
     <>
-      {qr}
+      {channels.length > 1 ? <div className="flex flex-wrap gap-2">{channels.map(c => <Button type="button" key={c.method} variant={(selected?.method ?? method) === c.method ? "default" : "outline"} size="sm" aria-pressed={(selected?.method ?? method) === c.method} onClick={() => setMethod(c.method)}>{c.label}</Button>)}</div> : null}
+      {selected?.method === "promptpay" || !selected ? qr : selected.details}
       <div>
         <Label htmlFor="pay-amount" className="text-sm">
           {t.payment.amountSent}
@@ -443,6 +465,7 @@ function PaymentItem({
   fits,
   money,
   readOnly = false,
+  awaitingApproval = false,
 }: {
   code: string;
   row: PaymentRow;
@@ -451,6 +474,7 @@ function PaymentItem({
   money: (c: number) => string;
   /** ออเดอร์ปิดแล้ว — ไม่มีปุ่มตอบรายการ และคำแนะนำ "แจ้งใหม่ได้" ต้องไม่โผล่ */
   readOnly?: boolean;
+  awaitingApproval?: boolean;
 }) {
   const { t, locale } = useLocale();
   const [pending, run] = usePaymentAction();
@@ -515,12 +539,12 @@ function PaymentItem({
             ไม่ใช่หลังจากสงสัยแล้วไปหาเอง
           */}
           <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
-            {fits ? t.payment.confirmReceivedHint : t.payment.overTotalWarning}
+            {awaitingApproval ? (locale === "th" ? "รอลูกค้ายืนยันภาพตัวอย่างงานก่อนยืนยันรับเงินยอดสุดท้าย" : "Wait for the client to approve the preview before confirming the final payment.") : fits ? t.payment.confirmReceivedHint : t.payment.overTotalWarning}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              disabled={pending || !fits}
+              disabled={pending || !fits || awaitingApproval}
               onClick={() =>
                 run(() => confirmPayment(code, row.id), t.payment.confirmed)
               }

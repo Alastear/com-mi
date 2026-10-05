@@ -29,6 +29,7 @@ import { creatorPage, media, service } from "./app";
 export const order = pgTable(
   "order",
   {
+    approvedPreviewId: text("approved_preview_id"),
     id: text("id").primaryKey(),
 
     /**

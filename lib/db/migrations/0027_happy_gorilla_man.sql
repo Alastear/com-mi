@@ -1,0 +1,1 @@
+ALTER TABLE "order" ADD COLUMN "approved_preview_id" text;

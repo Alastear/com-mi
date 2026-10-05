@@ -202,6 +202,11 @@ export const creatorPage = pgTable(
     promptpayType: text("promptpay_type"),
     promptpayId: text("promptpay_id"),
     promptpayName: text("promptpay_name"),
+    bankName: text("bank_name"),
+    bankAccountNumber: text("bank_account_number"),
+    bankAccountName: text("bank_account_name"),
+    trueWalletPhone: text("true_wallet_phone"),
+    trueWalletName: text("true_wallet_name"),
 
     /**
      * เบอร์ติดต่อของครีเอเตอร์ — **ไว้ให้ผู้ดูแลติดต่อกลับเท่านั้น**

@@ -682,7 +682,7 @@ describe("event ของระบบบน timeline", () => {
 });
 
 describe("ด่านใน SQL ที่เทสต์นี้รันไม่ถึง (ต้องมี DB) — ตรวจที่ตัวโค้ด", () => {
-  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+  const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8").replace(/\r\n/g, "\n");
   const run = read("lib/orders/lifecycle-run.ts");
   const pay = read("lib/payments/actions.ts");
 

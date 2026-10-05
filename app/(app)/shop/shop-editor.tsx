@@ -61,8 +61,9 @@ export function ShopEditor({
 
   function togglePublish() {
     startPublish(async () => {
-      await setPublished(!shop.isPublished);
+      const result = await setPublished(!shop.isPublished);
       toast.success(shop.isPublished ? t.shop.unpublished : t.shop.published);
+      if (!result.avatarImported) toast.warning("นำเข้ารูป Google ไม่สำเร็จ กรุณาอัปโหลดรูปโปรไฟล์หรือเผยแพร่อีกครั้ง");
     });
   }
 

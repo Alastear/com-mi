@@ -12,7 +12,7 @@ import { ORDER_STATUSES } from "@/lib/types";
  * แค่เขียนของลงไปผิดที่ (เงินบนออเดอร์ที่ยกเลิก, ราคาของใบที่ถูกแทนที่, รอบแก้ที่ลูกค้าไม่เคยเห็น)
  * ถ้าเทสต์นี้พังเพราะย้ายโค้ด ให้ตามไปดูว่าด่านยังอยู่ ไม่ใช่แค่แก้ regex ให้ผ่าน
  */
-const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8").replace(/\r\n/g, "\n");
 
 describe("เงินบนออเดอร์ที่ปิดแล้ว (lib/payments/actions.ts)", () => {
   const src = read("lib/payments/actions.ts");

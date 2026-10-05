@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download, FileUp, Loader2, Lock, Package, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DeliveryPreview } from "@/components/app/delivery-preview";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
@@ -409,6 +410,8 @@ export function DeliveryPanel({
           <p className="tabular text-xs text-muted-foreground">{formatBytes(f.bytes)}</p>
         </div>
         {canDownload ? (
+          <>
+          <DeliveryPreview code={code} mediaId={f.mediaId} filename={f.filename} contentType={f.contentType} />
           <Button
             size="sm"
             variant="outline"
@@ -422,6 +425,7 @@ export function DeliveryPanel({
             )}
             {downloading === f.mediaId ? t.delivery.downloading : t.delivery.download}
           </Button>
+          </>
         ) : viewer === "client" ? (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Lock className="size-3.5" />

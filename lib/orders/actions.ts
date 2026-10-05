@@ -282,6 +282,7 @@ export async function transitionOrder(input: {
       .update(schema.order)
       .set({
         status: to,
+        ...(["in_progress", "revision_requested"].includes(to) ? { approvedPreviewId: null } : null),
         updatedAt: now,
         ...(to === "completed" ? { completedAt: now } : null),
         ...(consuming ? { revisionsUsed: sql`${schema.order.revisionsUsed} + 1` } : null),

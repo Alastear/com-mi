@@ -30,7 +30,7 @@ describe("ทางสร้างออเดอร์", () => {
     const writers = files.filter((f) => readFileSync(f, "utf8").includes("insert(schema.order)"));
 
     assert.deepEqual(
-      writers.map((f) => f.slice(root.length + 1)),
+      writers.map((f) => f.slice(root.length + 1).replace(/\\/g, "/")),
       ["lib/orders/new-order.ts"],
       "เจอทางสร้างออเดอร์ทางอื่น — ด่านใน assertCanAcceptNewOrder จะถูกข้ามไปทั้งชุด",
     );

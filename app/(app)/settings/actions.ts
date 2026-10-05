@@ -49,6 +49,11 @@ const Schema = z.object({
   promptpayType: z.enum(PROMPTPAY_TYPES),
   promptpayId: z.string().trim().max(40),
   promptpayName: z.string().trim().max(80),
+  bankName: z.string().trim().max(80).default(""),
+  bankAccountNumber: z.string().trim().max(30).default(""),
+  bankAccountName: z.string().trim().max(80).default(""),
+  trueWalletPhone: z.string().trim().max(30).default(""),
+  trueWalletName: z.string().trim().max(80).default(""),
 });
 
 export type SavePayoutResult = { ok: true } | { ok: false; error: "invalid" } | undefined;
@@ -72,6 +77,10 @@ export async function savePayout(
   const v = parsed.data;
 
   const digits = normalizePromptPayId(v.promptpayId);
+  const bankNumber = v.bankAccountNumber.replace(/[\s-]/g, "");
+  const walletPhone = v.trueWalletPhone.replace(/[\s-]/g, "");
+  if ((bankNumber && (!/^\d{8,20}$/.test(bankNumber) || !v.bankName || !v.bankAccountName)) ||
+      (walletPhone && (!/^0[689]\d{8}$/.test(walletPhone) || !v.trueWalletName))) return { ok: false, error: "invalid" };
   if (digits && !isValidPromptPayId(v.promptpayType, digits)) {
     return { ok: false, error: "invalid" };
   }
@@ -82,6 +91,11 @@ export async function savePayout(
       promptpayType: digits ? v.promptpayType : null,
       promptpayId: digits || null,
       promptpayName: digits ? v.promptpayName : null,
+      bankName: bankNumber ? v.bankName : null,
+      bankAccountNumber: bankNumber || null,
+      bankAccountName: bankNumber ? v.bankAccountName : null,
+      trueWalletPhone: walletPhone || null,
+      trueWalletName: walletPhone ? v.trueWalletName : null,
       updatedAt: new Date(),
     })
     .where(eq(schema.creatorPage.userId, user.id));

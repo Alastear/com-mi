@@ -47,6 +47,8 @@ const CALLER_DATA: { [T in NotificationType]: NotificationData[T] } = {
   quote_issued: { code: CODE },
   quote_accepted: { code: CODE },
   delivery_released: { code: CODE },
+  work_preview_uploaded: { code: CODE },
+  work_preview_approved: { code: CODE },
   order_auto_complete_soon: { code: CODE, days: 2 },
   review_posted: { code: CODE },
   review_replied: { code: CODE },

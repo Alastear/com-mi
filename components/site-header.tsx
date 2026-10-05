@@ -19,6 +19,7 @@ import { Logo } from "@/components/brand";
 import { LanguageToggle, ThemeToggle } from "@/components/toggles";
 import { useDict } from "@/lib/i18n/client";
 import { signOut } from "@/lib/auth-client";
+import { NotificationBell } from "@/components/notification-bell";
 import { UserAvatar } from "@/components/user-avatar";
 
 /**
@@ -85,6 +86,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          {user ? <NotificationBell /> : null}
           <LanguageToggle />
           <ThemeToggle />
           {user ? (

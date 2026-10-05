@@ -29,6 +29,8 @@ export const NOTIFICATION_TYPES = [
   "quote_issued",
   "quote_accepted",
   "delivery_released",
+  "work_preview_uploaded",
+  "work_preview_approved",
   /**
    * ระบบจะปิดงานที่ส่งแล้วให้อัตโนมัติในอีกไม่กี่วัน — **ถึงลูกค้า** (cron: lib/orders/lifecycle-run.ts)
    * บอกล่วงหน้าเพื่อให้ลูกค้าที่เจอปัญหายังขอแก้หรือทักครีเอเตอร์ทัน ก่อนงานถูกปิดทับ
@@ -68,6 +70,8 @@ export type NotificationData = {
   quote_issued: { code: string };
   quote_accepted: { code: string };
   delivery_released: { code: string };
+  work_preview_uploaded: { code: string };
+  work_preview_approved: { code: string };
   /** `days` = อีกกี่วันจะปิด — มาจาก `AUTO_COMPLETE_NOTICE_DAYS` ไม่ใช่เลขที่พิมพ์ไว้ในข้อความ */
   order_auto_complete_soon: { code: string; days: number };
   review_posted: { code: string };

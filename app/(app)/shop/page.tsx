@@ -23,7 +23,7 @@ export default async function ShopPage() {
       shop={{
         id: shop.id,
         bannerUrl: shop.banner?.url ?? null,
-        avatarUrl: shop.avatar?.url ?? user.image ?? null,
+        avatarUrl: shop.avatar?.url || user.image || null,
         displayName: shop.displayName,
         tagline: shop.tagline,
         about: shop.about,

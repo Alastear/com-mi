@@ -171,6 +171,8 @@ export function eventText(
     return t.orderEvent[paymentEvent].replace("{amount}", shown).trim();
   }
   if (eventType === "order_created") return t.orderEvent.order_created;
+  if (eventType === "work_preview_uploaded") return t.orderEvent.work_preview_uploaded;
+  if (eventType === "work_preview_approved") return t.orderEvent.work_preview_approved;
   if (eventType === "quote_issued") return t.orderEvent.quote_issued;
   if (eventType === "quote_accepted") return t.orderEvent.quote_accepted;
   if (eventType === "quote_withdrawn") return t.orderEvent.quote_withdrawn;

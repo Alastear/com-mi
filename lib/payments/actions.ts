@@ -15,6 +15,7 @@ import { EVENT_AFTER } from "@/lib/orders/due-clock-sql";
 import { notify } from "@/lib/notifications/create";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedSum } from "./money";
+import { mayRecordDeposit, needsWorkApproval } from "./approval-policy";
 
 /**
  * บันทึกการชำระเงิน — แพลตฟอร์มไม่ได้ประมวลผลเงิน แค่จดว่ามีการจ่าย
@@ -45,7 +46,7 @@ import { checkReportAmount, fitsUnderTotal, isWholeBaht, paymentState, verifiedS
  * ไม่งั้นสองคนกดพร้อมกันจะผ่านเงื่อนไข "ยังไม่เกินยอด" ทั้งคู่
  */
 
-const METHODS = ["promptpay", "bank_transfer", "paypal", "stripe_link", "kofi", "other"] as const;
+const METHODS = ["promptpay", "bank_transfer", "true_wallet", "paypal", "stripe_link", "kofi", "other"] as const;
 
 /** รูปแบบของ `newId("pay")` — ฝั่ง client สร้าง id ไว้ล่วงหน้าเพื่อกันกดซ้ำ */
 const PAYMENT_ID = /^pay_[0-9A-HJKMNP-TV-Z]{22}$/;
@@ -97,6 +98,7 @@ export type PaymentResult =
         | "rate_limited"
         /** มีรายการที่ลูกค้าแจ้งไว้แล้วยังรอครีเอเตอร์ตอบ */
         | "pending_exists"
+        | "approval_required"
         /** ยอดที่แจ้ง/บันทึกเกินยอดคงค้าง */
         | "over_outstanding"
         /** ยืนยันแล้วยอดรวมจะเกินราคางาน */
@@ -109,7 +111,7 @@ export type PaymentResult =
 async function resolveOrder(code: string, userId: string) {
   const order = await getDb().query.order.findFirst({
     where: eq(schema.order.code, code),
-    columns: { id: true, code: true, clientUserId: true, totalCents: true, status: true },
+    columns: { id: true, code: true, clientUserId: true, totalCents: true, depositCents: true, approvedPreviewId: true, status: true },
     with: { page: { columns: { userId: true } } },
   });
   if (!order) return null;
@@ -337,9 +339,13 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
 
   const byCreator = order.isCreator;
   const rows = await loadPayments(order.id);
+  if (v.paymentId && rows.some((r) => r.id === v.paymentId)) return { ok: true };
+  // Final payments must originate from the client's payment report.
+  if (byCreator && !mayRecordDeposit(verifiedSum(rows), order.depositCents, v.amountCents)) {
+    return { ok: false, error: "forbidden" };
+  }
 
   // ส่งซ้ำด้วย id เดิม = แถวนี้บันทึกไปแล้ว ตอบสำเร็จโดยไม่ทำอะไรเพิ่ม
-  if (v.paymentId && rows.some((r) => r.id === v.paymentId)) return { ok: true };
 
   /**
    * มีรายการที่ลูกค้าแจ้งไว้แล้วยังไม่ถูกตอบ = ห้ามเพิ่มแถวเงิน **ทั้งสองฝ่าย**
@@ -391,6 +397,8 @@ export async function recordPayment(input: z.input<typeof RecordSchema>): Promis
                                      - (${verifiedSumSql(order.id)})
         and ${noPending}
         and ${orderPayableSql(order.id)}
+        and (${!byCreator}::boolean or ${v.amountCents}::int + (${verifiedSumSql(order.id)}) <=
+          (select o.deposit_cents from "order" o where o.id = ${order.id}))
       on conflict (id) do nothing
       returning id
     `),
@@ -483,6 +491,7 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
   // กดซ้ำหลังสำเร็จไปแล้ว — ไม่ใช่ error และห้ามแจ้งเตือนซ้ำ
   if (row.state === "verified") return { ok: true };
   if (row.state !== "pending") return { ok: false, error: "stale" };
+  if (needsWorkApproval(order.status, order.approvedPreviewId, verifiedSum(rows), row.amountCents, order.totalCents)) return { ok: false, error: "approval_required" };
   if (!fitsUnderTotal(row.amountCents, verifiedSum(rows), order.totalCents)) {
     return { ok: false, error: "over_total" };
   }
@@ -512,6 +521,9 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
           sql`${schema.paymentRecord.amountCents} + (${verifiedSumSql(order.id)})
               <= (select o.total_cents from "order" o where o.id = ${order.id})`,
           orderPayableSql(order.id),
+          sql`exists (select 1 from "order" o where o.id = ${order.id} and
+            (o.status not in ('in_progress', 'in_review', 'revision_requested') or o.approved_preview_id is not null or
+              ${schema.paymentRecord.amountCents} + (${verifiedSumSql(order.id)}) < o.total_cents))`,
         ),
       )
       .returning({ id: schema.paymentRecord.id }),
@@ -535,6 +547,8 @@ export async function confirmPayment(code: string, paymentId: string): Promise<P
     const fresh = (await loadPayments(order.id)).find((r) => r.id === row.id);
     if (fresh?.state === "verified") return { ok: true };
     if (await orderClosedNow(order.id)) return { ok: false, error: "order_closed" };
+    const current = await db.query.order.findFirst({ where: eq(schema.order.id, order.id), columns: { approvedPreviewId: true, status: true } });
+    if (current && ["in_progress", "in_review", "revision_requested"].includes(current.status) && !current.approvedPreviewId) return { ok: false, error: "approval_required" };
     // ยังรออยู่แต่เขียนไม่ผ่าน และออเดอร์ยังเปิด = เงื่อนไขที่เหลือข้อเดียวคือเพดาน
     return { ok: false, error: fresh?.state === "pending" ? "over_total" : "stale" };
   }

@@ -22,6 +22,7 @@ import { canRelease } from "@/lib/orders/release";
 import { isTerminal } from "@/lib/orders/state-machine";
 import { PromptPayQR } from "@/components/app/promptpay-qr";
 import type { PromptPayType } from "@/lib/payments/promptpay-id";
+import { WorkPreviewPanel } from "@/components/app/work-preview-panel";
 import { OrderThread } from "@/components/app/order-thread";
 import { OrderActions } from "@/components/app/order-actions";
 import { orderVersion } from "@/lib/orders/version";
@@ -229,7 +230,8 @@ export default async function ClientRequestPage({ params }: Props) {
         ฝั่งหนึ่งกดได้อีกฝั่งกดไม่ได้เพราะเขียนรายการปุ่มไว้คนละที่
       */}
       <div className="mt-4">
-        <OrderThread
+        <WorkPreviewPanel code={order.code} viewer="client" status={order.status as OrderStatus} />
+          <OrderThread
           code={order.code}
           entries={toThreadEntries(order.messages)}
           currentUserId={session.user.id}
@@ -283,6 +285,7 @@ export default async function ClientRequestPage({ params }: Props) {
             <>
               <Separator />
               <PaymentPanel
+              finalApproved={Boolean(order.approvedPreviewId) || ["accepted", "delivered", "completed"].includes(order.status)}
                 code={order.code}
                 viewer="client"
                 totalCents={order.totalCents}
@@ -290,7 +293,7 @@ export default async function ClientRequestPage({ params }: Props) {
                 depositCents={order.depositCents}
                 currency={order.currency}
                 payments={payments}
-                hasPayout={Boolean(order.page.promptpayId)}
+                hasPayout={Boolean(order.page.promptpayId || order.page.bankAccountNumber || order.page.trueWalletPhone)}
                 closed
               />
             </>
@@ -300,6 +303,7 @@ export default async function ClientRequestPage({ params }: Props) {
       <Card className="mt-4 gap-3 p-6">
         <p className="font-medium">{t.payment.title}</p>
         <PaymentPanel
+              finalApproved={Boolean(order.approvedPreviewId) || ["accepted", "delivered", "completed"].includes(order.status)}
           code={order.code}
           viewer="client"
           totalCents={order.totalCents}
@@ -307,12 +311,17 @@ export default async function ClientRequestPage({ params }: Props) {
           depositCents={order.depositCents}
           currency={order.currency}
           payments={payments}
-          hasPayout={Boolean(order.page.promptpayId)}
+          hasPayout={Boolean(order.page.promptpayId || order.page.bankAccountNumber || order.page.trueWalletPhone)}
           /*
             QR สร้างฝั่ง server แล้วส่งเป็น element ลงมา
             หมายเลข PromptPay จึงไม่เคยถูก serialize ไปอยู่ใน payload ของหน้า
             และ payload ที่ลูกค้าสแกนก็ไม่มีทางถูกแก้จากฝั่ง client
           */
+          channels={[
+            ...(order.page.promptpayId ? [{ method: "promptpay" as const, label: "PromptPay", details: null }] : []),
+            ...(order.page.bankAccountNumber ? [{ method: "bank_transfer" as const, label: locale === "th" ? "บัญชีธนาคาร" : "Bank transfer", details: <div className="rounded-lg border p-4"><p className="font-medium">{order.page.bankName}</p><p className="mt-1 select-all text-lg font-semibold tabular-nums">{order.page.bankAccountNumber}</p><p className="text-sm">{order.page.bankAccountName}</p></div> }] : []),
+            ...(order.page.trueWalletPhone ? [{ method: "true_wallet" as const, label: "TrueMoney Wallet", details: <div className="rounded-lg border p-4"><p className="font-medium">TrueMoney Wallet</p><p className="mt-1 select-all text-lg font-semibold tabular-nums">{order.page.trueWalletPhone}</p><p className="text-sm">{order.page.trueWalletName}</p></div> }] : []),
+          ]}
           qr={
             order.page.promptpayId ? (
               <PromptPayQR

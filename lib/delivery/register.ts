@@ -29,6 +29,7 @@ import {
   type UploadIntent,
 } from "@/lib/uploads/intent";
 import { STALE_CLAIM_MS } from "@/lib/uploads/register-retry";
+import { notify } from "@/lib/notifications/create";
 
 /**
  * บันทึกไฟล์ส่งมอบที่เพิ่งอัปโหลดลงตาราง media
@@ -94,7 +95,7 @@ export async function registerDeliveryFile(
       ? { ok: false, error: "busy" }
       : { ok: false, error: "forbidden" };
   }
-  if (intent.kind !== "final" || !intent.orderId || !intent.uploadId) {
+  if ((intent.kind !== "final" && intent.kind !== "wip") || !intent.orderId || !intent.uploadId) {
     return { ok: false, error: "forbidden" };
   }
 
@@ -171,7 +172,7 @@ async function registerClaimed(
 
   const order = await db.query.order.findFirst({
     where: eq(schema.order.id, intent.orderId),
-    columns: { id: true, status: true },
+    columns: { id: true, status: true, code: true, clientUserId: true },
     with: { page: { columns: { userId: true } } },
   });
   if (!order || order.page.userId !== userId) {
@@ -275,18 +276,31 @@ async function registerClaimed(
     lockStorage(userId),
     db.execute(sql`
       insert into media
-        (id, owner_user_id, order_id, pathname, url, access, kind, content_type, bytes, filename, status)
+        (id, owner_user_id, order_id, pathname, url, access, kind, content_type, bytes, filename, status, is_watermarked)
       select ${mediaId}::text, ${userId}::text, ${intent.orderId}::text, ${key}::text,
-             ''::text, 'private'::text, 'final'::text, ${intent.contentType}::text,
-             ${intent.bytes}::int, ${intent.filename.slice(0, MAX_FILENAME_LENGTH)}::text, 'orphan'::text
+             ''::text, 'private'::text, ${intent.kind}::text, ${intent.contentType}::text,
+             ${intent.bytes}::int, ${intent.filename.slice(0, MAX_FILENAME_LENGTH)}::text,
+             ${intent.kind === "wip" ? "linked" : "orphan"}::text, ${intent.kind === "wip"}::boolean
       where exists (select 1 from "order" o where o.id = ${intent.orderId} and o.status in (${statuses}))
         and not exists (select 1 from media m where m.pathname = ${key})
         and ${intentLive}
         and ${withinQuotaSql(userId, intent.bytes, planLimits(plan).storage_bytes)}
       returning id
     `),
+    ...(intent.kind === "wip" ? [db.execute(sql`
+      update "order" set approved_preview_id = null, updated_at = now()
+      where id = ${intent.orderId} and exists (select 1 from media where id = ${mediaId})
+    `), db.execute(sql`
+      insert into message (id, order_id, sender_user_id, body, attachment_media_ids, is_system_event, event_type, event_data, read_by_creator_at)
+      select ${newId("msg")}, ${intent.orderId}, ${userId}, '', jsonb_build_array(${mediaId}::text), true,
+        'work_preview_uploaded', jsonb_build_object('actor', 'creator', 'previewId', ${mediaId}::text), now()
+      where exists (select 1 from media where id = ${mediaId})
+    `)] : []),
   ]);
-  if (affectedRows(inserted) > 0) return { ok: true, mediaId };
+  if (affectedRows(inserted) > 0) {
+    if (intent.kind === "wip") await notify({ userId: order.clientUserId, actorUserId: userId, type: "work_preview_uploaded", data: { code: order.code }, url: `/my/requests/${order.code}`, entityType: "order", entityId: order.id });
+    return { ok: true, mediaId };
+  }
 
   /**
    * ไม่ผ่าน — ดูของจริงอีกรอบแล้วตอบให้ตรงเรื่อง

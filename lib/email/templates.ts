@@ -110,6 +110,8 @@ const KIND_OF: { [T in NotificationType]: KindRule<T> } = {
   quote_issued: "quote_issued",
   quote_accepted: "quote_accepted",
   delivery_released: "delivery_released",
+  work_preview_uploaded: null,
+  work_preview_approved: null,
   /**
    * ต้องเป็นอีเมล ไม่ใช่แค่กระดิ่ง — ลูกค้าที่ได้ไฟล์ไปแล้วมักไม่กลับมาเปิดเว็บ
    * ถ้ารู้ตัวหลังงานถูกปิดไปแล้วว่าไฟล์ผิด ปุ่มขอแก้ไขก็หายไปแล้ว

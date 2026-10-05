@@ -141,7 +141,7 @@ export function OrderActions({
     if (to === "completed" && status !== "delivered" && !window.confirm(t.orderAction.closeWithReleasedConfirm)) {
       return;
     }
-    if (needsMoneyConfirm(to, money)) setConfirming(to);
+    if (to === "cancelled" || needsMoneyConfirm(to, money)) setConfirming(to);
     else move(to);
   }
 
@@ -155,7 +155,7 @@ export function OrderActions({
       {destructive.map((to) => (
         <Button
           key={to}
-          variant="ghost"
+          variant="outline"
           size="sm"
           disabled={pending}
           onClick={() => press(to)}
@@ -193,7 +193,7 @@ export function OrderActions({
         </p>
       ) : null}
 
-      {money ? (
+      {(
         <Dialog
           open={confirming !== null}
           // ระหว่างส่งห้ามปิด — ปิดไปแล้วคนจะคิดว่ายกเลิกไม่สำเร็จแล้วกดใหม่
@@ -205,19 +205,19 @@ export function OrderActions({
             <DialogHeader>
               <DialogTitle>{t.orderAction.cancelConfirmTitle}</DialogTitle>
               <DialogDescription className="font-medium text-foreground">
-                {money.paidCents > 0
-                  ? fill(t.orderAction.cancelPaid, { amount: fmt(money.paidCents) })
+                {(money?.paidCents ?? 0) > 0
+                  ? fill(t.orderAction.cancelPaid, { amount: fmt(money?.paidCents ?? 0) })
                   : t.orderAction.cancelNonePaid}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-2 text-sm leading-relaxed">
-              {money.pendingCents > 0 ? (
+              {(money?.pendingCents ?? 0) > 0 ? (
                 <p className="text-warning">
                   {fill(
                     actor === "creator"
                       ? t.orderAction.cancelPendingCreator
                       : t.orderAction.cancelPendingClient,
-                    { amount: fmt(money.pendingCents) },
+                    { amount: fmt(money?.pendingCents ?? 0) },
                   )}
                 </p>
               ) : null}
@@ -239,7 +239,7 @@ export function OrderActions({
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      ) : null}
+      )}
     </div>
   );
 }

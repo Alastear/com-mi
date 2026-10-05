@@ -90,9 +90,9 @@ export async function recentNotifications(userId: string, limit = 12) {
 }
 
 /** ทำเครื่องหมายอ่านทั้งหมด — เขียนเฉพาะแถวที่ยังไม่อ่าน */
-export async function markAllRead(userId: string): Promise<void> {
+export async function markAllRead(userId: string, id?: string): Promise<void> {
   await getDb()
     .update(schema.notification)
     .set({ readAt: new Date() })
-    .where(and(eq(schema.notification.userId, userId), isNull(schema.notification.readAt)));
+    .where(and(eq(schema.notification.userId, userId), isNull(schema.notification.readAt), id ? eq(schema.notification.id, id) : undefined));
 }

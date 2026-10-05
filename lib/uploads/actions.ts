@@ -222,6 +222,7 @@ async function insertIntentWithinQuota(input: {
 /* ── ไฟล์ส่งมอบ: ถังส่วนตัว อัปเป็นชิ้น ─────────────────────────── */
 
 const DeliverySchema = z.object({
+  kind: z.enum(["final", "wip"]).default("final"),
   code: z.string().refine(isOrderCode),
   filename: z.string().trim().max(MAX_FILENAME_LENGTH),
   contentType: z.string().max(200),
@@ -261,6 +262,7 @@ export async function startDeliveryUpload(
   const userId = session.user.id;
 
   if (v.bytes > MAX_DELIVERY_BYTES) return fail("too_large");
+  if (v.kind === "wip" && (v.contentType !== "image/webp" || v.bytes > MAX_IMAGE_UPLOAD_BYTES)) return fail("invalid");
 
   const order = await getDb().query.order.findFirst({
     where: eq(schema.order.code, v.code),
@@ -302,7 +304,7 @@ export async function startDeliveryUpload(
       userId,
       bucket: "private",
       key,
-      kind: "final",
+      kind: v.kind,
       orderId: order.id,
       contentType,
       bytes: v.bytes,

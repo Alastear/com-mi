@@ -237,6 +237,7 @@ export async function presignPrivateGet(input: {
   key: string;
   filename: string;
   expiresInSeconds: number;
+  inline?: boolean;
 }): Promise<string> {
   const { client, bucket } = store("private");
   return getSignedUrl(
@@ -244,7 +245,7 @@ export async function presignPrivateGet(input: {
     new GetObjectCommand({
       Bucket: bucket,
       Key: input.key,
-      ResponseContentDisposition: attachmentDisposition(input.filename),
+      ResponseContentDisposition: input.inline ? "inline" : attachmentDisposition(input.filename),
     }),
     { expiresIn: input.expiresInSeconds },
   );

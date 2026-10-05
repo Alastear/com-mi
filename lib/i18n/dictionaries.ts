@@ -458,6 +458,7 @@ const th = {
     recordBlockedPending:
       "ลูกค้าแจ้งโอนไว้แล้ว ตอบรายการนั้นก่อน (ยืนยันว่าเงินเข้า หรือ ยังไม่ได้รับ) แล้วค่อยบันทึกเงินก้อนอื่นที่ได้รับ — ถ้าเงินที่ได้รับคือก้อนเดียวกับที่ลูกค้าแจ้ง กดยืนยันรายการนั้นอย่างเดียวพอ",
     /* ── error ที่ server ตอบกลับ ── */
+    awaitingWorkApproval: "รอลูกค้ายืนยันภาพตัวอย่างงานก่อนยืนยันรับเงินยอดสุดท้าย",
     errPending: "มีรายการแจ้งโอนที่รอครีเอเตอร์ยืนยันอยู่แล้ว",
     errOverOutstanding: "ยอดเกินที่ต้องชำระ",
     errOverTotal: "ยืนยันไม่ได้ — ยอดรวมที่ยืนยันแล้วจะเกินราคางาน",
@@ -716,7 +717,7 @@ const th = {
       "ไม่ครับ เงินโอนจากลูกค้าเข้าบัญชีคุณโดยตรงผ่าน PromptPay หรือช่องทางที่คุณตั้งไว้ ระบบทำหน้าที่บันทึกและล็อกไฟล์ส่งมอบจนกว่าจะได้รับเงินครบเท่านั้น",
     freeLimitQ: "ใช้ฟรีแล้วเจอกำแพงตอนไหน",
     freeLimitA:
-      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 2 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องจนเกินเพดานเหล่านี้",
+      "แพ็กเกจฟรีรับงานพร้อมกันได้ 5 งาน มีเมนูได้ 5 รายการ ผลงาน 30 ชิ้น และพื้นที่ 5 GB ซึ่งลงคลิปตัวอย่างได้สบาย ส่วน Pro เหมาะกับคนที่รับงานต่อเนื่องจนเกินเพดานเหล่านี้",
     downgradeQ: "ถ้ายกเลิก Pro ข้อมูลหายไหม",
     /**
      * ⚠️ พูดเฉพาะสิ่งที่โค้ดทำจริง — เดิมสัญญาว่า "ของที่เกินโควตาจะถูกซ่อน แล้วแสดงกลับเมื่อสมัครใหม่"
@@ -724,19 +725,19 @@ const th = {
      * ส่วนพื้นที่เก็บเช็คตอนอัปไฟล์ส่งมอบด้วย (lib/delivery/register.ts) ต้องบอกไว้ เพราะกระทบงานที่ค้างอยู่
      */
     downgradeA:
-      "ไม่หายครับ ไม่มีอะไรถูกลบหรือซ่อน เมนูและผลงานที่มีอยู่ยังแสดงบนหน้าร้านตามเดิม แค่เพิ่มใหม่เกินโควตาแพ็กเกจฟรีไม่ได้ รับงานใหม่ได้เมื่องานที่ทำอยู่เหลือไม่ถึง 5 งาน และถ้าพื้นที่ที่ใช้เกิน 2 GB จะอัปไฟล์ใหม่ไม่ได้ (รวมไฟล์ส่งมอบ) จนกว่าจะลบไฟล์ให้อยู่ในโควตา",
+      "ไม่หายครับ ไม่มีอะไรถูกลบหรือซ่อน เมนูและผลงานที่มีอยู่ยังแสดงบนหน้าร้านตามเดิม แค่เพิ่มใหม่เกินโควตาแพ็กเกจฟรีไม่ได้ รับงานใหม่ได้เมื่องานที่ทำอยู่เหลือไม่ถึง 5 งาน และถ้าพื้นที่ที่ใช้เกิน 5 GB จะอัปไฟล์ใหม่ไม่ได้ (รวมไฟล์ส่งมอบ) จนกว่าจะลบไฟล์ให้อยู่ในโควตา",
     freeBullets: {
       orders: "รับงานพร้อมกัน 5 งาน",
       services: "เมนูรับงาน 5 รายการ",
       portfolio: "ผลงาน 30 ชิ้น (ลงคลิปได้)",
-      storage: "พื้นที่เก็บไฟล์ 2 GB",
+      storage: "พื้นที่เก็บไฟล์ 5 GB",
       noEscrow: "เงินเข้าบัญชีคุณโดยตรง ไม่หัก % จากออเดอร์",
     },
     /** ลำดับและป้าย "เร็ว ๆ นี้" อยู่ที่ PRO_BULLETS ใน lib/billing/plans.ts */
     proBullets: {
       orders: "รับงานไม่จำกัด",
       services: "เมนูรับงานไม่จำกัด",
-      storage: "พื้นที่เก็บไฟล์ 20 GB",
+      storage: "พื้นที่เก็บไฟล์ 50 GB",
       notify: "Web Push + Discord แจ้งเตือนทันที",
       auctions: "ระบบประมูล Adopts / YCH",
       theme: "ธีมหน้าร้านของตัวเอง",
@@ -1259,6 +1260,8 @@ const th = {
   },
 
   orderEvent: {
+    work_preview_uploaded: "ส่งภาพตัวอย่างงานพร้อมลายน้ำ",
+    work_preview_approved: "ลูกค้ายืนยันภาพตัวอย่างงานล่าสุด",
     order_created: "ลูกค้าส่งคำขอเข้ามา",
     status_changed: "เปลี่ยนสถานะเป็น {status}",
     revisionRound: "ครั้งที่ {n} จาก {total}",
@@ -1402,6 +1405,8 @@ const th = {
     invite_confirmed: "ครีเอเตอร์เปิดออเดอร์ #{code} จากคำเชิญที่คุณกดรับแล้ว",
     quote_issued: "ครีเอเตอร์ส่งใบเสนอราคางาน #{code} มาแล้ว",
     quote_accepted: "ลูกค้ายอมรับใบเสนอราคางาน #{code} แล้ว",
+    work_preview_uploaded: "มีภาพตัวอย่างงานใหม่สำหรับ #{code}",
+    work_preview_approved: "ลูกค้ายืนยันภาพตัวอย่างงาน #{code} แล้ว",
     delivery_released: "ไฟล์งาน #{code} พร้อมให้ดาวน์โหลดแล้ว",
     order_auto_complete_soon: "งาน #{code} จะปิดอัตโนมัติในอีก {days} วัน — มีอะไรต้องแก้ กดขอแก้ไขหรือทักครีเอเตอร์ก่อน",
     review_posted: "ลูกค้ารีวิวงาน #{code} แล้ว — ตอบกลับได้หนึ่งครั้ง",
@@ -1847,6 +1852,7 @@ const en: Dictionary = {
     recordedToast: "Payment recorded",
     recordBlockedPending:
       "The client has reported a payment. Answer that report first (confirm it arrived, or mark it not received), then record anything else you received. If what you received is that same transfer, just confirm the report.",
+    awaitingWorkApproval: "Wait for the client to approve the preview before confirming the final payment.",
     errPending: "A reported payment is already waiting for the creator to confirm",
     errOverOutstanding: "That is more than what is owed",
     errOverTotal: "Cannot confirm — the confirmed total would exceed the order price",
@@ -2082,21 +2088,21 @@ const en: Dictionary = {
       "No. Clients pay you directly via PromptPay or whichever method you set up. We only record the payment and keep delivery files locked until the full amount is marked received.",
     freeLimitQ: "Where does the free plan run out?",
     freeLimitA:
-      "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 2 GB of storage — enough room for video clips. Pro is for people taking work continuously who outgrow those limits.",
+      "The free plan allows 5 concurrent orders, 5 menu items, 30 portfolio pieces and 5 GB of storage — enough room for video clips. Pro is for people taking work continuously who outgrow those limits.",
     downgradeQ: "If I cancel Pro, do I lose my data?",
     downgradeA:
-      "No. Nothing is deleted or hidden — your menu items and portfolio stay on your shop as they are. You just can't add more than the free plan allows, new orders come in once you have fewer than 5 in progress, and if you are using more than 2 GB you can't upload new files (delivery files included) until you are back under it.",
+      "No. Nothing is deleted or hidden — your menu items and portfolio stay on your shop as they are. You just can't add more than the free plan allows, new orders come in once you have fewer than 5 in progress, and if you are using more than 5 GB you can't upload new files (delivery files included) until you are back under it.",
     freeBullets: {
       orders: "5 concurrent orders",
       services: "5 menu items",
       portfolio: "30 portfolio pieces (video welcome)",
-      storage: "2 GB of file storage",
+      storage: "5 GB of file storage",
       noEscrow: "Money goes straight to you — no cut of your orders",
     },
     proBullets: {
       orders: "Unlimited orders",
       services: "Unlimited menu items",
-      storage: "20 GB of file storage",
+      storage: "50 GB of file storage",
       notify: "Instant push + Discord alerts",
       auctions: "Adopts / YCH auctions",
       theme: "Custom shop theme",
@@ -2589,6 +2595,8 @@ const en: Dictionary = {
   },
 
   orderEvent: {
+    work_preview_uploaded: "Sent a watermarked work preview",
+    work_preview_approved: "Client approved the latest work preview",
     order_created: "Client sent the request",
     status_changed: "Status changed to {status}",
     revisionRound: "revision {n} of {total}",
@@ -2729,6 +2737,8 @@ const en: Dictionary = {
     invite_confirmed: "The creator opened order #{code} from the invite you accepted",
     quote_issued: "The creator sent a quote for order #{code}",
     quote_accepted: "The client accepted your quote for order #{code}",
+    work_preview_uploaded: "New work preview for #{code}",
+    work_preview_approved: "Client approved the preview for #{code}",
     delivery_released: "Files for order #{code} are ready to download",
     order_auto_complete_soon: "Order #{code} closes automatically in {days} days — request a revision or message the creator first if something is wrong",
     review_posted: "The client reviewed order #{code} — you can reply once",

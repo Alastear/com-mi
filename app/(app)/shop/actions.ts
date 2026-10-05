@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { requireCreator } from "@/lib/auth-guard";
+import { importGoogleAvatar } from "@/lib/media/google-avatar";
 
 const SHOP_STATUSES = ["open", "closed", "waitlist", "vacation"] as const;
 
@@ -56,6 +57,11 @@ export async function saveShop(
 
 export async function setPublished(isPublished: boolean) {
   const { user } = await requireCreator();
+  let avatarImported = true;
+  if (isPublished) {
+    try { avatarImported = await importGoogleAvatar(user.id); }
+    catch { avatarImported = false; }
+  }
 
   await getDb()
     .update(schema.creatorPage)
@@ -64,4 +70,5 @@ export async function setPublished(isPublished: boolean) {
 
   revalidatePath("/shop");
   if (user.handle) revalidatePath(`/${user.handle}`);
+  return { avatarImported };
 }

@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<Response> {
    * ใช้ id ของอันล่าสุด (เรียงตามเวลาในตัว) คู่กับจำนวน — พอสำหรับทั้งสองกรณี
    * และไม่ต้อง hash อะไรให้เปลืองแรง
    */
-  const etag = `W/"${items[0]?.id ?? "0"}-${unread}"`;
+  const etag = `W/"${unread}-${items.map(n => `${n.id}.${n.readAt ? "r" : "u"}`).join("-")}"`;
   if (request.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag, "Cache-Control": "private, no-store" } });
   }

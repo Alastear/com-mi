@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmButton } from "@/components/confirm-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -364,11 +365,13 @@ export function InvitesClient({
                   </Button>
                 ) : null}
                 {!dead ? (
-                  <Button
+                  <ConfirmButton
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     disabled={pending}
-                    onClick={() =>
+                    title={t.invite.revoke}
+                    description={locale === "th" ? "ต้องการยกเลิกลิงก์เชิญนี้หรือไม่? ลูกค้าจะใช้ลิงก์นี้รับงานไม่ได้อีก" : "Revoke this invitation? The client will no longer be able to accept it."}
+                    onConfirm={() =>
                       start(async () => {
                         const res = await revokeInvite(inv.id);
                         if (res.ok) {
@@ -379,7 +382,7 @@ export function InvitesClient({
                     }
                   >
                     {t.invite.revoke}
-                  </Button>
+                  </ConfirmButton>
                 ) : null}
               </div>
             </Card>

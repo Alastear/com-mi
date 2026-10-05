@@ -198,6 +198,11 @@ export default async function SettingsPage() {
                 type: (shop?.promptpayType ?? "phone") as PromptPayType,
                 id: shop?.promptpayId ?? "",
                 name: shop?.promptpayName ?? "",
+                bankName: shop?.bankName ?? "",
+                bankAccountNumber: shop?.bankAccountNumber ?? "",
+                bankAccountName: shop?.bankAccountName ?? "",
+                trueWalletPhone: shop?.trueWalletPhone ?? "",
+                trueWalletName: shop?.trueWalletName ?? "",
               }}
             />
             <p className="rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">

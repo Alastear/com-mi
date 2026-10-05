@@ -79,6 +79,11 @@ export async function getShopByHandle(handle: string) {
       promptpayId: false,
       promptpayType: false,
       promptpayName: false,
+      bankName: false,
+      bankAccountNumber: false,
+      bankAccountName: false,
+      trueWalletPhone: false,
+      trueWalletName: false,
       contactPhone: false,
       // `suspendedAt` ยังต้องอ่านได้ หน้าร้านต้องรู้ว่าถูกระงับเพื่อปิดปุ่มสั่งงาน
       // แต่ "ใครสั่ง" กับ "เพราะอะไร" เป็นเรื่องภายใน ไม่ใช่ของที่ลูกค้าต้องเห็น

@@ -62,7 +62,7 @@ export default async function CreatorPage({ params }: Props) {
   const trackRecord = summarizeTrackRecord(reputation.raw);
 
   const ownerHandle = shop.owner.handle ?? handle;
-  const avatarSrc = shop.avatar?.url ?? shop.owner.image ?? null;
+  const avatarSrc = shop.avatar?.url || shop.owner.image || null;
   const hasServices = shop.services.length > 0;
   const openSlots = openSlotsToShow(shop.status as ShopStatus, shop.slotsTotal);
 

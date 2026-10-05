@@ -535,6 +535,7 @@ export type DownloadResult = { ok: true; url: string } | { ok: false; error: str
 export async function requestDeliveryDownload(
   code: string,
   mediaId: string,
+  preview = false,
 ): Promise<DownloadResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "forbidden" };
@@ -577,9 +578,10 @@ export async function requestDeliveryDownload(
       eq(schema.media.orderId, order.id),
       eq(schema.media.kind, "final"),
     ),
-    columns: { pathname: true, filename: true },
+    columns: { pathname: true, filename: true, contentType: true },
   });
   if (!media) return { ok: false, error: "not_found" };
+  if (preview && !["image/jpeg", "image/png", "image/webp", "video/mp4", "video/webm"].includes(media.contentType)) return { ok: false, error: "invalid" };
 
   /**
    * 15 นาที — พอสำหรับโหลดไฟล์ใหญ่บนมือถือไทย และสั้นพอที่ URL ที่หลุดไป
@@ -596,6 +598,7 @@ export async function requestDeliveryDownload(
     key: media.pathname,
     filename: media.filename,
     expiresInSeconds: ttlSeconds,
+    inline: preview,
   });
 
   /**
@@ -611,7 +614,7 @@ export async function requestDeliveryDownload(
   });
 
   // บันทึกครั้งแรกที่ลูกค้าโหลดเท่านั้น — ครีเอเตอร์กดดูไฟล์ตัวเองไม่นับ
-  if (dlv.downloadedAt === null && order.isClient) {
+  if (!preview && dlv.downloadedAt === null && order.isClient) {
     await db
       .update(schema.delivery)
       .set({ downloadedAt: new Date() })
