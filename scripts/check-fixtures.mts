@@ -7,6 +7,8 @@ import { loadCapabilityContext } from "../lib/capabilities/context";
 import { authorizeCapability, CapabilityAccessError } from "../lib/capabilities/authorize";
 import { fixtureManifest } from "../lib/environment/fixture-manifest";
 import { requireFixtureEnvironment } from "./fixture-environment.mjs";
+import { clientListSql, clientOrdersSql } from "../lib/clients/sql";
+import { clientFilters } from "../lib/clients/filters";
 
 const { env, args } = await requireFixtureEnvironment();
 if (args.length !== 1) {
@@ -35,6 +37,18 @@ try {
     assert.deepEqual(rows[0], { creator_page_id: order.shopId, client_user_id: order.clientId, service_id: order.serviceId });
   }
   console.log("PASS fixture order ownership graph");
+  for (const shop of manifest.shops) {
+    const list = await db.execute<{ id: string; orders: number }>(clientListSql(shop.id, clientFilters({})));
+    assert.equal(list.rows.length, 2, "Expected two fixture clients");
+    for (const client of manifest.users.slice(2)) {
+      assert.equal(list.rows.find(row => row.id === client.id)?.orders, 2);
+      const history = await db.execute<{ code: string }>(clientOrdersSql(shop.id, client.id, 0));
+      assert.deepEqual(history.rows.map(row => row.code).sort(), manifest.orders.filter(order => order.shopId === shop.id && order.clientId === client.id).map(order => order.code).sort());
+    }
+    const unrelated = await db.execute(clientOrdersSql(shop.id, manifest.users.find(user => user.id !== shop.userId && user.handle)?.id ?? "missing", 0));
+    assert.equal(unrelated.rows.length, 0, "Unrelated account must not return orders");
+  }
+  console.log("PASS CRM query ownership and counts for pristine fixtures");
 
   // Intentionally fail the second statement; the first insert must roll back.
   // UUID IDs ensure the probe never conflicts with an existing fixture or real user.

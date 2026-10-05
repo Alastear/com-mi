@@ -1,64 +1,28 @@
-import { CAPABILITY_SURFACES } from "@/lib/capabilities/registry";
-import { ArtAvatar } from "@/components/art-image";
-import { LockedFeature } from "@/components/locked-feature";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { formatMoney } from "@/lib/format";
+import Link from "next/link";
+import { CapabilityAccessError } from "@/lib/capabilities/authorize";
+import { listClients } from "@/lib/clients/queries";
 import { getLocale } from "@/lib/i18n/server";
-import { getDictionary } from "@/lib/i18n/dictionaries";
+import { formatMoney } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { dynamicHref } from "@/lib/routes";
+import { ClientPagination } from "./pagination";
 
-const MOCK_CLIENTS = [
-  { name: "KaiStream", seed: "client-kai", orders: 6, spent: 480_000, tags: ["ลูกค้าประจำ", "จ่ายไว"] },
-  { name: "Mint", seed: "client-mint", orders: 4, spent: 320_000, tags: ["ลูกค้าประจำ"] },
-  { name: "ploy.", seed: "client-ploy", orders: 3, spent: 610_000, tags: ["งานใหญ่"] },
-  { name: "Tar", seed: "client-tar", orders: 2, spent: 280_000, tags: [] },
-  { name: "Bam", seed: "client-bam", orders: 1, spent: 0, tags: ["ลูกค้าใหม่"] },
-];
-
-export default async function ClientsPage() {
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
   const locale = await getLocale();
-  const t = getDictionary(locale);
-
-  return (
-    <div className="mx-auto w-full max-w-4xl px-4 py-6 lg:py-8">
-      <h1 className="text-xl font-semibold tracking-tight">{t.nav.clients}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {t.clients.desc}
-      </p>
-
-      <LockedFeature
-        capabilities={CAPABILITY_SURFACES.nav["/clients"]}
-        className="mt-6"
-        description={
-          t.clients.lockDesc
-        }
-      >
-        <Card className="gap-0 overflow-hidden p-0">
-          <ul className="divide-y">
-            {MOCK_CLIENTS.map((c) => (
-              <li key={c.name} className="flex items-center gap-3 p-3.5">
-                <ArtAvatar seed={c.seed} alt={c.name} className="size-10 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{c.name}</p>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {c.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-xs font-normal">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="tabular shrink-0 text-right text-sm">
-                  <p className="font-medium">{formatMoney(c.spent, "THB", locale)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {c.orders} {t.clients.orders}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </LockedFeature>
-    </div>
-  );
+  const th = locale === "th";
+  let result;
+  try { result = await listClients(await searchParams); }
+  catch (error) { if (!(error instanceof CapabilityAccessError)) throw error; }
+  return <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 lg:py-8">
+    <header><h1 className="text-xl font-semibold">{th ? "ลูกค้า" : "Clients"}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{th ? "ประวัติการสั่งงานกับร้านของคุณ และยอดรับที่ยืนยันแล้ว" : "Order history with your shop and confirmed receipts."}</p></header>
+    {!result ? <div className="rounded-xl border bg-muted/30 p-6"><h2 className="font-medium">{th ? "ยังไม่เปิดให้ใช้งาน" : "Not available yet"}</h2><p className="mt-2 text-sm text-muted-foreground">{th ? "ส่วนลูกค้ากำลังเตรียมเปิดใช้งาน คุณยังดูข้อมูลลูกค้าจากแต่ละออเดอร์ได้" : "Client management is being prepared. You can still view client details in each order."}</p><Button asChild variant="outline" className="mt-4"><Link href="/orders">{th ? "ดูออเดอร์" : "View orders"}</Link></Button></div> : <>
+      <form className="space-y-2"><Label htmlFor="client-search">{th ? "ค้นหาชื่อลูกค้า" : "Search client name"}</Label><div className="flex gap-2"><Input id="client-search" name="q" defaultValue={result.q} maxLength={100} /><Button type="submit">{th ? "ค้นหา" : "Search"}</Button></div></form>
+      <p className="text-xs text-muted-foreground">{th ? "ยอดรับแสดงเฉพาะ THB ที่ยืนยันแล้ว ไม่นับรายการถูกปฏิเสธหรือยกเลิกการยืนยัน จำนวนงานรวมทุกสถานะ" : "Receipts include confirmed THB payments, excluding rejected or voided records. Order counts include all statuses."}</p>
+      {result.clients.length ? <ul className="divide-y rounded-xl border">{result.clients.map(client => <li key={client.id}><Link href={dynamicHref(`/clients/${encodeURIComponent(client.id)}`)} className="flex flex-wrap items-center justify-between gap-3 p-4 hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-ring"><div className="min-w-0"><p className="font-medium [overflow-wrap:anywhere]">{client.name}</p><p className="mt-1 text-sm text-muted-foreground">{client.orders} {th ? "งาน" : "orders"} · {new Date(client.last_order).toLocaleDateString(th ? "th-TH" : "en-US", { timeZone: "Asia/Bangkok" })}</p></div><p className="text-sm font-medium tabular-nums">{formatMoney(Number(client.received), "THB", locale)}</p></Link></li>)}</ul> : <p className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">{th ? "ไม่พบลูกค้าในรายการนี้" : "No clients found."}</p>}
+      <ClientPagination page={result.page} hasNext={result.hasNext} base="/clients" q={result.q} th={th} />
+    </>}
+  </div>;
 }
