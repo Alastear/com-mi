@@ -9,6 +9,9 @@ import { fixtureManifest } from "../lib/environment/fixture-manifest";
 import { requireFixtureEnvironment } from "./fixture-environment.mjs";
 import { clientListSql, clientOrdersSql } from "../lib/clients/sql";
 import { clientFilters } from "../lib/clients/filters";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { sql as statement } from "drizzle-orm";
+import { saveClientProfileSql } from "../lib/clients/profile-sql";
 
 const { env, args } = await requireFixtureEnvironment();
 if (args.length !== 1) {
@@ -54,8 +57,23 @@ try {
   // UUID IDs ensure the probe never conflicts with an existing fixture or real user.
   const probe = `qa_rollback_${randomUUID()}`;
   const insert = () => sql`insert into "user"(id,name,email) values (${probe},'Rollback probe',${`${probe}@example.invalid`})`;
+  const dialect = new PgDialect();
+  const clientId = manifest.users[2].id;
+  const [shopA, shopB] = manifest.shops;
+  const profileChecks = [
+    [shopA, shopA.userId, 0, 1], // initial insert
+    [shopA, shopA.userId, 0, 0], // stale first-save loses
+    [shopA, shopA.userId, 1, 1], // current version updates
+    [shopB, shopA.userId, 0, 0], // different shop's owner is denied
+    [shopB, shopB.userId, 0, 1], // same client, separate shop profile
+  ] as const;
+  const profileQueries = profileChecks.map(([shop, owner, version, expected]) => {
+    const query = saveClientProfileSql({ creatorPageId: shop.id, userId: owner }, { clientId, version, note: shop.id, tags: ["QA"] });
+    const compiled = dialect.sqlToQuery(statement`with saved as (${query}) select 1 / case when (select count(*) from saved) = ${expected} then 1 else 0 end`);
+    return sql.query(compiled.sql, compiled.params);
+  });
   let rejected = false;
-  try { await sql.transaction([sql.query("SET LOCAL statement_timeout = '30s'"), insert(), insert()]); }
+  try { await sql.transaction([sql.query("SET LOCAL statement_timeout = '30s'"), ...profileQueries, insert(), insert()]); }
   catch (error) {
     // A network failure does not prove the database executed the rollback test.
     if (!(error && typeof error === "object" && "code" in error && error.code === "23505")) throw error;
@@ -63,7 +81,9 @@ try {
   }
   assert.ok(rejected, "Expected unique constraint failure");
   assert.equal((await sql`select id from "user" where id = ${probe}`).length, 0, "Transaction rollback failed");
+  assert.equal((await sql`select creator_page_id from client_profile where client_user_id = ${clientId} and creator_page_id = any(${[shopA.id, shopB.id]}::text[])`).length, 0, "Private profile writes did not roll back");
   console.log("PASS neon-http transaction rollback after unique constraint failure");
+  console.log("PASS private profile ownership and stale-version checks (rolled back with probe)");
   console.log("Database checks passed. Authenticated browser, storage, concurrency and restore QA remain separate.");
 } catch {
   console.error("Fixture verification failed. No success claim is made; check staging schema and fixture state. Error details are suppressed to avoid exposing connection or account data.");

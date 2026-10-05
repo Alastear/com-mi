@@ -24,7 +24,7 @@ try {
     sql.query("SET LOCAL lock_timeout = '5s'"),
     sql.query("SET LOCAL statement_timeout = '30s'"),
     // Serialize fixture changes and prevent concurrent writes from changing the checked graph.
-    sql.query('LOCK TABLE "user", creator_page, service, "order", order_item, message, media, upload_intent IN SHARE ROW EXCLUSIVE MODE'),
+    sql.query('LOCK TABLE "user", creator_page, service, "order", order_item, message, media, upload_intent, client_profile IN SHARE ROW EXCLUSIVE MODE'),
   ];
   for (const user of manifest.users) queries.push(sql`
     select 1 / case when exists(select 1 from "user" where id = ${user.id} and email <> ${user.email}) then 0 else 1 end`);
@@ -48,7 +48,8 @@ try {
       exists(select 1 from "order" where (creator_page_id = any(${shopIds}::text[]) or client_user_id = any(${userIds}::text[]) or service_id = any(${serviceIds}::text[])) and not(id = any(${orderIds}::text[]))) or
       exists(select 1 from media where owner_user_id = any(${userIds}::text[]) or order_id = any(${orderIds}::text[])) or
       exists(select 1 from upload_intent where user_id = any(${userIds}::text[]) or order_id = any(${orderIds}::text[])) or
-      exists(select 1 from message where sender_user_id = any(${userIds}::text[]) and not(order_id = any(${orderIds}::text[])))
+      exists(select 1 from message where sender_user_id = any(${userIds}::text[]) and not(order_id = any(${orderIds}::text[]))) or
+      exists(select 1 from client_profile where client_user_id = any(${userIds}::text[]) and not(creator_page_id = any(${shopIds}::text[])))
       then 0 else 1 end`);
     queries.push(sql`delete from "order" where id = any(${orderIds}::text[])`);
     queries.push(sql`delete from service where id = any(${serviceIds}::text[])`);

@@ -8,7 +8,8 @@ const received = sql`coalesce((select sum(p.amount_cents) from payment_record p 
 export function clientListSql(shopId: string, filters: ReturnType<typeof clientFilters>) {
   return sql`select u.id, u.name, count(*)::int as orders,
     sum(case when o.currency = 'THB' then ${received} else 0 end)::text as received,
-    max(o.created_at)::text as last_order
+    max(o.created_at)::text as last_order,
+    coalesce((select cp.tags from client_profile cp where cp.creator_page_id = ${shopId} and cp.client_user_id = u.id), '[]'::jsonb) as tags
     from "order" o inner join "user" u on u.id = o.client_user_id
     where o.creator_page_id = ${shopId} and u.name ilike ${filters.pattern}
     group by u.id, u.name order by max(o.created_at) desc, u.id asc

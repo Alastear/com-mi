@@ -20,7 +20,8 @@
 เตรียม `db:fixtures-check` สำหรับ owner isolation และ transaction rollback แล้ว
 พร้อม [ขั้นตอนตั้งค่า staging](STAGING-SETUP.md); ยังไม่รายงานว่า DB tests ผ่านจนกว่าจะรันจริง
 เริ่ม CRM-01 list/detail จากออเดอร์จริงแล้ว พร้อม search/pagination และ owner/capability guard
-ดู [CRM-IMPLEMENTATION.md](CRM-IMPLEMENTATION.md); ยังไม่เปิด capability และ CRM-02 ยังไม่เริ่ม
+เพิ่ม CRM-02 โน้ต/แท็กส่วนตัวและ optimistic version พร้อม migration 0028 แล้ว
+ดู [CRM-IMPLEMENTATION.md](CRM-IMPLEMENTATION.md); ยังไม่เปิด capability เพราะรอ staging QA และ FND-03 rollout
 ทำทีละชุดตามลำดับนี้ โดยคงทั้ง 13 capability เป็น planned จนผ่านเกณฑ์ของแต่ละฟีเจอร์:
 
 | ลำดับ | ชุดงานที่เริ่มได้ | ผลส่งมอบ / เกณฑ์จบ |
