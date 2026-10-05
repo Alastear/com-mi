@@ -13,6 +13,7 @@
  * ⚠️ dev/staging tool — ลบด้วย `pnpm db:seed-demo --clean`
  */
 import { neon } from "@neondatabase/serverless";
+import { requireFixtureEnvironment } from "./fixture-environment.mjs";
 
 /**
  * อีเมลของบัญชีร้านตัวอย่าง — ตั้งผ่าน DEMO_SHOP_EMAIL ได้
@@ -22,20 +23,21 @@ import { neon } from "@neondatabase/serverless";
  */
 import { creator, portfolio, services } from "@/lib/mock/data";
 
-const url = process.env.DATABASE_URL;
+const { env, args } = await requireFixtureEnvironment();
+const url = env.DATABASE_URL;
 if (!url) {
   console.error("ต้องมี DATABASE_URL");
   process.exit(1);
 }
 const sql = neon(url);
 
-const DEMO_EMAIL = process.env.DEMO_SHOP_EMAIL || "demo@com-mi.local";
+const DEMO_EMAIL = env.DEMO_SHOP_EMAIL || "demo@com-mi.local";
 
 const USER_ID = "demo_user_nongfah";
 const PAGE_ID = "demo_page_nongfah";
 const P = "demo_"; // prefix ของทุกแถวที่สคริปต์นี้สร้าง — ใช้ตอนลบ
 
-if (process.argv.includes("--clean")) {
+if (args.includes("--clean")) {
   // media/service/portfolio ผูก cascade กับ user กับ page อยู่แล้ว ลบต้นทางพอ
   await sql`delete from "user" where id = ${USER_ID}`;
   console.log("ลบร้านตัวอย่างแล้ว");

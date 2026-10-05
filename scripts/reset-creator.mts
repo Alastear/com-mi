@@ -8,14 +8,16 @@
  *    pnpm db:reset-creator <email|handle>
  */
 import { neon } from "@neondatabase/serverless";
+import { requireFixtureEnvironment } from "./fixture-environment.mjs";
 
-const target = process.argv[2];
+const { env, args } = await requireFixtureEnvironment();
+const target = args[0];
 if (!target) {
   console.error("ระบุอีเมลหรือ handle: pnpm db:reset-creator you@example.com");
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL!);
+const sql = neon(env.DATABASE_URL!);
 const key = target.toLowerCase().replace(/^@/, "");
 
 const user = (

@@ -7,8 +7,10 @@
  * ⚠️ เครื่องมือ dev เท่านั้น — ลบทิ้งด้วย `pnpm db:seed-orders --clean`
  */
 import { neon } from "@neondatabase/serverless";
+import { requireFixtureEnvironment } from "./fixture-environment.mjs";
 
-const url = process.env.DATABASE_URL;
+const { env, args } = await requireFixtureEnvironment();
+const url = env.DATABASE_URL;
 if (!url) {
   console.error("ต้องมี DATABASE_URL");
   process.exit(1);
@@ -17,19 +19,22 @@ const sql = neon(url);
 
 const PREFIX = "seed_ord_";
 
-if (process.argv.includes("--clean")) {
-  const del = await sql`delete from "order" where id like ${PREFIX + "%"} returning id`;
+if (args.includes("--clean")) {
+  const ids = Array.from({ length: 9 }, (_, i) => `${PREFIX}${String(i).padStart(2, "0")}`);
+  const del = await sql`delete from "order" where id = any(${ids}::text[])
+    and creator_page_id in (select id from creator_page where user_id = 'e2e_user_0001' and is_demo = true)
+    and client_user_id = 'e2e_user_0002' returning id`;
   console.log(`ลบออเดอร์ตัวอย่างแล้ว ${(del as unknown[]).length} รายการ`);
   process.exit(0);
 }
 
-const page = (await sql`select id from creator_page limit 1`)[0] as { id: string } | undefined;
+const page = (await sql`select id from creator_page where user_id = 'e2e_user_0001' and is_demo = true limit 1`)[0] as { id: string } | undefined;
 const client = (
-  await sql`select id from "user" where email like 'e2e-%' order by id desc limit 1`
+  await sql`select id from "user" where id = 'e2e_user_0002' and email = 'e2e-new@commi.local' limit 1`
 )[0] as { id: string } | undefined;
 const services = (await sql`
   select id, title, base_price_cents, delivery_days, revisions_included
-  from service where deleted_at is null order by sort_order limit 4
+  from service where creator_page_id = ${page?.id ?? ""} and deleted_at is null order by sort_order limit 4
 `) as { id: string; title: string; base_price_cents: number; delivery_days: number; revisions_included: number }[];
 
 if (!page || !client || services.length === 0) {

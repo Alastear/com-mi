@@ -1,5 +1,16 @@
 # FND — ผลเริ่ม implementation และวิธีทำงานต่อ
 
+## เพิ่มคำสั่ง integration check — 5 ตุลาคม 2026
+
+`pnpm db:fixtures-check <run-id> --target-env .env.staging.local --production-env .env.production.audit.local`
+พร้อมรันหลัง staging ผ่าน preflight และสร้าง fixture แล้ว ดู [คู่มือตั้งค่า](STAGING-SETUP.md)
+ตรวจ context query เดียวกับ server guard, owner/cross-shop/planned gate, order ownership
+และ rollback ของ neon-http transaction เมื่อเกิด unique constraint failure
+ยังไม่ได้รันคำสั่งนี้กับ PostgreSQL จริง จึงยังไม่ถือว่าผ่าน integration
+Tests ของ capability/environment ผ่าน 26 ข้อ; TypeScript และ lint ผ่าน
+เพิ่มการตรวจ child record ID, ไฟล์ที่ผูกกับออเดอร์ และข้อความนอกชุดก่อน cleanup
+เพื่อหยุดเมื่อการล้างอาจกระทบข้อมูลนอก manifest
+
 ปรับปรุง 4 ตุลาคม 2026 · ต่อจาก [COMING-SOON-PLAN.md](COMING-SOON-PLAN.md)
 
 ## ส่งมอบรอบแรก
@@ -51,7 +62,42 @@ target ต้องระบุ `APP_ENV=staging` (หรือ `development` �
 
 ยังไม่มีระบบดักอีเมลทดสอบ จึงให้ `EMAIL_FROM` ว่างใน staging รอบนี้; งาน OTP/email integration ต้องรอ sink หรือข้อจำกัด recipient ที่ทดสอบได้ก่อน ไม่ให้ส่งไปหาลูกค้าจริงโดยไม่ตั้งใจ
 
-เครื่องมือนี้เป็น preflight แบบเรียกเอง **ยังไม่ได้ครอบสคริปต์ seed/migrate เดิมโดยอัตโนมัติ** ห้ามรันคำสั่งเหล่านั้นกับ target ที่ยังยืนยันไม่ได้ว่าปลอดภัย เป้าหมายถัดไปของ FND-01 คือ fixture runner ที่บังคับ preflight ก่อนเชื่อมต่อ DB
+เครื่องมือนี้เป็น preflight แบบเรียกเอง; ตั้งแต่ 5 ตุลาคม 2026 สคริปต์ seed-session,
+seed-orders, seed-demo และ reset-creator บังคับใช้ preflight เดียวกันก่อนสร้าง DB client
+รวม `--clean` และการรันไฟล์โดยตรงด้วย โดยไม่อ่าน fallback จาก shell หรือ `.env.local`
+คำสั่ง migrate, storage migration และ admin ยังเป็นเครื่องมือดูแลระบบแยกต่างหาก
+ไม่ได้ครอบด้วย guard นี้ และไม่ควรถือว่าผ่าน staging โดยอัตโนมัติ
+
+```sh
+pnpm db:seed-session --target-env .env.staging.local --production-env .env.production.audit.local
+pnpm db:seed-orders --target-env .env.staging.local --production-env .env.production.audit.local
+pnpm db:clean-session --target-env .env.staging.local --production-env .env.production.audit.local
+```
+
+seed-orders เลือกเฉพาะร้าน demo ของ `e2e_user_0001`, client `e2e_user_0002`
+และ service ของร้านนั้น; cleanup จำกัด ID ชุดเดิมและเจ้าของ ไม่ลบด้วย email wildcard
+เพิ่ม `db:fixtures` แบบ run ID แล้ว มี creator 2/client 2, ภาษา TH/EN, service 2,
+order 8 ในสถานะ requested/accepted/in_progress/in_review พร้อมข้อความยาวและรายการราคา
+ยอดรับเงินทุกงานเป็นศูนย์ ไม่มี payment ปลอม ร้านเป็น demo และไม่เผยแพร่
+ไม่สร้าง session, ไม่ส่งข้อความภายนอก และยังไม่มีไฟล์จริงใน R2
+
+```sh
+pnpm db:fixtures create qa-run-01 --target-env .env.staging.local --production-env .env.production.audit.local
+pnpm db:fixtures manifest qa-run-01 --target-env .env.staging.local --production-env .env.production.audit.local
+pnpm db:fixtures clean qa-run-01 --target-env .env.staging.local --production-env .env.production.audit.local
+```
+
+manifest แสดงรายการ ID และรหัสออเดอร์แบบ deterministic โดยไม่มี token/secret
+ใช้ run ID เดิมเพื่อรันซ้ำโดยไม่ reset สถานะที่ผู้ทดสอบแก้ไปแล้ว; ใช้ run ID ใหม่เพื่อสร้างชุดใหม่
+create/clean อยู่ใน transaction และตรวจ ownership ก่อนเขียน ใช้ table locks บน staging
+เพื่อไม่ให้ข้อมูลเปลี่ยนระหว่างตรวจ จึงควรรันช่วงที่ไม่มีการทดสอบอื่นกำลังเขียนข้อมูล
+cleanup ใช้ ID ตรงจาก manifest และปฏิเสธเมื่อพบร้าน/service/order เพิ่มนอกชุดหรือ media/upload intent
+ต้องจัดการไฟล์ตาม lifecycle ก่อนล้างบัญชี เพื่อไม่ทิ้ง object ใน storage
+
+Tests offline ผ่าน 15 ข้อ, lint และ TypeScript ผ่าน; ทดสอบ CLI ที่ไม่ระบุ env แล้วหยุดก่อนเชื่อม DB
+ยังไม่ได้พิสูจน์ transaction/rollback/concurrency บน PostgreSQL หรือรัน seed/reset จริง
+เพราะยังไม่มีหลักฐาน staging isolation งานต่อไปคือ integration ดังกล่าว ตามด้วย session
+สำหรับ QA สองบัญชีและไฟล์จำลองผ่าน upload lifecycle จริง
 
 ### ผลตรวจเครื่องที่ใช้พัฒนาในรอบนี้
 

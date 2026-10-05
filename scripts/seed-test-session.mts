@@ -15,13 +15,16 @@
  */
 import { neon } from "@neondatabase/serverless";
 import { makeSignature } from "better-auth/crypto";
+import { requireFixtureEnvironment } from "./fixture-environment.mjs";
+
+const { env, args } = await requireFixtureEnvironment();
 
 /** `--no-handle` จำลองคนที่เพิ่งล็อกอิน Google ครั้งแรก (ยังไม่ได้ทำ onboarding) */
-const noHandle = process.argv.includes("--no-handle");
+const noHandle = args.includes("--no-handle");
 const TEST_EMAIL = noHandle ? "e2e-new@commi.local" : "e2e-test@commi.local";
 
-const url = process.env.DATABASE_URL;
-const secret = process.env.BETTER_AUTH_SECRET;
+const url = env.DATABASE_URL;
+const secret = env.BETTER_AUTH_SECRET;
 if (!url || !secret) {
   console.error("ต้องมี DATABASE_URL และ BETTER_AUTH_SECRET");
   process.exit(1);
@@ -29,8 +32,8 @@ if (!url || !secret) {
 
 const sql = neon(url);
 
-if (process.argv.includes("--clean")) {
-  await sql`delete from "user" where email like 'e2e-%@commi.local'`;
+if (args.includes("--clean")) {
+  await sql`delete from "user" where (id = 'e2e_user_0001' and email = 'e2e-test@commi.local') or (id = 'e2e_user_0002' and email = 'e2e-new@commi.local')`;
   console.log("ลบผู้ใช้ทดสอบแล้ว");
   process.exit(0);
 }
@@ -61,7 +64,7 @@ await sql`
  */
 const demoed = await sql`
   update creator_page set is_demo = true
-  where user_id in (select id from "user" where email like 'e2e-%@commi.local')
+  where user_id in (select id from "user" where (id = 'e2e_user_0001' and email = 'e2e-test@commi.local') or (id = 'e2e_user_0002' and email = 'e2e-new@commi.local'))
     and is_demo = false
   returning id
 `;

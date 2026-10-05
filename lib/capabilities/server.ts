@@ -1,7 +1,7 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
 import { requireSession } from "@/lib/auth-guard";
-import { getDb, schema } from "@/lib/db";
+import { getDb } from "@/lib/db";
+import { loadCapabilityContext } from "./context";
 import { authorizeCapability } from "./authorize";
 import type { CapabilityId } from "./registry";
 import type { CapabilityOperation } from "./policy";
@@ -18,28 +18,6 @@ export async function requireCapability(
   operation: CapabilityOperation = "write",
 ) {
   const session = await requireSession();
-  await authorizeCapability(capability, operation, async () => {
-    const [row] = await getDb().select({
-      ownerUserId: schema.creatorPage.userId,
-      plan: schema.user.plan,
-      planUntil: schema.user.planUntil,
-      userSuspendedAt: schema.user.suspendedAt,
-      shopSuspendedAt: schema.creatorPage.suspendedAt,
-    }).from(schema.creatorPage)
-      .innerJoin(schema.user, eq(schema.user.id, schema.creatorPage.userId))
-      .where(and(eq(schema.creatorPage.id, creatorPageId), eq(schema.creatorPage.userId, session.user.id)))
-      .limit(1);
-    return row ? {
-      userId: session.user.id,
-      ownerUserId: row.ownerUserId,
-      plan: row.plan,
-      planUntil: row.planUntil,
-      userSuspended: row.userSuspendedAt !== null,
-      shopSuspended: row.shopSuspendedAt !== null,
-      // FND-03 will supply a private, audited rollout store. Default is deny.
-      inInternalCohort: false,
-      inBetaCohort: false,
-    } : null;
-  });
+  await authorizeCapability(capability, operation, () => loadCapabilityContext(getDb(), session.user.id, creatorPageId));
   return { userId: session.user.id, creatorPageId };
 }

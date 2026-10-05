@@ -5,6 +5,52 @@
 
 ความคืบหน้า: [ผล implementation รอบพื้นฐาน](FOUNDATION-IMPLEMENTATION.md) — registry/UI mapping และ server guard พร้อม unit tests; FND-01 ยังไม่ผ่าน staging และ FND-03 ยังไม่ทำ private rollout store
 
+### เตรียมเริ่มงาน — ตรวจซ้ำ 5 ตุลาคม 2026
+
+ฐานโค้ดล่าสุด `91171de` เพิ่มไฟล์ตัวอย่างมีลายน้ำ การอนุมัติตัวอย่างก่อนรับเงินงวดสุดท้าย
+ช่องทางแจ้งโอนธนาคาร/Wallet และกระดิ่งร่วมหน้าแรกแล้ว รายละเอียดใน
+[ผลแก้ไขการใช้งาน](latest-usage-fixes.md) งานเหล่านี้ไม่ถือว่า REL หรือ milestone เสร็จ
+เพราะ `notify()` ยังเป็น best effort และยังไม่มี outbox/worker ที่กู้การส่งค้างได้
+
+**งานแรกที่หยิบทำ: FND-01 — fixture runner ที่บังคับตรวจสภาพแวดล้อมก่อนเชื่อมต่อ**
+ความคืบหน้า 5 ตุลาคม: เพิ่ม `loadFixtureEnvironment` และครอบ seed/reset เดิมแล้ว
+รวม cleanup; tests ป้องกัน missing config, production/shared resources และ secret leakage ผ่าน
+เพิ่ม fixture runner แบบ run ID แล้วสำหรับสองร้าน/สองลูกค้าและออเดอร์ 8 รายการ
+พร้อม manifest/create/clean; ยังไม่ผ่าน PostgreSQL integration และยังไม่มี session/ไฟล์จำลอง
+เตรียม `db:fixtures-check` สำหรับ owner isolation และ transaction rollback แล้ว
+พร้อม [ขั้นตอนตั้งค่า staging](STAGING-SETUP.md); ยังไม่รายงานว่า DB tests ผ่านจนกว่าจะรันจริง
+ทำทีละชุดตามลำดับนี้ โดยคงทั้ง 13 capability เป็น planned จนผ่านเกณฑ์ของแต่ละฟีเจอร์:
+
+| ลำดับ | ชุดงานที่เริ่มได้ | ผลส่งมอบ / เกณฑ์จบ |
+|---|---|---|
+| 1 | FND-01: แยก preflight สำหรับ fixture และตรวจสคริปต์ seed เดิม | ต้องระบุ target และ production baseline ชัดเจน; ไม่มี fallback env; ถ้าไม่ผ่านต้องหยุดก่อนสร้าง DB client; ทดสอบ missing config, resource ซ้ำ และ target production |
+| 2 | FND-01: fixture แบบรันซ้ำและล้างเฉพาะชุดได้ | creator 2 / client 2, ร้าน demo, TH/EN, งานหลายสถานะ; มี run ID และรายการ ID ที่สร้าง; ไม่ลบด้วย email wildcard; ไม่ส่งอีเมลหรือ notification ภายนอก |
+| 3 | FND-01/02: staging integration และแกนงานเดิม | พิสูจน์สิทธิ์ข้ามร้าน, เงิน/ไฟล์, preview ใหม่ล้าง approval, payment retry และ unread; บันทึกผล restore DB/ไฟล์ก่อนปิด FND-01 |
+| 4 | FND-03: private rollout store | spec → additive schema → server loader → admin mutation/audit; ทดสอบ cohort removal, pause, downgrade และ stale tab; ไม่ส่ง cohort list ออก client |
+| 5 | REL-01: atomic event/outbox prototype | เขียน state และ event ใน transaction เดียวบน neon-http; พิสูจน์ rollback, duplicate key และ concurrent write บน staging ก่อนย้าย action จริง |
+| 6 | REL-02/03 → DSC; CRM → ANL/EXP | เริ่มตาม dependency และเกณฑ์ตรวจรับเดิม ไม่เปิดหลายงานใหญ่พร้อมกัน |
+
+**สถานะสภาพแวดล้อมที่ตรวจได้:** `node --import tsx scripts/check-beta-readiness.mts .env.local`
+ผ่าน 16/32 ข้อ (offline, exit 1 ตามที่ควรเป็น) มี DB/R2/auth config แต่ยังขาดการระบุ
+non-production, noindex, origin ที่ผ่านเงื่อนไข และการปิด outbound email; ยังไม่มี
+production baseline ที่ยืนยันเพื่อเทียบ DB/secret/bucket จึงยังพิสูจน์ isolation ไม่ได้
+ผลนี้ไม่ได้แปลว่าค่า production ผิด แต่แปลว่าไฟล์นี้ยังใช้รับรอง staging ไม่ได้
+
+DB ที่ผู้ใช้เพิ่มให้เชื่อมต่อและรัน migrations 0026–0027 แล้ว แต่การเชื่อมต่อสำเร็จ
+ไม่ใช่หลักฐานว่าเป็น staging และไม่ควร seed ข้อมูลจำลองลงเป้าหมายนี้จนกว่าจะตรวจแยกได้
+ยังไม่ได้สร้าง fixture หรือรัน integration สองบัญชีในรอบเตรียมงานนี้
+
+สิ่งที่ต้องเตรียมก่อนข้อ 2–3: `.env.staging.local` ที่ครบในตัวเอง และ
+`.env.production.audit.local` ที่เจ้าของยืนยันว่าเป็น baseline จริง โดยเก็บนอก Git
+ตาม [เงื่อนไข staging](FOUNDATION-IMPLEMENTATION.md#ตรวจความพร้อมของ-staging)
+จากนั้นรัน `pnpm beta:check .env.staging.local .env.production.audit.local`
+และตรวจ permission/restore ของ resource จริง การเขียน preflight, pure tests และ spec
+เริ่มได้ก่อนมี credentials เหล่านี้ ส่วน worker cadence/งบค่อยตัดสินก่อนเปิด sender ภายนอก
+
+การตรวจรับแต่ละชุด: unit tests ตาม invariant, lint/typecheck/build และ staging tests
+เมื่อมี DB/ไฟล์เกี่ยวข้อง พร้อมระบุเคสที่ยังไม่ทดสอบ ทุก push เข้า main จะกระตุ้น Vercel
+จึงต้องให้โค้ดที่ยังไม่พร้อมอยู่หลัง server capability guard และไม่เอาป้าย soon ออกล่วงหน้า
+
 แผนนี้ต่อจาก [แผน Beta และเตรียมขาย](../PLAN.md) และ [แผน UI / responsive](HOMEPAGE-ART-DIRECTION.md) ใช้แทนลำดับเก่าใน [roadmap เดิม](05-roadmap.md) เฉพาะฟีเจอร์ที่ระบุด้านล่าง วันที่และระยะเวลาเป็นประมาณการเพื่อจัดคิว ไม่ใช่กำหนดส่งที่ประกาศกับผู้ใช้
 
 ## 1. ข้อเสนอหลัก
@@ -267,7 +313,7 @@
 
 ## 6. Backlog พร้อมหยิบไปพัฒนา
 
-ทุกแถวด้านล่างยัง **ไม่ได้เริ่ม implementation**; เจ้าของงานเสนอเป็นบทบาท ไม่ใช่การมอบหมายบุคคลหรือการอนุมัติจ้างทีม ควรแยก PR ให้ตรวจได้โดยไม่รอทั้งรุ่นเสร็จ
+FND-01 มี offline preflight แล้วแต่ยังไม่ผ่าน staging; FND-02 มี registry, mapping และ server guard พร้อม unit tests แต่รอ integration ส่วน FND-03 และฟีเจอร์ใหม่ยังไม่เริ่ม implementation เจ้าของงานเสนอเป็นบทบาท ไม่ใช่การมอบหมายบุคคลหรือการอนุมัติจ้างทีม ควรแยกชุดเปลี่ยนแปลงให้ตรวจได้โดยไม่รอทั้งรุ่นเสร็จ
 
 | งาน | ผลส่งมอบที่ตรวจได้ | พึ่งพา | ผู้รับผิดชอบเสนอ |
 |---|---|---|---|
@@ -437,6 +483,8 @@
 - [x] แยก 13 ขอบเขต พร้อมสถานะปัจจุบัน MVP/data/UI/QA และสิ่งที่ยังไม่รวม
 - [x] จัด dependency, backlog, ประมาณการ, rollout/rollback และ decision log
 - [x] เชื่อมแผนนี้จาก PLAN.md / README / roadmap เดิม
-- [ ] Implementation ของ FND/REL/CRM และฟีเจอร์ใหม่ — ยังไม่เริ่มในรอบเอกสารนี้
+- [x] เริ่มพื้นฐาน FND: registry, UI mapping, server guard และ offline preflight (ยังไม่ผ่าน staging)
+- [x] ตรวจสถานะโค้ดและจัดชุดเริ่มงาน FND-01 ใหม่เมื่อ 5 ตุลาคม 2026
+- [ ] ปิดงาน FND และเริ่ม REL/CRM ตาม dependency พร้อมหลักฐาน integration
 
 แหล่งภายนอกตรวจวันที่ 4 ตุลาคม 2026 และอ้างไว้ตรงข้อที่ใช้: MDN Push API, Discord Rate Limits, Vercel Managing Cron Jobs ต้องตรวจ compatibility/ข้อจำกัดบริการซ้ำเมื่อเริ่ม integration จริง ส่วน schema/ชื่อโมดูลใหม่ทั้งหมดในเอกสารเป็นแบบเสนอ ไม่ใช่ตารางหรือ API ที่สร้างแล้ว
