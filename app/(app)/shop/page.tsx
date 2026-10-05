@@ -32,6 +32,7 @@ export default async function ShopPage() {
         slotsTotal: shop.slotsTotal,
         tos: shop.tos,
         isPublished: shop.isPublished,
+        socials: shop.socials,
       }}
     />
   );

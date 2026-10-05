@@ -404,10 +404,10 @@ export function DeliveryPanel({
   /** `action` — ปุ่มข้างไฟล์ของครีเอเตอร์: ลบทิ้ง (ไฟล์ค้าง) หรือเอาออกจากรอบ (รอบที่ยังไม่ปล่อย) */
   function fileRow(f: DeliveryFileRow, canDownload: boolean, action: "remove" | "takeOut" | null = null) {
     return (
-      <li key={f.mediaId} className="flex items-center gap-3 rounded-lg border p-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{f.filename || f.mediaId}</p>
-          <p className="tabular text-xs text-muted-foreground">{formatBytes(f.bytes)}</p>
+      <li key={f.mediaId} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-3">
+        <div className={cn("min-w-0", canDownload && "col-span-2")}>
+          <p className="text-sm font-medium leading-relaxed [overflow-wrap:anywhere]">{f.filename || f.mediaId}</p>
+          <p className="mt-1 whitespace-nowrap text-xs tabular-nums text-muted-foreground">{formatBytes(f.bytes)}</p>
         </div>
         {canDownload ? (
           <>
@@ -415,6 +415,7 @@ export function DeliveryPanel({
           <Button
             size="sm"
             variant="outline"
+            className="col-span-2 min-h-11 w-full"
             disabled={downloading === f.mediaId}
             onClick={() => void download(f.mediaId)}
           >
@@ -531,7 +532,7 @@ export function DeliveryPanel({
         ปุ่มเตรียม และปุ่มปล่อย ทันทีที่ปล่อยรอบแรก — พอลูกค้าขอแก้งาน
         ออเดอร์ก็เดินต่อไม่ได้อีกเลย และไฟล์ที่อัปหลังจากนั้นหายเงียบ
       */}
-      {viewer === "creator" ? (
+      {viewer === "creator" && (uploadable || openRound || loose.length > 0 || !releasedRound) ? (
         <>
           <Separator />
           {uploadable ? (
@@ -562,9 +563,9 @@ export function DeliveryPanel({
                 <span className="text-xs text-muted-foreground">{t.delivery.uploadHint}</span>
               </label>
             </>
-          ) : (
+          ) : !releasedRound || roundFiles.length > 0 || loose.length > 0 ? (
             <p className="text-sm text-muted-foreground">{t.delivery.wrongState}</p>
-          )}
+          ) : null}
 
           {/* เตรียมรอบใหม่ได้เมื่อมีไฟล์ค้างและยังไม่มีรอบไหนเปิดอยู่ */}
           {plan?.mode === "prepare" ? (

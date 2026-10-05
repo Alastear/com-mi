@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { requireCreator } from "@/lib/auth-guard";
 import { importGoogleAvatar } from "@/lib/media/google-avatar";
+import { SOCIAL_PLATFORMS, parseSocialLink, socialKey } from "@/lib/shop/socials";
 
 const SHOP_STATUSES = ["open", "closed", "waitlist", "vacation"] as const;
 
@@ -33,10 +34,24 @@ export async function saveShop(
   if (!parsed.success) return { ok: false, error: "invalid" };
   const v = parsed.data;
 
+  const links: Array<{ platform: string; url: string }> = [];
+  for (const platform of SOCIAL_PLATFORMS) {
+    const value = formData.get(`social_${platform.key}`);
+    if (typeof value !== "string") return { ok: false, error: "invalid_social" };
+    const url = parseSocialLink(platform, value);
+    if (url === null) return { ok: false, error: "invalid_social" };
+    if (url) links.push({ platform: platform.label, url });
+  }
+  const [existing] = await getDb().select({ socials: schema.creatorPage.socials })
+    .from(schema.creatorPage).where(eq(schema.creatorPage.userId, user.id)).limit(1);
+  const preserved = (existing?.socials ?? []).filter(link =>
+    !SOCIAL_PLATFORMS.some(platform => platform.key === socialKey(link.platform)));
+
   await getDb()
     .update(schema.creatorPage)
     .set({
       displayName: v.displayName,
+      socials: [...preserved, ...links],
       tagline: v.tagline,
       about: v.about,
       status: v.status,

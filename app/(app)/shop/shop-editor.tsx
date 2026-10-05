@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { CopyLinkButton } from "@/components/copy-link-button";
-import { useDict } from "@/lib/i18n/client";
+import { useLocale } from "@/lib/i18n/client";
+import { SOCIAL_PLATFORMS, socialKey } from "@/lib/shop/socials";
 import { shopHref } from "@/lib/routes";
 import { shopUrl, shopUrlDisplay } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -45,9 +46,10 @@ export function ShopEditor({
     slotsTotal: number;
     tos: string[];
     isPublished: boolean;
+    socials: Array<{ platform: string; url: string }>;
   };
 }) {
-  const t = useDict();
+  const { t, locale } = useLocale();
   const [state, action, saving] = useActionState<SaveShopResult, FormData>(saveShop, undefined);
   const [status, setStatus] = useState(shop.status);
   const [publishing, startPublish] = useTransition();
@@ -168,6 +170,20 @@ export function ShopEditor({
       </Card>
 
       <form action={action} className="mt-5 space-y-5">
+        <Card className="gap-4 p-5">
+          <div>
+            <h2 className="font-medium">{locale === "th" ? "ช่องทางติดต่อและโซเชียล" : "Contact & social links"}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{locale === "th" ? "ใส่ลิงก์โปรไฟล์หรือคำเชิญ Discord ลูกค้ากดเปิดจากหน้าร้านได้ เว้นว่างเพื่อนำช่องทางออก แล้วกดบันทึกด้านล่าง" : "Add profile links or a Discord invite for visitors to open from your shop. Clear a field to remove it, then save below."}</p>
+          </div>
+          {SOCIAL_PLATFORMS.map(platform => (
+            <div key={platform.key} className="space-y-2">
+              <Label htmlFor={`social_${platform.key}`}>{platform.label}</Label>
+              <Input id={`social_${platform.key}`} name={`social_${platform.key}`} type="url" inputMode="url" maxLength={500}
+                placeholder={platform.placeholder} defaultValue={shop.socials.find(link => socialKey(link.platform) === platform.key)?.url ?? ""} />
+            </div>
+          ))}
+          {state && !state.ok && state.error === "invalid_social" ? <p role="alert" className="text-sm text-destructive">{locale === "th" ? "กรุณาใส่ลิงก์ https:// ของแพลตฟอร์มให้ตรงช่อง สำหรับ Discord ใช้ลิงก์คำเชิญหรือโปรไฟล์" : "Use an https:// link matching each platform. For Discord, use an invite or profile link."}</p> : null}
+        </Card>
         <Card className="gap-4 p-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Clock, Eye } from "lucide-react";
+import { ArrowRight, Clock, Eye, ExternalLink } from "lucide-react";
+import { isSafeSocialUrl } from "@/lib/shop/socials";
 import { ArtAvatar, ArtImage } from "@/components/art-image";
 import { ArtMedia } from "@/components/art-media";
 import { ShopStatusPill } from "@/components/status-pill";
@@ -161,15 +162,16 @@ export default async function CreatorPage({ params }: Props) {
 
         {shop.socials.length > 0 ? (
           <ul className="mt-4 flex flex-wrap gap-2">
-            {shop.socials.map((s) => (
+            {shop.socials.filter(s => isSafeSocialUrl(s.url)).map((s) => (
               <li key={s.platform}>
                 <a
                   href={s.url}
                   target="_blank"
                   rel="noreferrer noopener nofollow"
-                  className="inline-block rounded-md border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {s.platform}
+                  <ExternalLink className="size-3.5 text-muted-foreground" aria-hidden="true" />
                 </a>
               </li>
             ))}
