@@ -12,3 +12,4 @@ export * from "./app";
 export * from "./order";
 export * from "./notification";
 export * from "./crm";
+export * from "./rollout";

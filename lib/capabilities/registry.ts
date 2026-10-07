@@ -21,7 +21,7 @@ export const CAPABILITIES = {
   listings: { roadmap: "LST", implemented: false, status: "planned", entitlement: null },
   auctions: { roadmap: "AUC", implemented: false, status: "planned", entitlement: "auctions" },
   waitlist: { roadmap: "WTL", implemented: false, status: "planned", entitlement: "waitlist_broadcast" },
-  crm: { roadmap: "CRM", implemented: false, status: "planned", entitlement: "crm" },
+  crm: { roadmap: "CRM", implemented: true, status: "planned", entitlement: "crm" },
   analytics: { roadmap: "ANL", implemented: false, status: "planned", entitlement: "analytics" },
   csv_export: { roadmap: "EXP", implemented: false, status: "planned", entitlement: "export" },
 } as const satisfies Record<string, CapabilityDefinition>;

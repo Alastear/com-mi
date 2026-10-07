@@ -1,4 +1,7 @@
 import { count } from "drizzle-orm";
+import Link from "next/link";
+import { dynamicHref } from "@/lib/routes";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth-guard";
@@ -41,6 +44,7 @@ export default async function AdminPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:py-8">
       <h1 className="text-xl font-semibold tracking-tight">{t.overview}</h1>
+      <Button asChild variant="outline" className="mt-4"><Link href={dynamicHref("/admin/rollouts")}>CRM rollout</Link></Button>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-4">
         {stats.map((s) => (
@@ -76,6 +80,7 @@ export default async function AdminPage() {
                 <tr key={r.id} className="align-top">
                   <td className="p-3">
                     <p className="font-medium">{r.displayName}</p>
+                    <p className="mt-1 break-all text-xs text-muted-foreground">ID: {r.id}</p>
                     <p className="text-xs text-muted-foreground">
                       {r.user.handle ? `/@${r.user.handle}` : "—"}
                     </p>

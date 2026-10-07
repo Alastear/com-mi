@@ -16,8 +16,8 @@
 
 ## สถานะเปิดใช้งาน
 
-ยังคง `crm` เป็น `implemented: false / planned` จนกว่าจะตรวจรับทั้งฟีเจอร์
-เพิ่ม private notes/tags แล้ว แต่ยังขาด private rollout store และหลักฐาน staging QA ครบ
+ยังคง `crm` เป็น `implemented: true / planned` โดยไม่มี rollout record จะไม่เปิดใช้งาน
+เพิ่ม private notes/tags แล้ว แต่มี private rollout store แล้ว แต่ยังขาดหลักฐาน staging QA ครบ
 หน้า clients จึงอธิบายว่ายังไม่เปิด และเชื่อมกลับออเดอร์; เข้าหน้า detail ตรงไม่ได้
 ไม่มี role bypass หรือ env switch สำหรับเปิดข้อมูลโดยข้าม guard
 
@@ -30,7 +30,7 @@
   ยังไม่ได้รันเพราะ staging ยังไม่พร้อม
 - ต้องเพิ่มเคสเงินจริงหลาย payment/void/reject และตรวจยอดกับ ledger บน staging
 - ต้องตรวจ query plan ด้วยข้อมูลขนาดเหมาะสมก่อนตัดสินใจเพิ่ม index; ใช้ index เดิมก่อน
-- ยังต้อง UI QA สองบัญชี/มือถือ/ธีม/คีย์บอร์ด และ FND-03 rollout
+- ยังต้อง UI QA สองบัญชี/มือถือ/ธีม/คีย์บอร์ด และการตรวจรับ FND-03 rollout
 
 ## CRM-02 — โน้ตและแท็ก
 

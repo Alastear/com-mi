@@ -3,7 +3,7 @@
 จัดทำ: 4 ตุลาคม 2026 · ตรวจจาก source ณ commit `0ddb97e`
 สถานะ: **เริ่ม FND แล้ว — ยังไม่ได้เปิดใช้ฟีเจอร์ทั้ง 13 ขอบเขต**
 
-ความคืบหน้า: [ผล implementation รอบพื้นฐาน](FOUNDATION-IMPLEMENTATION.md) — registry/UI mapping และ server guard พร้อม unit tests; FND-01 ยังไม่ผ่าน staging และ FND-03 ยังไม่ทำ private rollout store
+ความคืบหน้า: [ผล implementation รอบพื้นฐาน](FOUNDATION-IMPLEMENTATION.md) — registry/UI mapping และ server guard พร้อม unit tests; FND-01 ยังไม่ผ่าน staging และ FND-03 มี private rollout store/admin/audit แล้ว รอ staging QA (ดู ROLLOUT-IMPLEMENTATION.md)
 
 ### เตรียมเริ่มงาน — ตรวจซ้ำ 5 ตุลาคม 2026
 
@@ -21,7 +21,7 @@
 พร้อม [ขั้นตอนตั้งค่า staging](STAGING-SETUP.md); ยังไม่รายงานว่า DB tests ผ่านจนกว่าจะรันจริง
 เริ่ม CRM-01 list/detail จากออเดอร์จริงแล้ว พร้อม search/pagination และ owner/capability guard
 เพิ่ม CRM-02 โน้ต/แท็กส่วนตัวและ optimistic version พร้อม migration 0028 แล้ว
-ดู [CRM-IMPLEMENTATION.md](CRM-IMPLEMENTATION.md); ยังไม่เปิด capability เพราะรอ staging QA และ FND-03 rollout
+ดู [CRM-IMPLEMENTATION.md](CRM-IMPLEMENTATION.md); ยังไม่เปิดใช้งานจริงเพราะรอ staging QA; FND-03 มีโค้ด rollout แล้ว
 ทำทีละชุดตามลำดับนี้ โดยคงทั้ง 13 capability เป็น planned จนผ่านเกณฑ์ของแต่ละฟีเจอร์:
 
 | ลำดับ | ชุดงานที่เริ่มได้ | ผลส่งมอบ / เกณฑ์จบ |
@@ -316,7 +316,7 @@ DB ที่ผู้ใช้เพิ่มให้เชื่อมต่�
 
 ## 6. Backlog พร้อมหยิบไปพัฒนา
 
-FND-01 มี offline preflight แล้วแต่ยังไม่ผ่าน staging; FND-02 มี registry, mapping และ server guard พร้อม unit tests แต่รอ integration ส่วน FND-03 และฟีเจอร์ใหม่ยังไม่เริ่ม implementation เจ้าของงานเสนอเป็นบทบาท ไม่ใช่การมอบหมายบุคคลหรือการอนุมัติจ้างทีม ควรแยกชุดเปลี่ยนแปลงให้ตรวจได้โดยไม่รอทั้งรุ่นเสร็จ
+FND-01 มี offline preflight แล้วแต่ยังไม่ผ่าน staging; FND-02 มี registry, mapping และ server guard พร้อม unit tests แต่รอ integration ส่วน FND-03 และ CRM เริ่ม implementation แล้วแต่ยังไม่ผ่าน staging; ฟีเจอร์อื่นยังไม่เริ่ม เจ้าของงานเสนอเป็นบทบาท ไม่ใช่การมอบหมายบุคคลหรือการอนุมัติจ้างทีม ควรแยกชุดเปลี่ยนแปลงให้ตรวจได้โดยไม่รอทั้งรุ่นเสร็จ
 
 | งาน | ผลส่งมอบที่ตรวจได้ | พึ่งพา | ผู้รับผิดชอบเสนอ |
 |---|---|---|---|

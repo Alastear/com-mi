@@ -1,5 +1,9 @@
 # FND — ผลเริ่ม implementation และวิธีทำงานต่อ
 
+อัปเดต 7 ตุลาคม 2026: เพิ่ม FND-03 private store, admin controls และ audit แล้ว
+ดู [สถานะ rollout ล่าสุด](ROLLOUT-IMPLEMENTATION.md) โค้ด CRM เป็น implemented=true/planned
+แต่ยังไม่มีการเปิดใช้จริง ส่วนรายละเอียดรอบแรกด้านล่างเป็นประวัติก่อนการเปลี่ยนแปลงนี้
+
 ## เพิ่มคำสั่ง integration check — 5 ตุลาคม 2026
 
 `pnpm db:fixtures-check <run-id> --target-env .env.staging.local --production-env .env.production.audit.local`
