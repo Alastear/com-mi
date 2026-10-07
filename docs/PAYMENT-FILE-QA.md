@@ -25,7 +25,9 @@
 
 พบ timeout ในรอบอัปโหลดภาพตัวอย่างครั้งแรก (ไม่มีแถว wip ภายใน 60 วินาที)
 รอบถัดไปเพิ่ม diagnostic และรอ toast สำเร็จแล้วผ่านทุกขั้น โดยไม่ได้แก้โค้ดแอป
-ยังไม่ทราบสาเหตุ จึงไม่ถือว่าแก้ปัญหา upload intermittent แล้ว ต้องติดตาม retry/network failure
+ตรวจต่อพบ hydration race ในชุดทดสอบและเพิ่มการป้องกัน/กู้คืนในแอปแล้ว
+fault injection ส่ง PUT ล้มและคำตอบ registration หายหลัง commit ผ่าน ดู [UPLOAD-RECOVERY.md](UPLOAD-RECOVERY.md)
+ยังไม่มี trace ของเหตุการณ์แรก จึงไม่อ้างว่าทุก timeout มาจากสาเหตุเดียวกัน
 
 ## Cleanup
 

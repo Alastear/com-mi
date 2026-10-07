@@ -13,6 +13,18 @@ import {
 
 const HOUR = 60 * 60 * 1000;
 
+it("a hung response returns unconfirmed without deleting an upload that later commits", async () => {
+  let finish!: (value: RegisterCallResult) => void;
+  let cancels=0; let calls=0;
+  const result=await registerWithRetry({
+    call:()=>{calls++;return new Promise<RegisterCallResult>(resolve=>{finish=resolve;});},
+    now:Date.now,sleep:async()=>{},isOnline:()=>true,waitOnline:async()=>{},
+    expiresAt:Date.now()+HOUR,onHardFailure:()=>{cancels++;},callTimeoutMs:5,
+  });
+  assert.deepEqual(result,{ok:false,error:"unconfirmed"}); assert.equal(calls,1); assert.equal(cancels,0);
+  finish({ok:true}); await Promise.resolve(); assert.equal(cancels,0);
+});
+
 /** จำลองนาฬิกา — sleep กับ waitOnline แค่เลื่อนเวลา ไม่ได้รอจริง */
 function harness(opts: {
   answers: (attempt: number, now: number) => RegisterCallResult | "throw";

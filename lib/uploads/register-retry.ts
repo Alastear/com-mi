@@ -11,6 +11,7 @@
  */
 
 import { retryDelayMs } from "./errors";
+import { settleWithin } from "./settle-within";
 
 /**
  * คำขอที่ถูก claim ไว้นานเกินนี้แล้วยังไม่มีแถว `media` = การเรียกที่ถือไว้ตายไปแล้ว
@@ -106,6 +107,8 @@ export async function registerWithRetry<R extends RegisterCallResult>(deps: {
   /** เรียกเฉพาะเมื่อล้มถาวร — ผู้เรียกใช้คืนพื้นที่ที่จองไว้ */
   onHardFailure: () => void;
   onStatus?: (s: RegisterStatus) => void;
+  /** A lost/hung response must leave a recoverable intent, not a spinning UI forever. */
+  callTimeoutMs?: number;
 }): Promise<R | Unconfirmed> {
   const started = deps.now();
   let offlineMs = 0;
@@ -115,7 +118,9 @@ export async function registerWithRetry<R extends RegisterCallResult>(deps: {
     let verdict: "done" | "retry" | "hard";
     let res: R | null = null;
     try {
-      res = await deps.call();
+      const settled = await settleWithin(deps.call, deps.callTimeoutMs ?? 60_000);
+      if (!settled.done) return { ok: false, error: "unconfirmed" };
+      res = settled.value;
       verdict = classifyRegisterResult(res);
     } catch {
       /**

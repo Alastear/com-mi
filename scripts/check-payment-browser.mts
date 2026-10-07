@@ -41,6 +41,23 @@ async function pending(amount: number, method: string) {
 try {
   await db`update "order" set deposit_cents=30000 where id=${order.id}`;
   const owner = await pageFor(0); const client = await pageFor(2); const other = await pageFor(1);
+  const injectFaults = process.env.QA_UPLOAD_FAULTS === "1";
+  let droppedPart = false; let heldRegistration = false; let releaseRegistration: (() => void) | undefined;
+  if (injectFaults) {
+    await owner.route("https://*.r2.cloudflarestorage.com/**", async (route: { request: () => { method: () => string }; abort: () => Promise<void>; continue: () => Promise<void> }) => {
+      if (!droppedPart && route.request().method()==="PUT") { droppedPart=true; await route.abort(); }
+      else await route.continue();
+    });
+    await owner.route(`${origin}/**`, async (route: { request: () => { method: () => string; postData: () => string | null }; fetch: () => Promise<unknown>; abort: () => Promise<void>; continue: () => Promise<void> }) => {
+      const request=route.request(); const body=request.postData() ?? "";
+      if (!heldRegistration && request.method()==="POST" && body.includes('"intentId"') && body.includes('"parts"')) {
+        heldRegistration=true;
+        await route.fetch(); // Let the server commit; simulate its response never reaching the browser.
+        await new Promise<void>(resolve=>{releaseRegistration=resolve;});
+        await route.abort();
+      } else await route.continue();
+    });
+  }
   owner.on("console", (message: { type: () => string; text: () => string }) => { if(message.type()==="error") console.log("Browser error:",message.text().replace(/https?:\/\/\S+/g,"[URL]").slice(0,350)); });
   owner.on("response", (response: { status: () => number; url: () => string }) => { if(response.status()>=400) console.log("HTTP failure:",response.status(),new URL(response.url()).hostname); });
   const url = `${origin}/orders/${order.code}`;
@@ -85,15 +102,32 @@ try {
   // Real private upload -> watermarked preview -> client approval -> payment -> release -> download.
   await db`update "order" set status='in_review' where id=${order.id}`;
   await owner.reload();
+  if(injectFaults) {
+    const beforeHydration = await browser.newContext({javaScriptEnabled:false});
+    await beforeHydration.addCookies(await owner.context().cookies());
+    const staticPage = await beforeHydration.newPage(); await staticPage.goto(url);
+    await expect(staticPage.locator('#work-previews input[type="file"]')).toBeDisabled();
+    await beforeHydration.close(); console.log("PASS server-rendered upload input stays disabled until hydration");
+  }
   const png = Buffer.from(await owner.evaluate(() => {
     const canvas = document.createElement("canvas"); canvas.width=600; canvas.height=400;
     const ctx=canvas.getContext("2d")!; ctx.fillStyle="#d9c7ff"; ctx.fillRect(0,0,600,400);
     ctx.fillStyle="#34154a"; ctx.font="40px sans-serif"; ctx.fillText("QA TEST ART",100,200);
     return canvas.toDataURL("image/png").split(",")[1];
   }), "base64");
+  // setInputFiles itself can target a disabled, unhydrated input and lose the change event.
+  await expect(owner.locator('#work-previews input[type="file"]')).toBeEnabled();
   await owner.locator('#work-previews input[type="file"]').setInputFiles({ name:"qa-preview.png", mimeType:"image/png", buffer:png });
+  if(injectFaults) {
+    await expect(owner.getByRole("button",{name:"Retry saving (no re-upload)",exact:true})).toBeVisible({timeout:75000});
+    assert.equal(droppedPart,true); assert.equal(heldRegistration,true); assert.ok(releaseRegistration);
+    assert.equal((await db`select count(*)::int as n from media where order_id=${order.id} and kind='wip'`)[0].n,1);
+    releaseRegistration();
+    await owner.getByRole("button",{name:"Retry saving (no re-upload)",exact:true}).click();
+  }
   await expect(owner.getByText("Watermarked preview sent",{exact:true})).toBeVisible({timeout:60000});
   await expect.poll(async () => (await db`select count(*)::int as n from media where order_id=${order.id} and kind='wip' and is_watermarked=true`)[0].n, { timeout:60000 }).toBe(1);
+  if(injectFaults) console.log("PASS failed PUT retries; lost registration response shows recovery; retry returns one existing media row without re-upload");
   await client.reload(); await expect(client.locator("#work-previews img")).toBeVisible();
   await expect.poll(async () => client.locator("#work-previews img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth>0)).toBe(true);
   const output=join(tmpdir(),"com-mi-payment-qa"); await mkdir(output,{recursive:true});

@@ -2,7 +2,8 @@ import type { PublicMediaKind } from "@/lib/media/kinds";
 import { registerDeliveryFile, type RegisterDeliveryResult } from "@/lib/delivery/register";
 import { clampFilename, partPlan } from "@/lib/storage/keys";
 import { cancelUpload, startDeliveryUpload, startMediaUpload } from "./actions";
-import { isRetryableStatus, MAX_PART_ATTEMPTS, retryDelayMs } from "./errors";
+import { retryDelayMs } from "./errors";
+import { putPart } from "./put-part";
 import { registerWithRetry, type RegisterStatus, type Unconfirmed } from "./register-retry";
 
 /**
@@ -68,6 +69,7 @@ export async function uploadDelivery(
   file: File,
   onProgress?: (fraction: number) => void,
   kind: "final" | "wip" = "final",
+  onStatus?: (status: "uploading" | "retrying" | "offline") => void,
 ): Promise<DeliveryUpload> {
   // ไฟล์ 0 ไบต์ประกอบเป็น multipart ไม่ได้ (ต้องมีอย่างน้อยหนึ่งชิ้น) — บอกให้ตรงเรื่องแทน "ลองใหม่"
   if (file.size === 0) throw new Error("empty_file");
@@ -101,7 +103,15 @@ export async function uploadDelivery(
       const i = next++;
       const from = i * start.partSize;
       try {
-        const etag = await putPart(start.urls[i], file.slice(from, from + sizes[i]), abort.signal);
+        onStatus?.("uploading");
+        const etag = await putPart(start.urls[i], file.slice(from, from + sizes[i]), {
+          signal: abort.signal,
+          waitToRetry: async (attempt, signal) => {
+            onStatus?.(navigator.onLine === false ? "offline" : "retrying");
+            await waitToRetry(attempt, signal);
+            onStatus?.("uploading");
+          },
+        });
         if (failure !== null) return;
         parts.push({ partNumber: i + 1, etag });
         sent += sizes[i];
@@ -152,27 +162,6 @@ export async function registerDelivery(
     onHardFailure: () => void cancelUpload(up.intentId).catch(() => {}),
     onStatus,
   });
-}
-
-async function putPart(url: string, chunk: Blob, signal: AbortSignal): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
-    let res: Response | null = null;
-    try {
-      res = await fetch(url, { method: "PUT", body: chunk, signal });
-    } catch (err) {
-      if (signal.aborted || attempt >= MAX_PART_ATTEMPTS) throw err;
-    }
-    if (res?.ok) {
-      // อ่านได้เพราะ CORS ของถังตั้ง ExposeHeaders: ETag ไว้ — ไม่มีก็ประกอบไฟล์ไม่ได้
-      const etag = res.headers.get("etag");
-      if (!etag) throw new Error("upload_failed");
-      return etag;
-    }
-    if (res && (!isRetryableStatus(res.status) || attempt >= MAX_PART_ATTEMPTS)) {
-      throw new Error(`put_${res.status}`);
-    }
-    await waitToRetry(attempt, signal);
-  }
 }
 
 /**
