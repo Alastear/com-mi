@@ -32,8 +32,9 @@ apply ทั้งสอง migration แล้วเมื่อ 7 ตุลา
 
 Tests CRM/capability 20 ข้อผ่าน และ full unit/regression suite ผ่าน
 ตรวจ SQL จริงแล้ว: non-admin ถูกปฏิเสธ, mutation + audit บันทึกร่วมกัน, version เก่าเขียนทับไม่ได้ และ rollback ไม่เหลือ cohort/audit หรือ role ชั่วคราว
-ยังต้องตรวจ role revocation,
-pause ขณะมี request ค้าง, two-shop isolation และ UI บน staging ก่อนเปิด beta
+UI บน local test DB ผ่าน role revocation ด้วย session เดิม, stale editor หลัง pause/revoke,
+two-shop isolation, มือถือและคีย์บอร์ด ดู [CRM-BROWSER-QA.md](CRM-BROWSER-QA.md)
+ยังต้องตรวจ pause ขณะมี request เริ่มเขียนแล้ว และ staging isolation ก่อนรับรอง beta เต็มรูปแบบ
 การ pause ไม่ยกเลิก request ที่ตรวจสิทธิ์ผ่านไปแล้วและกำลังเขียนอยู่ ต้องตรวจเคสนี้ใน QA
 ยังไม่ถือว่า FND-01/03 หรือ closed beta ผ่านการตรวจรับครบ
 

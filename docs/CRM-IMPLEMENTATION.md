@@ -30,7 +30,7 @@
   รันผ่านกับ DB ทดสอบจาก `.env.local` เมื่อ 7 ตุลาคม 2026 ตามการยืนยันของเจ้าของระบบ
 - ต้องเพิ่มเคสเงินจริงหลาย payment/void/reject และตรวจยอดกับ ledger บน staging
 - ต้องตรวจ query plan ด้วยข้อมูลขนาดเหมาะสมก่อนตัดสินใจเพิ่ม index; ใช้ index เดิมก่อน
-- ยังต้อง UI QA สองบัญชี/มือถือ/ธีม/คีย์บอร์ด และการตรวจรับ FND-03 rollout
+- UI QA สองร้าน/บัญชีลูกค้า มือถือ light/dark TH/EN คีย์บอร์ด stale-tab และ pause/revoke ผ่านบน local test DB เมื่อ 7 ตุลาคม 2026 ดู [CRM-BROWSER-QA.md](CRM-BROWSER-QA.md)
 
 ## CRM-02 — โน้ตและแท็ก
 
@@ -49,4 +49,4 @@
 รัน migrations 0028–0029 และ SQL mutation tests กับ DB ทดสอบจริงแล้วเมื่อ 7 ตุลาคม 2026:
 ownership ข้ามร้าน, version เก่า, query จำนวนงาน และ transaction rollback ผ่าน
 fixture `qa-20261007-crm` ถูกล้างแล้ว ตรวจซ้ำไม่เหลือ user/shop/order ของชุดนี้
-ยังไม่ปลดป้ายเร็ว ๆ นี้ และยังไม่ถือว่าผ่าน UI หรือ staging isolation QA
+ยังไม่ปลดป้ายเร็ว ๆ นี้; UI QA ตามขอบเขตใน CRM-BROWSER-QA ผ่านแล้ว ส่วน staging isolation และ payment ledger matrix ยังไม่ผ่านการตรวจรับ
