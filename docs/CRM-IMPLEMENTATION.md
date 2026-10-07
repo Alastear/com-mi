@@ -28,7 +28,7 @@
   ไม่ใช้ ANALYZE, ไม่ execute อ่านลูกค้าหรือเปลี่ยนข้อมูล จึงไม่ใช่หลักฐาน performance หรือ isolation
 - เพิ่มเคส query จริงใน `db:fixtures-check` สำหรับ fixture สองร้าน/สองลูกค้า
   รันผ่านกับ DB ทดสอบจาก `.env.local` เมื่อ 7 ตุลาคม 2026 ตามการยืนยันของเจ้าของระบบ
-- ต้องเพิ่มเคสเงินจริงหลาย payment/void/reject และตรวจยอดกับ ledger บน staging
+- เคสหลาย payment/void/reject และแยก currency ผ่านกับ ledger จำลองบน local test DB ดู PAYMENT-FILE-QA.md; ยังไม่ได้ทดสอบการโอนเงินจริง
 - ต้องตรวจ query plan ด้วยข้อมูลขนาดเหมาะสมก่อนตัดสินใจเพิ่ม index; ใช้ index เดิมก่อน
 - UI QA สองร้าน/บัญชีลูกค้า มือถือ light/dark TH/EN คีย์บอร์ด stale-tab และ pause/revoke ผ่านบน local test DB เมื่อ 7 ตุลาคม 2026 ดู [CRM-BROWSER-QA.md](CRM-BROWSER-QA.md)
 
@@ -49,4 +49,4 @@
 รัน migrations 0028–0029 และ SQL mutation tests กับ DB ทดสอบจริงแล้วเมื่อ 7 ตุลาคม 2026:
 ownership ข้ามร้าน, version เก่า, query จำนวนงาน และ transaction rollback ผ่าน
 fixture `qa-20261007-crm` ถูกล้างแล้ว ตรวจซ้ำไม่เหลือ user/shop/order ของชุดนี้
-ยังไม่ปลดป้ายเร็ว ๆ นี้; UI QA ตามขอบเขตใน CRM-BROWSER-QA ผ่านแล้ว ส่วน staging isolation และ payment ledger matrix ยังไม่ผ่านการตรวจรับ
+ยังไม่ปลดป้ายเร็ว ๆ นี้; UI QA และ payment ledger matrix แบบจำลองผ่านตามรายงานแล้ว ส่วน staging isolation ยังไม่ผ่านการตรวจรับ

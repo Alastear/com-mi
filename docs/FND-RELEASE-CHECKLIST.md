@@ -28,7 +28,9 @@
 
 อัปเดต 7 ตุลาคม 2026: เจ้าของยืนยัน `.env.local` เป็น DB ทดสอบ จึงรัน migrations
 0028–0029 และ create → check → rollout-check → clean ผ่านแล้ว ตรวจไม่เหลือ fixture
-ยังไม่ครอบคลุม retry/concurrency/browser หรือ staging isolation
+Browser CRM และ payment/file flows ผ่านตาม [CRM-BROWSER-QA.md](CRM-BROWSER-QA.md)
+และ [PAYMENT-FILE-QA.md](PAYMENT-FILE-QA.md); R2 permissions/CORS healthcheck ผ่าน 16 ข้อ
+ยังไม่ครอบคลุม retry/concurrency, restore drill หรือ staging isolation
 ชุดโค้ดนี้เตรียมสำหรับ deploy เครื่องมือพื้นฐานได้ แต่ยังไม่ปิด FND-01,
 FND-02 integration หรือเปิด rollout ของฟีเจอร์ใน COMING-SOON-PLAN
 
