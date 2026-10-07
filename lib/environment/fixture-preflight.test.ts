@@ -18,6 +18,18 @@ const args = ["--target-env", "stage", "--production-env", "prod"];
 const encode = (env: Record<string, string>) => Object.entries(env).map(([key, value]) => `${key}=${value}`).join("\n");
 const reader = (stage = config("stage")) => async (path: string) => encode(path === "stage" ? stage : config("prod"));
 
+test("explicit local-test attestation uses only loopback target and disables outbound email", async () => {
+  const localArgs = ["--target-env", "local", "--confirmed-local-test"];
+  const local = { ...config("stage"), APP_ENV: "development", NEXT_PUBLIC_APP_URL: "http://localhost:3450", EMAIL_FROM: "sender@example.test" };
+  const loaded = await loadFixtureEnvironment(localArgs, async () => encode(local));
+  assert.equal(loaded.env.EMAIL_FROM, "");
+  assert.equal(loaded.env.DATABASE_URL, local.DATABASE_URL);
+  for (const override of [{ APP_ENV: "production" }, { NEXT_PUBLIC_APP_URL: "https://real.example.test" }, { DATABASE_URL: "https://wrong.example.test" }]) {
+    await assert.rejects(loadFixtureEnvironment(localArgs, async () => encode({ ...local, ...override })), FixturePreflightError);
+  }
+  await assert.rejects(loadFixtureEnvironment([...localArgs, "--production-env", "prod"], reader()), FixturePreflightError);
+});
+
 test("requires explicit files before reading any configuration", async () => {
   for (const invalid of [[], ["--target-env", "stage"], [...args, "--target-env", "other"], ["--target-env", "--production-env", "prod"]]) {
     let reads = 0;

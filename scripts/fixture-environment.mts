@@ -7,6 +7,7 @@ export async function requireFixtureEnvironment() {
   } catch (error) {
     console.error(error instanceof FixturePreflightError ? error.message : "Fixture preflight failed.");
     console.error("Required: --target-env .env.staging.local --production-env .env.production.audit.local");
+    console.error("For an operator-confirmed local test DB: --target-env .env.local --confirmed-local-test");
     process.exit(1);
   }
 }

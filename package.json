@@ -6,6 +6,7 @@
     "beta:check": "node --import tsx scripts/check-beta-readiness.mts",
     "db:fixtures": "node --import tsx scripts/seed-fixtures.mts",
     "db:fixtures-check": "node --import tsx scripts/check-fixtures.mts",
+    "db:rollout-check": "node --import tsx scripts/check-rollout-fixtures.mts",
     "dev": "next dev --port 3450",
     "build": "next build",
     "start": "next start --port 3450",

@@ -17,7 +17,7 @@
 ## สถานะเปิดใช้งาน
 
 ยังคง `crm` เป็น `implemented: true / planned` โดยไม่มี rollout record จะไม่เปิดใช้งาน
-เพิ่ม private notes/tags แล้ว แต่มี private rollout store แล้ว แต่ยังขาดหลักฐาน staging QA ครบ
+เพิ่ม private notes/tags และ private rollout store แล้ว แต่ยังขาดหลักฐาน UI QA ครบ
 หน้า clients จึงอธิบายว่ายังไม่เปิด และเชื่อมกลับออเดอร์; เข้าหน้า detail ตรงไม่ได้
 ไม่มี role bypass หรือ env switch สำหรับเปิดข้อมูลโดยข้าม guard
 
@@ -27,14 +27,14 @@
 - PostgreSQL EXPLAIN ผ่านทั้ง list/history กับ schema ที่กำหนดใน env โดยใช้ ID สมมติ
   ไม่ใช้ ANALYZE, ไม่ execute อ่านลูกค้าหรือเปลี่ยนข้อมูล จึงไม่ใช่หลักฐาน performance หรือ isolation
 - เพิ่มเคส query จริงใน `db:fixtures-check` สำหรับ fixture สองร้าน/สองลูกค้า
-  ยังไม่ได้รันเพราะ staging ยังไม่พร้อม
+  รันผ่านกับ DB ทดสอบจาก `.env.local` เมื่อ 7 ตุลาคม 2026 ตามการยืนยันของเจ้าของระบบ
 - ต้องเพิ่มเคสเงินจริงหลาย payment/void/reject และตรวจยอดกับ ledger บน staging
 - ต้องตรวจ query plan ด้วยข้อมูลขนาดเหมาะสมก่อนตัดสินใจเพิ่ม index; ใช้ index เดิมก่อน
 - ยังต้อง UI QA สองบัญชี/มือถือ/ธีม/คีย์บอร์ด และการตรวจรับ FND-03 rollout
 
 ## CRM-02 — โน้ตและแท็ก
 
-- เพิ่มตาราง `client_profile` ด้วย migration `0028_shiny_scrambler` (ยังไม่ apply)
+- เพิ่มตาราง `client_profile` ด้วย migration `0028_shiny_scrambler` (apply บน DB ทดสอบแล้ว)
 - primary key คู่ร้าน/ลูกค้า ทำให้ลูกค้าคนเดียวมีโน้ตของแต่ละร้านแยกกัน
 - โน้ตสูงสุด 4,000 ตัวอักษร แท็กสูงสุด 10 รายการ รายการละ 30 ตัวอักษร ตัดแท็กซ้ำ
 - ตรวจ owner/capability และความสัมพันธ์จากออเดอร์ก่อนบันทึก ไม่รับ shop ID จาก client
@@ -46,4 +46,7 @@
 - Tests CRM/capability ผ่าน 16 ข้อ; build ผ่านหลังล้าง `.next` ที่ Windows ลบไม่ได้
 
 ต้อง apply migration 0028 บน staging ก่อนใช้ fixture/check รุ่นนี้
-ยังไม่ได้รัน migration หรือ SQL mutation tests กับ DB จริง และยังไม่ปลดป้ายเร็ว ๆ นี้
+รัน migrations 0028–0029 และ SQL mutation tests กับ DB ทดสอบจริงแล้วเมื่อ 7 ตุลาคม 2026:
+ownership ข้ามร้าน, version เก่า, query จำนวนงาน และ transaction rollback ผ่าน
+fixture `qa-20261007-crm` ถูกล้างแล้ว ตรวจซ้ำไม่เหลือ user/shop/order ของชุดนี้
+ยังไม่ปลดป้ายเร็ว ๆ นี้ และยังไม่ถือว่าผ่าน UI หรือ staging isolation QA

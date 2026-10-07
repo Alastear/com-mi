@@ -27,11 +27,12 @@ public registry ยัง planned จึงคงป้ายเร็ว ๆ �
 ## Migration และการตรวจรับ
 
 ต้อง apply 0028 (client_profile) และ 0029 (rollout/cohort/audit) ก่อน deploy โค้ดชุดนี้
-ยังไม่ได้ apply เพราะไม่มี staging ที่ผ่าน isolation preflight
+apply ทั้งสอง migration แล้วเมื่อ 7 ตุลาคม 2026 กับ DB ใน `.env.local` ที่เจ้าของยืนยันว่าเป็นระบบทดสอบ ยังไม่ใช่ production; migration history รวม 30 รายการ
 ห้าม push แล้วคาดว่าตารางจะถูกสร้างอัตโนมัติจาก build
 
 Tests CRM/capability 20 ข้อผ่าน และ full unit/regression suite ผ่าน
-ยังต้องพิสูจน์ SQL mutation + audit atomicity, stale admin tab, role revocation,
+ตรวจ SQL จริงแล้ว: non-admin ถูกปฏิเสธ, mutation + audit บันทึกร่วมกัน, version เก่าเขียนทับไม่ได้ และ rollback ไม่เหลือ cohort/audit หรือ role ชั่วคราว
+ยังต้องตรวจ role revocation,
 pause ขณะมี request ค้าง, two-shop isolation และ UI บน staging ก่อนเปิด beta
 การ pause ไม่ยกเลิก request ที่ตรวจสิทธิ์ผ่านไปแล้วและกำลังเขียนอยู่ ต้องตรวจเคสนี้ใน QA
 ยังไม่ถือว่า FND-01/03 หรือ closed beta ผ่านการตรวจรับครบ

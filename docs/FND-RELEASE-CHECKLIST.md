@@ -26,7 +26,9 @@
 - [ ] Session/browser QA สองบัญชี รวม permission ของไฟล์และ money flow
 - [ ] Restore DB/storage drill และผลตรวจ resource permissions
 
-มีเพียง `.env.local` ณ รอบเตรียมนี้ จึงยังไม่ได้เขียน/ล้าง fixture ลง DB จริง
+อัปเดต 7 ตุลาคม 2026: เจ้าของยืนยัน `.env.local` เป็น DB ทดสอบ จึงรัน migrations
+0028–0029 และ create → check → rollout-check → clean ผ่านแล้ว ตรวจไม่เหลือ fixture
+ยังไม่ครอบคลุม retry/concurrency/browser หรือ staging isolation
 ชุดโค้ดนี้เตรียมสำหรับ deploy เครื่องมือพื้นฐานได้ แต่ยังไม่ปิด FND-01,
 FND-02 integration หรือเปิด rollout ของฟีเจอร์ใน COMING-SOON-PLAN
 

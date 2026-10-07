@@ -6,6 +6,27 @@
 
 ## สิ่งที่เจ้าของระบบเตรียม
 
+### กรณียังไม่มี production และใช้ local เป็นระบบทดสอบ
+
+เมื่อเจ้าของยืนยันว่า DB ใน `.env.local` ใช้ทดสอบ สามารถรัน DB-only checks ด้วย explicit attestation ได้:
+
+```sh
+pnpm db:fixtures create qa-run-01 --target-env .env.local --confirmed-local-test
+pnpm db:fixtures-check qa-run-01 --target-env .env.local --confirmed-local-test
+pnpm db:rollout-check qa-run-01 --target-env .env.local --confirmed-local-test
+pnpm db:fixtures clean qa-run-01 --target-env .env.local --confirmed-local-test
+```
+
+โหมดนี้ต้องมี app URL แบบ loopback และ APP_ENV ว่างหรือ development; อ่านเฉพาะไฟล์ที่ระบุ
+และล้างค่า EMAIL_FROM/RESEND_API_KEY ใน config ของสคริปต์ ไม่แก้ไฟล์ env
+เป็นการยืนยันจากผู้ดูแลว่า DB ใช้ทดสอบ ไม่ใช่หลักฐานว่า resource แยกจาก production
+เมื่อมี production แล้วให้ใช้ขั้นตอน target/baseline ด้านล่าง
+
+7 ตุลาคม 2026: รัน migrations 0028–0029 และ create/check/rollout-check/clean สำเร็จ
+ด้วย run ID `qa-20261007-crm`; ตรวจซ้ำไม่มี user/shop/order ของ fixture เหลือ
+
+### กรณีแยก staging จาก production
+
 1. ฐานข้อมูลทดสอบที่แยก host/branch จาก production และไม่มีข้อมูลส่วนตัวลูกค้าจริง
 2. R2 public/private buckets สำหรับ staging พร้อม credentials แยกกันและแยกจาก production
 3. URL แอปทดสอบและ auth origin เดียวกัน รวม public asset origin ที่แยกจาก production
