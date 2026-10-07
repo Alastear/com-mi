@@ -290,7 +290,7 @@ const th = {
     playBadge: "ลองเล่นได้!",
     chooseStyle: "เลือกสไตล์ภาพตัวอย่าง",
     choosePalette: "เลือกชุดสีภาพตัวอย่าง",
-    styles: { illustration: "ภาพบุคคล", chibi: "ชิบิ", emote: "อีโมต" },
+    styles: { illustration: "ภาพบุคคล", chibi: "จิบิ", emote: "อีโมต" },
     palettes: { lilac: "ม่วงละมุน", peach: "พีชสดใส", mint: "มิ้นต์สบายตา" },
     tryColors: "จิ้มสี แล้วลองเปลี่ยนอารมณ์",
     findStyle: "หาคนวาดสไตล์นี้",
@@ -301,7 +301,7 @@ const th = {
     galleryCta: "สำรวจประเภทงาน",
     categories: {
       illustration: { title: "ตัวคุณ ในอีกลายเส้น", body: "ภาพบุคคล ตัวละคร และโลกในจินตนาการ" },
-      chibi: { title: "ตัวจิ๋ว ความน่ารักเต็มร้อย", body: "ชิบิและมาสคอตที่มีบุคลิกเฉพาะตัว" },
+      chibi: { title: "ตัวจิ๋ว ความน่ารักเต็มร้อย", body: "จิบิและมาสคอตที่มีบุคลิกเฉพาะตัว" },
       emote: { title: "ทุกอารมณ์ เป็นตัวคุณ", body: "อีโมตและสติกเกอร์สำหรับคอมมูนิตี้ของคุณ" },
     },
     creatorEyebrow: "เว้นที่ไว้ให้ความคิดสร้างสรรค์ของคุณ",
@@ -801,7 +801,7 @@ const th = {
   serviceKind: {
     illustration: "ภาพวาด",
     emote: "อิโมท",
-    chibi: "ชิบิ",
+    chibi: "จิบิ",
     reference_sheet: "เรฟชีต",
     animation: "แอนิเมชัน",
     video_edit: "ตัดต่อวิดีโอ",

@@ -241,7 +241,7 @@ export const services: Service[] = [
     id: "svc_chibi",
     slug: "chibi",
     title: "Chibi Illustration",
-    description: "ภาพชิบิน่ารัก ๆ เหมาะกับใช้เป็นสติกเกอร์ ของที่ระลึก หรือรูปโปรไฟล์",
+    description: "ภาพจิบิน่ารัก ๆ เหมาะกับใช้เป็นสติกเกอร์ ของที่ระลึก หรือรูปโปรไฟล์",
     kind: "chibi",
     mode: "instant",
     basePriceCents: 45_000,

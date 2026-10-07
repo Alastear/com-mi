@@ -82,8 +82,8 @@ const TH: { tos: string[]; services: ServiceSeed[] } = {
     },
     {
       slug: "chibi",
-      title: "ภาพชิบิ",
-      description: "ภาพชิบิน่ารัก ๆ เหมาะกับสติกเกอร์หรือรูปโปรไฟล์",
+      title: "ภาพจิบิ",
+      description: "ภาพจิบิน่ารัก ๆ เหมาะกับสติกเกอร์หรือรูปโปรไฟล์",
       kind: "chibi",
       mode: "instant",
       basePriceCents: 45_000,
