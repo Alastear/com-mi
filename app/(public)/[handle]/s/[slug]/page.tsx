@@ -12,17 +12,22 @@ import { serviceHref, shopHref } from "@/lib/routes";
 import { normalizeHandle, redirectToCanonicalHandle } from "@/lib/canonical";
 import { getLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
+import { shareMetadata } from "@/lib/shop/share-metadata";
 
 type Props = { params: Promise<{ handle: string; slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { handle, slug } = await params;
   const found = await getServiceBySlug(handle, slug);
-  if (!found) return { title: "404" };
-  return {
+  if (!found?.shop.isPublished) return { title: "404", robots: { index: false, follow: false } };
+  return shareMetadata({
     title: `${found.service.title} — ${found.shop.displayName}`,
     description: found.service.description,
-  };
+    path: serviceHref(found.shop.owner.handle ?? normalizeHandle(handle), encodeURIComponent(found.service.slug)),
+    cover: found.service.cover,
+    avatar: found.shop.avatar,
+    ownerImage: found.shop.owner.image,
+  });
 }
 
 export default async function ServicePage({ params }: Props) {

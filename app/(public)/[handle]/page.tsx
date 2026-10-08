@@ -24,18 +24,21 @@ import { getShopReputation } from "@/lib/queries/reputation";
 import { summarizeTrackRecord } from "@/lib/reputation/track-record";
 import { ShopReviews, ShopTrackRecord } from "@/components/shop-reputation";
 import type { ShopStatus } from "@/lib/types";
+import { shareMetadata } from "@/lib/shop/share-metadata";
 
 type Props = { params: Promise<{ handle: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { handle } = await params;
   const shop = await getShopByHandle(handle);
-  if (!shop) return { title: "404" };
-  return {
+  if (!shop?.isPublished) return { title: "404", robots: { index: false, follow: false } };
+  return shareMetadata({
     title: `${shop.displayName} (@${shop.owner.handle})`,
     description: shop.tagline,
-    openGraph: { title: shop.displayName, description: shop.tagline },
-  };
+    path: shopHref(shop.owner.handle ?? normalizeHandle(handle)),
+    avatar: shop.avatar,
+    ownerImage: shop.owner.image,
+  });
 }
 
 export default async function CreatorPage({ params }: Props) {

@@ -40,6 +40,12 @@ export const metadata: Metadata = {
   },
   description:
     "หน้าร้านรับงาน commission พร้อมระบบจัดการคิว ส่งงาน และเก็บเงิน สำหรับนักวาด นักตัดต่อ และคนทำ adopts",
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    images: [{ url: "/share-image", width: 1200, height: 630, alt: SITE_NAME }],
+  },
+  twitter: { card: "summary_large_image", images: ["/share-image"] },
 };
 
 export const viewport: Viewport = {
